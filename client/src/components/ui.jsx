@@ -1,0 +1,186 @@
+import { useEffect, useState, createContext, useContext, useCallback } from 'react';
+import { api } from '../api';
+
+export function Avatar({ src, name, size = 10, square = false }) {
+  const px = size * 4;
+  const cls = `${square ? 'rounded-xl' : 'rounded-full'} object-cover bg-ink-700 border border-ink-600/60 shrink-0`;
+  if (src) return <img src={src} alt={name} style={{ width: px, height: px }} className={cls} />;
+  return (
+    <div style={{ width: px, height: px, fontSize: px * 0.38 }}
+      className={`${cls} flex items-center justify-center font-display font-bold text-mist-300`}>
+      {(name || '?').split(' ').map(w => w[0]).slice(0, 2).join('')}
+    </div>
+  );
+}
+
+export const VerifiedBadge = ({ small }) => (
+  <span title="Verified by Fundamental" className={`inline-flex items-center justify-center rounded-full bg-accent-500 text-white shrink-0 ${small ? 'w-3.5 h-3.5' : 'w-4.5 h-4.5 w-[18px] h-[18px]'}`}>
+    <svg viewBox="0 0 24 24" fill="none" className={small ? 'w-2.5 h-2.5' : 'w-3 h-3'}><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  </span>
+);
+
+export const Spinner = ({ className = '' }) => (
+  <div className={`flex justify-center py-12 ${className}`}>
+    <div className="w-7 h-7 rounded-full border-2 border-ink-600 border-t-gold-400 animate-spin" />
+  </div>
+);
+
+export const Empty = ({ icon = '◇', title, sub }) => (
+  <div className="card p-10 text-center fade-in">
+    <div className="text-3xl mb-3 text-mist-500">{icon}</div>
+    <div className="h-display text-base">{title}</div>
+    {sub && <div className="text-sm text-mist-400 mt-1.5 max-w-sm mx-auto">{sub}</div>}
+  </div>
+);
+
+export function Modal({ open, onClose, title, children, wide }) {
+  useEffect(() => {
+    const fn = (e) => e.key === 'Escape' && onClose();
+    if (open) { document.addEventListener('keydown', fn); document.body.style.overflow = 'hidden'; }
+    return () => { document.removeEventListener('keydown', fn); document.body.style.overflow = ''; };
+  }, [open, onClose]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto p-6 rounded-b-none sm:rounded-2xl fade-in`}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="h-display text-lg">{title}</h3>
+          <button onClick={onClose} className="text-mist-400 hover:text-mist-100 text-xl leading-none px-1">×</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ---- Toast system ----
+const ToastCtx = createContext(() => {});
+export function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  const toast = useCallback((msg, kind = 'info') => {
+    const id = Math.random();
+    setToasts(t => [...t, { id, msg, kind }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200);
+  }, []);
+  return (
+    <ToastCtx.Provider value={toast}>
+      {children}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92%] max-w-md pointer-events-none">
+        {toasts.map(t => (
+          <div key={t.id} className={`fade-in pointer-events-auto rounded-xl border px-4 py-3 text-sm font-medium shadow-lift backdrop-blur
+            ${t.kind === 'error' ? 'bg-red-950/90 border-red-800/60 text-red-200' : t.kind === 'success' ? 'bg-emerald-950/90 border-emerald-800/60 text-emerald-200' : 'bg-ink-800/95 border-ink-600 text-mist-200'}`}>
+            {t.msg}
+          </div>
+        ))}
+      </div>
+    </ToastCtx.Provider>
+  );
+}
+export const useToast = () => useContext(ToastCtx);
+
+// ---- File upload field with progress ----
+export function FileUpload({ label, accept, onUploaded, hint, currentUrl }) {
+  const [progress, setProgress] = useState(null);
+  const toast = useToast();
+  const handle = async (file) => {
+    if (!file) return;
+    try {
+      setProgress(0);
+      const data = await api.upload(file, setProgress);
+      onUploaded(data, file);
+      toast('Upload complete', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setProgress(null);
+    }
+  };
+  return (
+    <div>
+      {label && <span className="label">{label}</span>}
+      <label className="block cursor-pointer border-2 border-dashed border-ink-600/80 hover:border-gold-500/50 rounded-xl p-4 text-center transition-colors bg-ink-850/50">
+        <input type="file" accept={accept} className="hidden" onChange={(e) => handle(e.target.files[0])} />
+        {progress !== null ? (
+          <div>
+            <div className="text-xs text-mist-400 mb-2">Uploading… {progress}%</div>
+            <div className="h-1.5 bg-ink-700 rounded-full overflow-hidden"><div className="h-full bg-gold-400 transition-all" style={{ width: progress + '%' }} /></div>
+          </div>
+        ) : currentUrl ? (
+          <div className="text-sm text-emerald-300 font-medium">✓ Uploaded — click to replace</div>
+        ) : (
+          <div className="text-sm text-mist-400">Click to upload{hint && <div className="text-xs text-mist-500 mt-1">{hint}</div>}</div>
+        )}
+      </label>
+    </div>
+  );
+}
+
+// ---- Simple SVG charts (no deps) ----
+export function LineChart({ data, xKey, yKey, height = 160, format = (v) => v }) {
+  if (!data || data.length < 2) return <div className="text-xs text-mist-500 py-8 text-center">Not enough data yet</div>;
+  const w = 600, h = height, pad = 8;
+  const ys = data.map(d => Number(d[yKey]) || 0);
+  const max = Math.max(...ys) || 1, min = Math.min(...ys, 0);
+  const x = (i) => pad + (i / (data.length - 1)) * (w - pad * 2);
+  const y = (v) => h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2 - 14);
+  const path = ys.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' ');
+  const area = `${path} L${x(ys.length - 1)},${h - pad} L${x(0)},${h - pad} Z`;
+  return (
+    <div>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#d9b15e" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#d9b15e" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#lg)" />
+        <path d={path} fill="none" stroke="#d9b15e" strokeWidth="2.5" strokeLinejoin="round" />
+        {ys.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r="3" fill="#0b0d12" stroke="#d9b15e" strokeWidth="2" />)}
+      </svg>
+      <div className="flex justify-between text-[10px] text-mist-500 px-1 mt-1">
+        {data.map((d, i) => <span key={i} className={data.length > 8 && i % 2 ? 'hidden sm:inline' : ''}>{d[xKey]}</span>)}
+      </div>
+      <div className="flex justify-between text-[10px] text-gold-400/80 px-1">
+        <span>{format(ys[0])}</span><span>{format(ys[ys.length - 1])}</span>
+      </div>
+    </div>
+  );
+}
+
+export function BarBreakdown({ items }) {
+  const colors = ['#d9b15e', '#4d8dff', '#34d399', '#a78bfa', '#f87171', '#fbbf24'];
+  return (
+    <div className="space-y-3">
+      <div className="flex h-3 rounded-full overflow-hidden border border-ink-600/50">
+        {items.map((it, i) => (
+          <div key={i} style={{ width: it.pct + '%', background: colors[i % colors.length] }} title={`${it.label} ${it.pct}%`} />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {items.map((it, i) => (
+          <div key={i} className="flex items-center gap-2 text-sm">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: colors[i % colors.length] }} />
+            <span className="text-mist-300 flex-1">{it.label}</span>
+            <span className="text-mist-100 font-semibold tabular-nums">{it.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export const Stat = ({ label, value, sub }) => (
+  <div className="card p-4">
+    <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">{label}</div>
+    <div className="stat-num mt-1">{value}</div>
+    {sub && <div className="text-xs text-mist-400 mt-0.5">{sub}</div>}
+  </div>
+);
+
+export const Logo = ({ className = 'h-7' }) => (
+  <span className={`inline-flex items-center gap-2 ${className}`}>
+    <svg viewBox="0 0 64 64" className="h-full w-auto"><rect width="64" height="64" rx="14" fill="#10131a" stroke="#2a3242" /><path d="M20 50V14h26v7H28.5v8.5H43v7H28.5V50H20z" fill="#d9b15e" /></svg>
+    <span className="font-display font-bold text-mist-100 tracking-tight text-lg">Fundamental</span>
+  </span>
+);

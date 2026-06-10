@@ -1,0 +1,8 @@
+node_modules/
+client/dist/
+server/fundamental.db
+server/fundamental.db-*
+server/uploads/*
+!server/uploads/.gitkeep
+.DS_Store
+*.log

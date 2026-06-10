@@ -1,0 +1,347 @@
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { api, fmtMoney, timeAgo } from '../api';
+import { useAuth } from '../AuthContext';
+import VideoPlayer from '../components/VideoPlayer';
+import { Avatar, BarBreakdown, Empty, LineChart, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+
+const Section = ({ id, title, children }) => (
+  <section id={id} className="card p-5 sm:p-6 fade-in">
+    <h2 className="section-title mb-4">{title}</h2>
+    {children}
+  </section>
+);
+
+export default function Startup() {
+  const { id } = useParams();
+  const { user } = useAuth();
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState('');
+  const [noteDoc, setNoteDoc] = useState(null);
+  const toast = useToast();
+  const nav = useNavigate();
+
+  const load = () => api.get(`/api/startups/${id}`).then(setD).catch(e => setErr(e.message));
+  useEffect(() => { setD(null); load(); }, [id]);
+
+  if (err) return <Empty title={err} />;
+  if (!d) return <Spinner />;
+  const { startup: s, founder, collateral, activity, notes, is_owner } = d;
+
+  const act = async (fn, ok) => {
+    try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); }
+  };
+
+  const connectFounder = () => act(async () => {
+    if (d.connected) { const r = await api.post(`/api/messages/start/${founder.id}`); nav(`/messages?c=${r.conversation_id}`); return; }
+    await api.post(`/api/users/connect/${founder.id}`);
+  }, d.connected ? null : 'Connection request sent');
+
+  const share = async () => {
+    const url = window.location.href;
+    try { await navigator.clipboard.writeText(url); toast('Profile link copied to clipboard', 'success'); }
+    catch { toast(url, 'info'); }
+  };
+
+  const metrics = [
+    ['ARR', s.arr ? fmtMoney(s.arr) : '—'], ['MRR', s.mrr ? fmtMoney(s.mrr) : '—'],
+    ['Growth (MoM)', s.growth ? s.growth + '%' : '—'], ['Gross Margin', s.gross_margin ? s.gross_margin + '%' : '—'],
+    ['Burn Rate', s.burn ? fmtMoney(s.burn) + '/mo' : '—'], ['Runway', s.runway ? s.runway + ' mo' : '—'],
+    ['CAC', s.cac ? fmtMoney(s.cac) : '—'], ['LTV', s.ltv ? fmtMoney(s.ltv) : '—'],
+  ];
+
+  const summary = [
+    ['One-line Positioning', s.one_liner], ['Problem', s.problem], ['Solution', s.solution],
+    ['Business Model', s.business_model], ['Market Size', s.market_size],
+    ['Competitive Advantage', s.competitive_advantage], ['Current Round', s.round_details],
+  ].filter(([, v]) => v);
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-5">
+      {/* ---- Header ---- */}
+      <div className="card p-5 sm:p-6">
+        <div className="flex flex-col sm:flex-row gap-5">
+          <Avatar src={s.logo} name={s.name} size={20} square />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="h-display text-2xl sm:text-3xl">{s.name}</h1>
+              {!!s.verified && <VerifiedBadge />}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mt-2 text-sm text-mist-400">
+              <span className="chip">{s.sector}</span><span className="chip">{s.stage}</span>
+              <span>{s.city}</span>{s.founded_year && <span>· Founded {s.founded_year}</span>}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap mt-3">
+              {s.raising_status === 'Actively Raising'
+                ? <span className="chip-green">● Actively Raising{s.raising_amount && ` — ${s.raising_amount}`}</span>
+                : s.raising_status === 'Round Closing'
+                  ? <span className="chip-gold">◐ Round Closing{s.raising_amount && ` — ${s.raising_amount}`}</span>
+                  : <span className="chip">Not Raising</span>}
+              <span className="text-xs text-mist-500">{s.views.toLocaleString()} profile views</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap mt-5 pt-5 border-t border-ink-700/60">
+          {!is_owner && (
+            <button className="btn-primary btn-sm" onClick={connectFounder} disabled={d.connection_status === 'pending'}>
+              {d.connected ? 'Message Founder' : d.connection_status === 'pending' ? 'Request Pending' : 'Connect Founder'}
+            </button>
+          )}
+          {user.role === 'investor' && (
+            <button className={`btn-ghost btn-sm ${s.upvoted ? '!text-gold-300 !border-gold-500/40' : ''}`}
+              onClick={() => act(() => api.post(`/api/startups/${s.id}/upvote`))} title="One upvote per investor per startup">
+              ▲ {s.upvoted ? 'Upvoted' : 'Upvote'} · {s.upvotes}
+            </button>
+          )}
+          <button className={`btn-ghost btn-sm ${s.saved ? '!text-gold-300 !border-gold-500/40' : ''}`}
+            onClick={() => act(() => api.post(`/api/startups/${s.id}/save`))}>
+            {s.saved ? '✓ Saved' : 'Save'}
+          </button>
+          {user.role === 'investor' && (
+            <button className="btn-ghost btn-sm" onClick={() => { setNoteDoc(null); setNoteOpen(true); }}>+ Private Note</button>
+          )}
+          <button className="btn-ghost btn-sm" onClick={share}>Share Profile Link</button>
+          {is_owner && <Link to="/settings?tab=startup" className="btn-ghost btn-sm ml-auto">Edit Startup</Link>}
+        </div>
+      </div>
+
+      {/* ---- Section 1: 12-Minute Pitch ---- */}
+      <Section id="pitch" title="Section 1 — The 12-Minute Pitch">
+        {s.video_url ? (
+          <VideoPlayer src={s.video_url} chapters={s.video_chapters} views={s.video_views}
+            onFirstPlay={() => api.post(`/api/startups/${s.id}/video-view`).catch(() => {})} />
+        ) : (
+          <Empty title="Pitch video pending" sub="This startup has not uploaded its mandatory 12-minute pitch yet." />
+        )}
+      </Section>
+
+      {/* ---- Section 2: Executive Summary ---- */}
+      <Section id="summary" title="Section 2 — Executive Summary">
+        {summary.length === 0 ? <div className="text-sm text-mist-500">Not provided yet.</div> : (
+          <div className="space-y-5">
+            {summary.map(([k, v]) => (
+              <div key={k}>
+                <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-1">{k}</div>
+                <p className="text-[15px] text-mist-200 leading-relaxed">{v}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      {/* ---- Section 3: Metrics Dashboard ---- */}
+      <Section id="metrics" title="Section 3 — Metrics Dashboard">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {metrics.map(([k, v]) => (
+            <div key={k} className="bg-ink-850 border border-ink-700/60 rounded-xl p-3.5">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">{k}</div>
+              <div className="font-display text-lg font-bold text-mist-100 mt-1 tabular-nums">{v}</div>
+            </div>
+          ))}
+        </div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Revenue Trend</div>
+        <LineChart data={s.revenue_series} xKey="month" yKey="revenue" format={fmtMoney} />
+      </Section>
+
+      {/* ---- Section 4: Collateral / Data Room ---- */}
+      <Section id="collateral" title="Section 4 — Collateral · Structured Data Room">
+        {collateral.length === 0 ? <div className="text-sm text-mist-500">No documents in the data room yet.</div> : (
+          <div className="space-y-2.5">
+            {collateral.map(c => (
+              <div key={c.id} className="flex items-center gap-3 flex-wrap bg-ink-850 border border-ink-700/60 rounded-xl px-4 py-3">
+                <span className="chip-blue shrink-0">{c.type}</span>
+                <div className="flex-1 min-w-[140px]">
+                  <div className="text-sm font-medium text-mist-100">{c.title}</div>
+                  <div className="text-[11px] text-mist-500">Uploaded {timeAgo(c.created_at)}{is_owner && ` · ${c.downloads} downloads`}</div>
+                </div>
+                <span className={c.access_level === 'Public' ? 'chip-green' : c.access_level === 'Connected Only' ? 'chip-gold' : 'chip'}>{c.access_level}</span>
+                {c.can_view ? (
+                  <button className="btn-ghost btn-sm" onClick={async () => {
+                    await api.post(`/api/startups/collateral/${c.id}/download`).catch(() => {});
+                    c.file_url ? window.open(c.file_url, '_blank') : toast('Document file not attached yet', 'info');
+                  }}>View</button>
+                ) : user.role === 'investor' ? (
+                  c.my_request === 'pending'
+                    ? <span className="chip">Requested</span>
+                    : c.my_request === 'rejected'
+                      ? <span className="chip-red">Declined</span>
+                      : <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/startups/collateral/${c.id}/request`), 'Access requested — the founder has been notified')}>Request Access</button>
+                ) : <span className="chip">Restricted</span>}
+                {user.role === 'investor' && (
+                  <button className="text-xs text-mist-500 hover:text-gold-300" title="Add private note on this document"
+                    onClick={() => { setNoteDoc(c); setNoteOpen(true); }}>✎ Note</button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {is_owner && <AccessManager startupId={s.id} onChange={load} />}
+        {user.role === 'investor' && notes.length > 0 && (
+          <div className="mt-6">
+            <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Your Private Notes <span className="normal-case font-normal">(visible only to you)</span></div>
+            <div className="space-y-2">
+              {notes.map(n => (
+                <div key={n.id} className="bg-gold-500/5 border border-gold-500/20 rounded-xl px-4 py-3 flex gap-3">
+                  <div className="flex-1">
+                    <p className="text-sm text-mist-200">{n.text}</p>
+                    <div className="text-[11px] text-mist-500 mt-1">
+                      {n.collateral_id && <span className="text-gold-400/80">On document · </span>}{timeAgo(n.created_at)}
+                    </div>
+                  </div>
+                  <button className="text-mist-500 hover:text-red-400 text-xs" onClick={() => act(() => api.del(`/api/startups/notes/${n.id}`))}>✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Section>
+
+      {/* ---- Section 5: Team ---- */}
+      <Section id="team" title="Section 5 — Team">
+        <div className="flex flex-col sm:flex-row gap-5 items-start">
+          <Avatar src={founder.photo} name={founder.name} size={18} />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="h-display text-lg">{founder.name}</span>
+              {!!founder.verified && <VerifiedBadge small />}
+            </div>
+            <div className="text-sm text-gold-300/90 font-medium">{founder.headline || 'Founder'}</div>
+            {founder.bio && <p className="text-sm text-mist-300 leading-relaxed mt-2.5">{founder.bio}</p>}
+            <div className="grid sm:grid-cols-2 gap-3 mt-4">
+              {founder.education && <div><div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">Education</div><div className="text-sm text-mist-300 mt-0.5">{founder.education}</div></div>}
+              {founder.experience && <div><div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">Previous Experience</div><div className="text-sm text-mist-300 mt-0.5">{founder.experience}</div></div>}
+            </div>
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <Link to={`/profile/${founder.id}`} className="btn-ghost btn-sm">View Founder Profile</Link>
+              {founder.linkedin && <a href={founder.linkedin} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">LinkedIn ↗</a>}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* ---- Section 6: Activity & Signals ---- */}
+      <Section id="activity" title="Section 6 — Activity & Signals">
+        {activity.length === 0 ? <div className="text-sm text-mist-500">No signals yet.</div> : (
+          <ol className="relative border-l border-ink-600/70 ml-2 space-y-5">
+            {activity.map(a => (
+              <li key={a.id} className="ml-5">
+                <span className="absolute -left-[5px] mt-1.5 w-2.5 h-2.5 rounded-full bg-gold-400 border-2 border-ink-900" />
+                <div className="text-xs font-semibold text-gold-300/90 uppercase tracking-wider">{a.type}</div>
+                <div className="text-sm text-mist-200 mt-0.5">{a.text}</div>
+                <div className="text-[11px] text-mist-500 mt-0.5">{timeAgo(a.created_at)}</div>
+              </li>
+            ))}
+          </ol>
+        )}
+        {d.upvote_trend.length > 1 && (
+          <div className="mt-6">
+            <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Upvote Trend</div>
+            <LineChart data={d.upvote_trend} xKey="d" yKey="c" height={100} format={(v) => v + ' ▲'} />
+          </div>
+        )}
+        {is_owner && <PostSignal startupId={s.id} onPosted={load} />}
+      </Section>
+
+      {/* ---- Section 7: Use of Funds ---- */}
+      <Section id="funds" title="Section 7 — Use of Funds">
+        {(!s.use_of_funds || s.use_of_funds.length === 0) && !s.deployment_timeline ? (
+          <div className="text-sm text-mist-500">Not provided yet.</div>
+        ) : (
+          <div className="space-y-6">
+            {s.use_of_funds?.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-3">Capital Allocation</div>
+                <BarBreakdown items={s.use_of_funds} />
+              </div>
+            )}
+            {s.deployment_timeline && s.deployment_timeline !== '—' && (
+              <div><div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-1">Deployment Timeline</div>
+                <p className="text-sm text-mist-200 leading-relaxed">{s.deployment_timeline}</p></div>
+            )}
+            {s.strategic_objectives && (
+              <div><div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-1">Strategic Objectives</div>
+                <p className="text-sm text-mist-200 leading-relaxed">{s.strategic_objectives}</p></div>
+            )}
+          </div>
+        )}
+      </Section>
+
+      <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title={noteDoc ? `Private note — ${noteDoc.title}` : 'Add Private Note'}>
+        <div className="space-y-3">
+          <div className="text-xs text-mist-400">Visible only to you. Founders never see private notes.</div>
+          <textarea className="input min-h-[110px]" autoFocus value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Diligence thoughts, follow-ups, reference checks…" />
+          <button className="btn-primary w-full" disabled={!noteText.trim()} onClick={async () => {
+            try {
+              await api.post(`/api/startups/${s.id}/notes`, { text: noteText, collateral_id: noteDoc?.id });
+              setNoteOpen(false); setNoteText(''); toast('Note saved', 'success'); load();
+            } catch (e) { toast(e.message, 'error'); }
+          }}>Save Note</button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+function AccessManager({ startupId, onChange }) {
+  const [reqs, setReqs] = useState([]);
+  const toast = useToast();
+  const load = () => api.get(`/api/startups/${startupId}/access-requests`).then(d => setReqs(d.requests)).catch(() => {});
+  useEffect(() => { load(); }, [startupId]);
+  if (reqs.length === 0) return null;
+  const act = async (id, action) => {
+    try { await api.post(`/api/startups/access-requests/${id}/${action}`); load(); onChange(); toast(`Request ${action}d`, 'success'); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  return (
+    <div className="mt-6">
+      <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Access Requests (Founder Controls)</div>
+      <div className="space-y-2">
+        {reqs.map(r => (
+          <div key={r.id} className="flex items-center gap-3 flex-wrap bg-ink-850 border border-ink-700/60 rounded-xl px-4 py-2.5">
+            <Link to={`/profile/${r.investor_id}`} className="text-sm font-medium text-mist-100 hover:text-gold-300">{r.investor_name}</Link>
+            <span className="text-xs text-mist-500 flex-1">requests "{r.title}"</span>
+            {r.status === 'pending' ? (
+              <div className="flex gap-2">
+                <button className="btn-primary btn-sm" onClick={() => act(r.id, 'approve')}>Approve</button>
+                <button className="btn-danger btn-sm" onClick={() => act(r.id, 'reject')}>Reject</button>
+              </div>
+            ) : (
+              <div className="flex gap-2 items-center">
+                <span className={r.status === 'approved' ? 'chip-green' : 'chip-red'}>{r.status}</span>
+                {r.status === 'approved' && <button className="btn-ghost btn-sm" onClick={() => act(r.id, 'revoke')}>Revoke</button>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PostSignal({ startupId, onPosted }) {
+  const [open, setOpen] = useState(false);
+  const [type, setType] = useState('Milestone Achieved');
+  const [text, setText] = useState('');
+  const toast = useToast();
+  return (
+    <div className="mt-5">
+      {!open ? <button className="btn-ghost btn-sm" onClick={() => setOpen(true)}>+ Post a Signal</button> : (
+        <div className="card p-4 space-y-3">
+          <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
+            {['Round Opened', 'Round Closed', 'Milestone Achieved', 'Hiring Announcement'].map(t => <option key={t}>{t}</option>)}
+          </select>
+          <textarea className="input min-h-[80px]" value={text} onChange={(e) => setText(e.target.value)} placeholder="What happened?" />
+          <div className="flex gap-2">
+            <button className="btn-primary btn-sm" disabled={!text.trim()} onClick={async () => {
+              try { await api.post(`/api/startups/${startupId}/activity`, { type, text }); setOpen(false); setText(''); onPosted(); toast('Signal posted', 'success'); }
+              catch (e) { toast(e.message, 'error'); }
+            }}>Post</button>
+            <button className="btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
