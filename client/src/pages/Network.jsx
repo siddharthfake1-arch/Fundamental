@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { Avatar, Empty, Spinner, VerifiedBadge, useToast } from '../components/ui';
@@ -65,8 +66,10 @@ export default function Network() {
 
           {!users ? <Spinner /> : users.length === 0 ? <Empty title="No one matches these filters" /> : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {users.map(u => (
-                <div key={u.id} className="card card-hover p-5">
+              {users.map((u, i) => (
+                <motion.div key={u.id} className="card card-hover p-5"
+                  initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: Math.min(i, 8) * 0.04, ease: [0.22, 1, 0.36, 1] }}>
                   <Link to={`/profile/${u.id}`} className="flex items-start gap-3.5 group">
                     <Avatar src={u.photo} name={u.name} size={12} />
                     <div className="min-w-0 flex-1">
@@ -89,7 +92,7 @@ export default function Network() {
                     <button className={`btn-ghost btn-sm ${u.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
                       onClick={() => act(() => api.post(`/api/users/follow/${u.id}`))}>{u.following ? '✓' : 'Follow'}</button>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           )}

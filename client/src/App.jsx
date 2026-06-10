@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import Nav from './components/Nav';
 import { Spinner } from './components/ui';
@@ -39,7 +40,12 @@ export default function App() {
   return (
     <div className="min-h-screen">
       {loc.pathname !== '/onboarding' && <Nav />}
-      <main className="max-w-7xl mx-auto px-4 py-6 pb-20">
+      <motion.main
+        key={loc.pathname}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        className="max-w-7xl mx-auto px-4 py-6 pb-20">
         <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />
@@ -57,7 +63,7 @@ export default function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/discover" replace />} />
         </Routes>
-      </main>
+      </motion.main>
     </div>
   );
 }

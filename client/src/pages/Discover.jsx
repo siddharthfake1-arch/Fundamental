@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'motion/react';
 import { api } from '../api';
 import StartupCard from '../components/StartupCard';
 import { Empty, Modal, Spinner, useToast } from '../components/ui';
@@ -118,7 +119,15 @@ export default function Discover() {
             <>
               <div className="text-xs text-mist-500 mb-3">{data.total} startup{data.total !== 1 ? 's' : ''}</div>
               <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {data.startups.map(s => <StartupCard key={s.id} s={s} />)}
+                {data.startups.map((s, i) => (
+                  <motion.div key={s.id}
+                    initial={{ opacity: 0, y: 18 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35, delay: Math.min(i, 8) * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                    className="h-full">
+                    <StartupCard s={s} />
+                  </motion.div>
+                ))}
               </div>
             </>
           )}

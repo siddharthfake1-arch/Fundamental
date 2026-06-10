@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { api, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
@@ -119,7 +120,9 @@ function Post({ p, onChange }) {
   };
 
   return (
-    <article className="card p-5 fade-in">
+    <motion.article className="card p-5"
+      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
       <div className="flex items-start gap-3">
         <Link to={`/profile/${p.author.id}`}><Avatar src={p.author.photo} name={p.author.name} size={11} /></Link>
         <div className="flex-1 min-w-0">
@@ -181,6 +184,6 @@ function Post({ p, onChange }) {
           </div>
         </div>
       )}
-    </article>
+    </motion.article>
   );
 }

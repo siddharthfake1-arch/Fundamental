@@ -29,7 +29,7 @@ export default function StartupCard({ s }) {
   };
 
   return (
-    <Link to={`/startup/${s.id}`} className="card card-hover p-5 flex flex-col gap-4 fade-in group">
+    <Link to={`/startup/${s.id}`} className="card card-hover p-5 flex flex-col gap-4 h-full group">
       <div className="flex items-start gap-3.5">
         <Avatar src={s.logo} name={s.name} size={12} square />
         <div className="min-w-0 flex-1">

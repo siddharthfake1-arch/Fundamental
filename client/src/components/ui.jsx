@@ -1,4 +1,5 @@
 import { useEffect, useState, createContext, useContext, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../api';
 
 export function Avatar({ src, name, size = 10, square = false }) {
@@ -39,17 +40,28 @@ export function Modal({ open, onClose, title, children, wide }) {
     if (open) { document.addEventListener('keydown', fn); document.body.style.overflow = 'hidden'; }
     return () => { document.removeEventListener('keydown', fn); document.body.style.overflow = ''; };
   }, [open, onClose]);
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto p-6 rounded-b-none sm:rounded-2xl fade-in`}>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="h-display text-lg">{title}</h3>
-          <button onClick={onClose} className="text-mist-400 hover:text-mist-100 text-xl leading-none px-1">×</button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm"
+          onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.94, y: 24 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 16 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto p-6 rounded-b-none sm:rounded-2xl`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="h-display text-lg">{title}</h3>
+              <button onClick={onClose} className="text-mist-400 hover:text-mist-100 text-xl leading-none px-1">×</button>
+            </div>
+            {children}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -66,12 +78,19 @@ export function ToastProvider({ children }) {
     <ToastCtx.Provider value={toast}>
       {children}
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92%] max-w-md pointer-events-none">
-        {toasts.map(t => (
-          <div key={t.id} className={`fade-in pointer-events-auto rounded-xl border px-4 py-3 text-sm font-medium shadow-lift backdrop-blur
-            ${t.kind === 'error' ? 'bg-red-950/90 border-red-800/60 text-red-200' : t.kind === 'success' ? 'bg-emerald-950/90 border-emerald-800/60 text-emerald-200' : 'bg-ink-800/95 border-ink-600 text-mist-200'}`}>
-            {t.msg}
-          </div>
-        ))}
+        <AnimatePresence>
+          {toasts.map(t => (
+            <motion.div key={t.id}
+              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.97 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+              className={`pointer-events-auto rounded-xl border px-4 py-3 text-sm font-medium shadow-lift backdrop-blur
+              ${t.kind === 'error' ? 'bg-red-950/90 border-red-800/60 text-red-200' : t.kind === 'success' ? 'bg-emerald-950/90 border-emerald-800/60 text-emerald-200' : 'bg-ink-800/95 border-ink-600 text-mist-200'}`}>
+              {t.msg}
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </ToastCtx.Provider>
   );
