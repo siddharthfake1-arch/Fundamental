@@ -1,8 +1,38 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
+import { Link } from 'react-router-dom';
+import { Flame } from 'lucide-react';
 import { api } from '../api';
 import StartupCard from '../components/StartupCard';
-import { Empty, Modal, Spinner, useToast } from '../components/ui';
+import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+
+function TrendingStrip({ startups }) {
+  const trending = [...startups].sort((a, b) => b.momentum - a.momentum).slice(0, 5).filter(s => s.momentum > 0);
+  if (trending.length < 2) return null;
+  return (
+    <div className="mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Flame className="w-4 h-4 text-orange-400" />
+        <span className="section-title !text-orange-400">Trending this week</span>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+        {trending.map((s, i) => (
+          <motion.div key={s.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.07 }}>
+            <Link to={`/startup/${s.id}`}
+              className="card ring-gradient card-hover flex items-center gap-3 px-4 py-3 min-w-[230px]">
+              <span className="font-display font-extrabold text-lg text-gradient w-6">{i + 1}</span>
+              <Avatar src={s.logo} name={s.name} size={10} square />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-mist-100 truncate">{s.name}{!!s.verified && <VerifiedBadge small />}</div>
+                <div className="text-[11px] text-mist-400">{s.sector} · ▲ {s.upvotes} · {s.momentum} momentum</div>
+              </div>
+            </Link>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const EMPTY_FILTERS = { sector: '', subsector: '', stage: '', revenue: '', geography: '', raising: '', verified: false, q: '' };
 const REVENUE_BANDS = [['', 'Any revenue'], ['0-100k', '$0 – $100K'], ['100k-1m', '$100K – $1M'], ['1m-10m', '$1M – $10M'], ['10m+', '$10M+']];
@@ -113,6 +143,7 @@ export default function Discover() {
       <div className="grid lg:grid-cols-[260px_1fr] gap-6 items-start">
         <aside className={`card p-4 lg:sticky lg:top-20 ${filtersOpen ? '' : 'hidden lg:block'}`}>{sidebar}</aside>
         <div>
+          {data && <TrendingStrip startups={data.startups} />}
           {!data ? <Spinner /> : data.startups.length === 0 ? (
             <Empty title="No startups match these filters" sub="Try widening your criteria, or save this search to be ready when matching startups list." />
           ) : (
@@ -136,7 +167,7 @@ export default function Discover() {
 
       <Modal open={saveOpen} onClose={() => setSaveOpen(false)} title="Save this search">
         <div className="space-y-4">
-          <input className="input" autoFocus value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="e.g. Seed fintech in Riyadh" />
+          <input className="input" autoFocus value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="e.g. Seed fintech in India" />
           <button className="btn-primary w-full" disabled={!saveName}
             onClick={async () => {
               try {

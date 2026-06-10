@@ -8,11 +8,15 @@ router.use(auth);
 const J = (s, d = []) => { try { return JSON.parse(s) ?? d; } catch { return d; } };
 
 function tile(s, userId) {
+  const upvotes = db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c;
+  const recentViews = db.prepare("SELECT COUNT(*) c FROM startup_views WHERE startup_id=? AND created_at > datetime('now','-7 days')").get(s.id).c;
+  const recentUpvotes = db.prepare("SELECT COUNT(*) c FROM upvotes WHERE startup_id=? AND created_at > datetime('now','-7 days')").get(s.id).c;
   return {
     id: s.id, name: s.name, logo: s.logo, sector: s.sector, subsector: s.subsector,
     stage: s.stage, city: s.city, arr: s.arr, mrr: s.mrr, verified: !!s.verified,
     raising_status: s.raising_status, one_liner: s.one_liner,
-    upvotes: db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c,
+    upvotes, views: s.views,
+    momentum: Math.min(100, Math.round(recentUpvotes * 18 + recentViews * 3 + upvotes * 4 + (s.raising_status === 'Actively Raising' ? 10 : 0))),
     has_video: !!s.video_url,
     has_collateral: !!db.prepare('SELECT 1 FROM collateral WHERE startup_id=?').get(s.id),
     saved: !!db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(userId, s.id),

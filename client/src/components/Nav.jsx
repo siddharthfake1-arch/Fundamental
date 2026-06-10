@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
+import { Sun, Moon } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import { useTheme } from '../ThemeContext';
 import { api } from '../api';
 import { Avatar, Logo, VerifiedBadge } from './ui';
 
@@ -15,6 +17,7 @@ const LINKS = [
 
 export default function Nav() {
   const { user, logout } = useAuth();
+  const { theme, toggle } = useTheme();
   const [counts, setCounts] = useState({ notifications: 0, messages: 0 });
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,6 +61,9 @@ export default function Nav() {
         </nav>
 
         <div className="flex items-center gap-2 ml-auto lg:ml-0">
+          <button onClick={toggle} className="nav-link !px-2.5" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </button>
           <NavLink to="/notifications" className={({ isActive }) => `nav-link !px-2.5 ${isActive ? 'nav-link-active' : ''}`} title="Notifications">
             <span className="relative inline-block">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>

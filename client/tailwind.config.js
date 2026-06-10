@@ -1,35 +1,28 @@
 /** @type {import('tailwindcss').Config} */
+const v = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
+        // Surfaces (deep navy in dark mode, airy blue-greys in light mode)
         ink: {
-          950: '#07080b',
-          900: '#0b0d12',
-          850: '#10131a',
-          800: '#151923',
-          700: '#1d2330',
-          600: '#2a3242',
-          500: '#3d4759',
+          950: v('ink-950'), 900: v('ink-900'), 850: v('ink-850'),
+          800: v('ink-800'), 700: v('ink-700'), 600: v('ink-600'), 500: v('ink-500'),
         },
+        // Text
         mist: {
-          100: '#f2f4f8',
-          200: '#dfe4ec',
-          300: '#b9c1cf',
-          400: '#8b95a8',
-          500: '#646e82',
+          100: v('mist-100'), 200: v('mist-200'), 300: v('mist-300'),
+          400: v('mist-400'), 500: v('mist-500'),
         },
+        // Primary accent — light blue / cyan
         gold: {
-          300: '#e8c882',
-          400: '#d9b15e',
-          500: '#c79a3f',
-          600: '#a87f2c',
+          300: v('acc-300'), 400: v('acc-400'), 500: v('acc-500'), 600: v('acc-600'),
         },
         accent: {
-          400: '#6ea8ff',
-          500: '#4d8dff',
-          600: '#3a72db',
+          400: v('acc2-400'), 500: v('acc2-500'), 600: v('acc2-600'),
         },
       },
       fontFamily: {
@@ -37,8 +30,9 @@ export default {
         display: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
       },
       boxShadow: {
-        card: '0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(0,0,0,0.35)',
-        lift: '0 1px 0 rgba(255,255,255,0.06) inset, 0 16px 40px rgba(0,0,0,0.5)',
+        card: 'var(--shadow-card)',
+        lift: 'var(--shadow-lift)',
+        glow: '0 0 24px rgb(var(--acc-500) / 0.25)',
       },
     },
   },

@@ -103,7 +103,7 @@ function FounderFlow({ refresh }) {
               <select className="input" value={s.stage} onChange={set('stage')}><option value="">Select…</option>{STAGES.map(x => <option key={x}>{x}</option>)}</select>
             </Field>
           </div>
-          <Field label="City"><input className="input" value={s.city} onChange={set('city')} placeholder="e.g. Riyadh" /></Field>
+          <Field label="City"><input className="input" value={s.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Raising Status">
               <select className="input" value={s.raising_status} onChange={set('raising_status')}>

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Sun, Moon } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { useTheme } from '../ThemeContext';
 import { FileUpload, Avatar, Spinner, useToast } from '../components/ui';
 
 const Field = ({ label, children }) => <div><span className="label">{label}</span>{children}</div>;
@@ -11,7 +13,7 @@ export default function Settings() {
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') || 'account';
   const tabs = [['account', 'Account'], ...(user.role === 'founder' ? [['startup', 'Startup Settings']] : []),
-    ...(user.role === 'investor' ? [['investor', 'Investor Profile']] : []), ['notifications', 'Notifications'], ['security', 'Security']];
+    ...(user.role === 'investor' ? [['investor', 'Investor Profile']] : []), ['appearance', 'Appearance'], ['notifications', 'Notifications'], ['security', 'Security']];
 
   return (
     <div className="max-w-3xl mx-auto fade-in">
@@ -25,6 +27,7 @@ export default function Settings() {
       {tab === 'account' && <Account user={user} refresh={refresh} />}
       {tab === 'startup' && <StartupSettings />}
       {tab === 'investor' && <InvestorSettings user={user} refresh={refresh} />}
+      {tab === 'appearance' && <Appearance />}
       {tab === 'notifications' && <NotifPrefs user={user} refresh={refresh} />}
       {tab === 'security' && <Security user={user} />}
     </div>
@@ -215,6 +218,26 @@ function InvestorSettings({ user, refresh }) {
           try { await api.put('/api/users/me', { investor: f }); await refresh(); toast('Investor profile saved', 'success'); }
           catch (e) { toast(e.message, 'error'); }
         }}>Save</button>
+      </div>
+    </div>
+  );
+}
+
+function Appearance() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <div className="card p-6">
+      <h2 className="section-title mb-1">Theme</h2>
+      <p className="text-sm text-mist-400 mb-5">Choose how Fundamental looks for you. Your preference is saved on this device.</p>
+      <div className="grid grid-cols-2 gap-4 max-w-md">
+        {[['dark', 'Dark', Moon, 'Deep navy. Easy on the eyes.'], ['light', 'Light', Sun, 'Crisp and bright for daytime.']].map(([v, label, Icon, sub]) => (
+          <button key={v} onClick={() => setTheme(v)}
+            className={`rounded-2xl border p-5 text-left transition-all ${theme === v ? 'border-gold-500/70 bg-gold-500/10 shadow-glow' : 'border-ink-600/70 bg-ink-850 hover:border-ink-500'}`}>
+            <Icon className={`w-5 h-5 mb-3 ${theme === v ? 'text-gold-300' : 'text-mist-400'}`} />
+            <div className={`font-display font-bold text-sm ${theme === v ? 'text-gold-300' : 'text-mist-100'}`}>{label}</div>
+            <div className="text-[11px] text-mist-400 mt-1">{sub}</div>
+          </button>
+        ))}
       </div>
     </div>
   );

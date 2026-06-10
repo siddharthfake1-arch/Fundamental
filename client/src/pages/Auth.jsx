@@ -1,8 +1,49 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'motion/react';
+import { MoveRight, PlayCircle, ShieldCheck, FolderLock, TrendingUp, Globe2 } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { Logo, useToast } from '../components/ui';
+
+// Animated hero — adapted from the provided shadcn/framer-motion component
+// into this codebase's native stack (motion/react + design tokens).
+function RotatingTitle() {
+  const [titleNumber, setTitleNumber] = useState(0);
+  const titles = useMemo(() => ['fundamental.', 'transparent.', 'serious.', '12 minutes.', 'global.'], []);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setTitleNumber(titleNumber === titles.length - 1 ? 0 : titleNumber + 1);
+    }, 2200);
+    return () => clearTimeout(timeoutId);
+  }, [titleNumber, titles]);
+
+  return (
+    <h1 className="h-display text-4xl lg:text-6xl leading-[1.08] tracking-tight">
+      <span className="block text-mist-100">Fundraising should be</span>
+      <span className="relative flex w-full overflow-hidden md:pb-3 md:pt-1 h-[1.35em]">
+        {titles.map((title, index) => (
+          <motion.span
+            key={index}
+            className="absolute font-display font-extrabold text-gradient"
+            initial={{ opacity: 0, y: -100 }}
+            transition={{ type: 'spring', stiffness: 50 }}
+            animate={titleNumber === index ? { y: 0, opacity: 1 } : { y: titleNumber > index ? -150 : 150, opacity: 0 }}>
+            {title}
+          </motion.span>
+        ))}
+      </span>
+    </h1>
+  );
+}
+
+const FEATURES = [
+  { icon: PlayCircle, t: '12-min pitch', s: 'Mandatory video on every startup' },
+  { icon: FolderLock, t: 'Data rooms', s: 'Permissioned diligence collateral' },
+  { icon: ShieldCheck, t: 'Verified', s: 'Founders, funds & real metrics' },
+  { icon: Globe2, t: 'Global', s: 'Bengaluru to the Bay Area' },
+];
 
 export default function Auth() {
   const [mode, setMode] = useState('login');
@@ -36,33 +77,65 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
+    <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden">
+      {/* Floating gradient orbs for depth */}
+      <div className="orb animate-float w-[480px] h-[480px] -top-40 -left-32" style={{ background: 'radial-gradient(circle, rgb(var(--acc2-500)), transparent 65%)' }} />
+      <div className="orb animate-float-slow w-[420px] h-[420px] bottom-[-140px] left-[28%]" style={{ background: 'radial-gradient(circle, rgb(var(--acc-500)), transparent 65%)' }} />
+      <div className="orb animate-float w-[300px] h-[300px] top-[12%] right-[-90px]" style={{ background: 'radial-gradient(circle, rgb(var(--acc-400)), transparent 65%)', animationDelay: '-4s' }} />
+
       {/* Brand panel */}
-      <div className="lg:w-[46%] relative flex flex-col justify-between p-8 lg:p-14 bg-ink-900 border-b lg:border-b-0 lg:border-r border-ink-700/60 overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.35]" style={{ background: 'radial-gradient(60% 50% at 20% 10%, rgba(217,177,94,0.18), transparent), radial-gradient(50% 40% at 90% 90%, rgba(77,141,255,0.12), transparent)' }} />
-        <div className="relative"><Logo className="h-9" /></div>
-        <div className="relative py-10 lg:py-0">
-          <h1 className="h-display text-4xl lg:text-5xl leading-[1.1] tracking-tight">
-            Fundraising?<br /><span className="text-gold-400">Fundamental.</span>
-          </h1>
-          <p className="mt-5 text-mist-300 max-w-md leading-relaxed">
-            The serious marketplace where startups raise capital. Every company opens with a mandatory <span className="text-gold-300 font-medium">12-minute video pitch</span>, structured metrics, and a verified data room — built for investors who do real diligence.
-          </p>
-          <div className="mt-8 grid grid-cols-3 gap-3 max-w-md">
-            {[['12-min', 'Video pitch on every profile'], ['Verified', 'Founders, funds & metrics'], ['Data Rooms', 'Permissioned collateral']].map(([t, s]) => (
-              <div key={t} className="card p-3.5">
-                <div className="font-display font-bold text-gold-300 text-sm">{t}</div>
-                <div className="text-[11px] text-mist-400 mt-1 leading-snug">{s}</div>
-              </div>
+      <div className="lg:w-[52%] relative flex flex-col justify-between p-8 lg:p-14 border-b lg:border-b-0 lg:border-r border-ink-700/50">
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+          <Logo className="h-9" />
+        </motion.div>
+
+        <div className="relative py-12 lg:py-0">
+          <motion.span
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
+            className="chip-gold !text-xs !px-3 !py-1.5 mb-6 inline-flex">
+            <TrendingUp className="w-3.5 h-3.5" /> The serious fundraising marketplace
+          </motion.span>
+
+          <RotatingTitle />
+
+          <motion.p
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.25 }}
+            className="mt-6 text-mist-300 max-w-lg leading-relaxed text-[15px]">
+            Where founders raise and investors do real diligence. Every startup opens with a
+            <span className="text-gold-300 font-semibold"> 12-minute video pitch</span>, structured metrics and a
+            permissioned data room — from Bengaluru and Mumbai to London and San Francisco.
+          </motion.p>
+
+          <div className="mt-9 grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-2xl">
+            {FEATURES.map(({ icon: Icon, t, s }, i) => (
+              <motion.div key={t}
+                initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.35 + i * 0.08 }}
+                className="card ring-gradient p-3.5">
+                <Icon className="w-4.5 h-4.5 w-[18px] h-[18px] text-gold-400 mb-2" />
+                <div className="font-display font-bold text-mist-100 text-sm">{t}</div>
+                <div className="text-[11px] text-mist-400 mt-0.5 leading-snug">{s}</div>
+              </motion.div>
             ))}
           </div>
+
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
+            className="mt-9 flex items-center gap-6 text-xs text-mist-400">
+            <span><span className="font-display font-bold text-mist-100 text-base">8+</span> startups raising</span>
+            <span><span className="font-display font-bold text-mist-100 text-base">$39M+</span> in open rounds</span>
+            <span><span className="font-display font-bold text-mist-100 text-base">5</span> active funds</span>
+          </motion.div>
         </div>
+
         <div className="relative text-xs text-mist-500 hidden lg:block">A professional network for founders and investors. No noise. No casual posting.</div>
       </div>
 
       {/* Form panel */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-14">
-        <div className="w-full max-w-md fade-in">
+      <div className="flex-1 flex items-center justify-center p-6 lg:p-14 relative">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15 }}
+          className="w-full max-w-md">
           <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1 mb-7">
             {['login', 'signup'].map(m => (
               <button key={m} onClick={() => setMode(m)}
@@ -93,10 +166,11 @@ export default function Auth() {
             <div><span className="label">Email</span><input type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
             <div><span className="label">Password</span><input type="password" className="input" value={form.password} onChange={set('password')} placeholder={mode === 'signup' ? 'Minimum 8 characters' : '••••••••'} required /></div>
             {mode === 'signup' && (
-              <div><span className="label">City</span><input className="input" value={form.city} onChange={set('city')} placeholder="e.g. Riyadh" /></div>
+              <div><span className="label">City</span><input className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
             )}
-            <button disabled={busy} className="btn-primary w-full !py-3">
+            <button disabled={busy} className="btn-primary w-full !py-3 group">
               {busy ? 'Please wait…' : mode === 'login' ? 'Sign In' : `Create ${role === 'founder' ? 'Founder' : 'Investor'} Account`}
+              <MoveRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
           </form>
 
@@ -114,7 +188,7 @@ export default function Auth() {
               Founder — <code className="text-mist-200">founder1@demo.app</code> · Investor — <code className="text-mist-200">investor1@demo.app</code> · Admin — <code className="text-mist-200">admin@fundamental.app</code>
             </div>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );

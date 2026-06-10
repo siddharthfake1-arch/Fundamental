@@ -189,17 +189,41 @@ export function BarBreakdown({ items }) {
   );
 }
 
+function CountUp({ value }) {
+  const target = typeof value === 'number' ? value : Number(String(value).replace(/,/g, ''));
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!Number.isFinite(target)) return;
+    let raf;
+    const t0 = performance.now();
+    const dur = 700;
+    const step = (t) => {
+      const p = Math.min((t - t0) / dur, 1);
+      setN(Math.round(target * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  if (!Number.isFinite(target)) return value;
+  return n.toLocaleString();
+}
+
 export const Stat = ({ label, value, sub }) => (
-  <div className="card p-4">
+  <div className="card card-hover p-4">
     <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">{label}</div>
-    <div className="stat-num mt-1">{value}</div>
+    <div className="stat-num mt-1"><CountUp value={value} /></div>
     {sub && <div className="text-xs text-mist-400 mt-0.5">{sub}</div>}
   </div>
 );
 
 export const Logo = ({ className = 'h-7' }) => (
   <span className={`inline-flex items-center gap-2 ${className}`}>
-    <svg viewBox="0 0 64 64" className="h-full w-auto"><rect width="64" height="64" rx="14" fill="#10131a" stroke="#2a3242" /><path d="M20 50V14h26v7H28.5v8.5H43v7H28.5V50H20z" fill="#d9b15e" /></svg>
+    <svg viewBox="0 0 64 64" className="h-full w-auto">
+      <defs><linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#2658c4" /><stop offset="100%" stopColor="#2aaef5" /></linearGradient></defs>
+      <rect width="64" height="64" rx="16" fill="url(#logo-g)" />
+      <path d="M20 50V14h26v7H28.5v8.5H43v7H28.5V50H20z" fill="#fff" />
+    </svg>
     <span className="font-display font-bold text-mist-100 tracking-tight text-lg">Fundamental</span>
   </span>
 );
