@@ -39,6 +39,7 @@ router.post('/', (req, res) => {
   const { type, text, startup_id, media } = req.body;
   if (!POST_TYPES.includes(type)) return res.status(400).json({ error: 'Posts must use one of the allowed professional categories.' });
   if (!text || text.trim().length < 10) return res.status(400).json({ error: 'Write a substantive update (min 10 characters).' });
+  if (text.trim().length > 400) return res.status(400).json({ error: 'Posts are capped at 400 characters — keep it sharp.' });
   const founderTypes = ['Fundraising Announcement', 'Round Closed', 'Milestone', 'Hiring', 'Product Launch'];
   const investorTypes = ['Investment Made', 'Investor Insight'];
   if (req.user.role === 'founder' && !founderTypes.includes(type)) return res.status(403).json({ error: 'This post type is for investors.' });

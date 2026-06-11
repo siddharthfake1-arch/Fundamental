@@ -10,11 +10,15 @@ const TYPE_STYLE = {
   'Hiring': 'chip', 'Product Launch': 'chip-blue', 'Investment Made': 'chip-green', 'Investor Insight': 'chip-gold',
 };
 
+const FORMATS = [['all', 'All'], ['status', 'Status'], ['image', 'Images'], ['video', 'Videos']];
+const mediaKind = (m) => !m ? 'status' : /\.(mp4|webm|mov)/i.test(m) ? 'video' : /\.(png|jpe?g|gif|svg|webp)/i.test(m) ? 'image' : 'status';
+
 export default function Social() {
   const { user } = useAuth();
   const [posts, setPosts] = useState(null);
   const [types, setTypes] = useState({ types: [], allowed_for_me: [] });
   const [filter, setFilter] = useState('');
+  const [format, setFormat] = useState('all');
   const [composer, setComposer] = useState(false);
   const toast = useToast();
 
@@ -23,17 +27,26 @@ export default function Social() {
   useEffect(load, [filter]);
   useEffect(() => { api.get('/api/social/types').then(setTypes).catch(() => {}); }, []);
 
+  const visible = posts && (format === 'all' ? posts : posts.filter(p => mediaKind(p.media) === format));
+
   return (
     <div className="max-w-2xl mx-auto fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-5">
         <div>
           <h1 className="h-display text-2xl">Social</h1>
-          <p className="text-sm text-mist-400 mt-1">A controlled professional feed. Announcements and insights only — no casual posting.</p>
+          <p className="text-sm text-mist-400 mt-1">A controlled professional feed. 400 characters max — every word earns its place.</p>
         </div>
         <select className="input !w-auto !py-2 !text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="">All posts</option>
+          <option value="">All categories</option>
           {types.types.map(t => <option key={t}>{t}</option>)}
         </select>
+      </div>
+
+      <div className="flex rounded-xl bg-ink-850 border border-ink-600/50 p-1 mb-5 w-fit">
+        {FORMATS.map(([v, l]) => (
+          <button key={v} onClick={() => setFormat(v)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${format === v ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
+        ))}
       </div>
 
       {user.role !== 'admin' && (
@@ -49,9 +62,9 @@ export default function Social() {
         </div>
       )}
 
-      {!posts ? <Spinner /> : posts.length === 0 ? <Empty title="No posts yet" sub="Professional updates from the network appear here." /> : (
+      {!posts ? <Spinner /> : visible.length === 0 ? <Empty title="No posts here yet" sub="Professional updates from the network appear here." /> : (
         <div className="space-y-4">
-          {posts.map(p => <Post key={p.id} p={p} onChange={load} />)}
+          {visible.map(p => <Post key={p.id} p={p} onChange={load} />)}
         </div>
       )}
     </div>
@@ -84,9 +97,12 @@ function Composer({ allowed, onDone, onCancel }) {
           ))}
         </div>
       </div>
-      <textarea className="input min-h-[110px]" value={text} onChange={(e) => setText(e.target.value)}
-        placeholder="Write a substantive professional update. Specifics — numbers, names, dates — earn attention here." />
-      <div className="grid sm:grid-cols-2 gap-3">
+      <div>
+        <textarea className="input min-h-[110px]" maxLength={400} value={text} onChange={(e) => setText(e.target.value)}
+          placeholder="Write a substantive professional update. Specifics — numbers, names, dates — earn attention here." />
+        <div className={`text-right text-[11px] mt-1 tabular-nums ${text.length > 360 ? 'text-amber-400' : 'text-mist-500'}`}>{text.length}/400</div>
+      </div>
+      <div className="grid sm:grid-cols-3 gap-3 items-end">
         <div>
           <span className="label">Tag Startup (optional)</span>
           <select className="input" value={startupId} onChange={(e) => setStartupId(e.target.value)}>
@@ -94,9 +110,17 @@ function Composer({ allowed, onDone, onCancel }) {
             {startups.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
-        <FileUpload label="Attach Media (optional)" accept="image/*,video/*,.pdf" currentUrl={media}
+        <FileUpload label="Add Image" accept="image/*" currentUrl={/\.(png|jpe?g|gif|svg|webp)/i.test(media) ? media : ''}
+          onUploaded={(d) => setMedia(d.url)} />
+        <FileUpload label="Add Video" accept="video/*" currentUrl={/\.(mp4|webm|mov)/i.test(media) ? media : ''}
           onUploaded={(d) => setMedia(d.url)} />
       </div>
+      {media && (
+        <div className="flex items-center justify-between text-xs bg-ink-850 border border-ink-700/50 rounded-xl px-3 py-2">
+          <span className="text-emerald-400 font-medium">✓ Media attached</span>
+          <button className="text-mist-500 hover:text-red-400" onClick={() => setMedia('')}>Remove</button>
+        </div>
+      )}
       <div className="flex gap-2 justify-end">
         <button className="btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
         <button className="btn-primary btn-sm" disabled={!type || text.trim().length < 10 || busy} onClick={async () => {

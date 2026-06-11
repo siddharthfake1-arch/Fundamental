@@ -220,6 +220,15 @@ CREATE TABLE IF NOT EXISTS startup_views (
   startup_id INTEGER NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS founder_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  startup_id INTEGER NOT NULL REFERENCES startups(id) ON DELETE CASCADE,
+  headline TEXT NOT NULL,
+  body TEXT NOT NULL,
+  arr REAL, mrr REAL, growth REAL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 `);
 
 // ---- shared helpers ----
@@ -260,4 +269,39 @@ function profileCompletion(user, startup) {
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
-module.exports = { db, notify, addActivity, areConnected, publicUser, profileCompletion };
+// Fundamental Score: 0–100 composite of completeness, traction, engagement and trust.
+// Deterministic and explainable — shown with its breakdown, never as a black box.
+function fundamentalScore(s) {
+  const fields = [s.one_liner, s.problem, s.solution, s.business_model, s.market_size,
+    s.competitive_advantage, s.round_details, s.logo, s.video_url].filter(Boolean).length;
+  const completeness = Math.round((fields / 9) * 40);
+  let traction = 4;
+  const rev = s.arr || (s.mrr || 0) * 12;
+  if (rev >= 5e6) traction = 26; else if (rev >= 1e6) traction = 21; else if (rev >= 250e3) traction = 15; else if (rev > 0) traction = 10;
+  if (s.growth >= 20) traction += 4; else if (s.growth >= 10) traction += 2;
+  traction = Math.min(30, traction);
+  const upvotes = db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c;
+  const updates = db.prepare("SELECT COUNT(*) c FROM founder_updates WHERE startup_id=? AND created_at > datetime('now','-60 days')").get(s.id).c;
+  const engagement = Math.min(20, upvotes * 2 + Math.min(6, (s.views || 0) / 500) + updates * 3);
+  const trust = s.verified ? 10 : 0;
+  return {
+    total: Math.min(100, Math.round(completeness + traction + engagement + trust)),
+    breakdown: { completeness, traction, engagement: Math.round(engagement), trust },
+  };
+}
+
+// Thesis fit: how well a startup matches an investor's declared focus.
+function thesisFit(startup, investorProfile) {
+  if (!investorProfile) return null;
+  const J = (x) => { try { return JSON.parse(x) ?? []; } catch { return []; } };
+  const sectors = Array.isArray(investorProfile.sector_focus) ? investorProfile.sector_focus : J(investorProfile.sector_focus);
+  const stages = Array.isArray(investorProfile.stage_focus) ? investorProfile.stage_focus : J(investorProfile.stage_focus);
+  if (sectors.length === 0 && stages.length === 0) return null;
+  let fit = 0;
+  if (sectors.includes(startup.sector)) fit += 55; else if (sectors.length === 0) fit += 25;
+  if (stages.includes(startup.stage)) fit += 35; else if (stages.length === 0) fit += 15;
+  if (startup.raising_status === 'Actively Raising') fit += 10;
+  return Math.min(100, fit);
+}
+
+module.exports = { db, notify, addActivity, areConnected, publicUser, profileCompletion, fundamentalScore, thesisFit };

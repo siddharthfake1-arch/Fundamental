@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, notify, addActivity, areConnected, publicUser } = require('../db');
+const { db, notify, addActivity, areConnected, publicUser, fundamentalScore, thesisFit } = require('../db');
 const { auth, requireRole } = require('../authmw');
 
 const router = express.Router();
@@ -7,8 +7,16 @@ router.use(auth);
 
 const J = (s, d = []) => { try { return JSON.parse(s) ?? d; } catch { return d; } };
 
-function tile(s, userId) {
+function investorProfileOf(user) {
+  return user.role === 'investor'
+    ? db.prepare('SELECT * FROM investor_profiles WHERE user_id=?').get(user.id)
+    : null;
+}
+
+function tile(s, userId, ip = null) {
   const upvotes = db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c;
+  const score = fundamentalScore(s);
+  const fit = ip ? thesisFit(s, ip) : null;
   const recentViews = db.prepare("SELECT COUNT(*) c FROM startup_views WHERE startup_id=? AND created_at > datetime('now','-7 days')").get(s.id).c;
   const recentUpvotes = db.prepare("SELECT COUNT(*) c FROM upvotes WHERE startup_id=? AND created_at > datetime('now','-7 days')").get(s.id).c;
   return {
@@ -16,6 +24,7 @@ function tile(s, userId) {
     stage: s.stage, city: s.city, arr: s.arr, mrr: s.mrr, verified: !!s.verified,
     raising_status: s.raising_status, one_liner: s.one_liner,
     upvotes, views: s.views,
+    score: score.total, fit,
     momentum: Math.min(100, Math.round(recentUpvotes * 18 + recentViews * 3 + upvotes * 4 + (s.raising_status === 'Actively Raising' ? 10 : 0))),
     has_video: !!s.video_url,
     has_collateral: !!db.prepare('SELECT 1 FROM collateral WHERE startup_id=?').get(s.id),
@@ -40,12 +49,15 @@ router.get('/', (req, res) => {
     const [lo, hi] = bands[revenue] || [0, Infinity];
     rows = rows.filter(s => { const r = s.arr || s.mrr * 12; return r >= lo && r < hi; });
   }
-  let tiles = rows.map(s => tile(s, req.user.id));
+  const ip = investorProfileOf(req.user);
+  let tiles = rows.map(s => tile(s, req.user.id, ip));
   if (sort === 'upvoted') tiles.sort((a, b) => b.upvotes - a.upvotes);
   else if (sort === 'viewed') {
     const v = Object.fromEntries(rows.map(s => [s.id, s.views]));
     tiles.sort((a, b) => v[b.id] - v[a.id]);
-  } else tiles.sort((a, b) => b.id - a.id); // recent
+  } else if (sort === 'score') tiles.sort((a, b) => b.score - a.score);
+  else if (sort === 'fit') tiles.sort((a, b) => (b.fit || 0) - (a.fit || 0));
+  else tiles.sort((a, b) => b.id - a.id); // recent
   res.json({ startups: tiles, total: tiles.length });
 });
 
@@ -129,6 +141,7 @@ router.get('/:id', (req, res) => {
   const conn = db.prepare(
     'SELECT * FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)'
   ).get(req.user.id, s.founder_id, s.founder_id, req.user.id);
+  const score = fundamentalScore(s);
   res.json({
     startup: {
       ...s, revenue_series: J(s.revenue_series), video_chapters: J(s.video_chapters), use_of_funds: J(s.use_of_funds),
@@ -136,6 +149,9 @@ router.get('/:id', (req, res) => {
       upvoted: !!db.prepare('SELECT 1 FROM upvotes WHERE user_id=? AND startup_id=?').get(req.user.id, s.id),
       saved: !!db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(req.user.id, s.id),
     },
+    score,
+    fit: thesisFit(s, investorProfileOf(req.user)),
+    updates: db.prepare('SELECT * FROM founder_updates WHERE startup_id=? ORDER BY id DESC LIMIT 12').all(s.id),
     founder, connected, is_owner: isOwner,
     connection_status: conn ? conn.status : null,
     connection_direction: conn ? (conn.requester_id === req.user.id ? 'outgoing' : 'incoming') : null,
@@ -253,6 +269,29 @@ router.get('/:id/access-requests', requireRole('founder'), (req, res) => {
 
 router.post('/collateral/:cid/download', (req, res) => {
   db.prepare('UPDATE collateral SET downloads = downloads + 1 WHERE id=?').run(req.params.cid);
+  res.json({ ok: true });
+});
+
+// Founder Updates — structured investor updates that keep watchers coming back.
+router.post('/:id/updates', requireRole('founder'), (req, res) => {
+  const s = db.prepare('SELECT * FROM startups WHERE id=? AND founder_id=?').get(req.params.id, req.user.id);
+  if (!s) return res.status(403).json({ error: 'Not your startup' });
+  const { headline, body, arr, mrr, growth } = req.body;
+  if (!headline || !headline.trim()) return res.status(400).json({ error: 'Headline is required' });
+  if (!body || !body.trim()) return res.status(400).json({ error: 'Update body is required' });
+  if (body.trim().length > 400) return res.status(400).json({ error: 'Updates are capped at 400 characters — keep it sharp.' });
+  db.prepare('INSERT INTO founder_updates (startup_id, headline, body, arr, mrr, growth) VALUES (?,?,?,?,?,?)')
+    .run(s.id, headline.trim().slice(0, 120), body.trim(), arr ?? null, mrr ?? null, growth ?? null);
+  // Refresh headline metrics on the startup when provided
+  if (arr != null || mrr != null || growth != null) {
+    db.prepare('UPDATE startups SET arr=COALESCE(?,arr), mrr=COALESCE(?,mrr), growth=COALESCE(?,growth) WHERE id=?')
+      .run(arr ?? null, mrr ?? null, growth ?? null, s.id);
+  }
+  addActivity(s.id, 'Milestone Achieved', `Investor update: ${headline.trim()}`);
+  const watchers = db.prepare('SELECT user_id FROM watchlist WHERE startup_id=?').all(s.id);
+  for (const w of watchers) {
+    notify(w.user_id, 'New Message', `${s.name} posted an investor update: "${headline.trim()}"`, `/startup/${s.id}`);
+  }
   res.json({ ok: true });
 });
 

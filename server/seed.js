@@ -205,6 +205,13 @@ db.prepare('INSERT INTO post_likes (user_id,post_id) VALUES (?,?)').run(investor
 db.prepare('INSERT INTO post_likes (user_id,post_id) VALUES (?,?)').run(founderIds[2], p2);
 db.prepare('INSERT INTO post_comments (post_id,user_id,text) VALUES (?,?,?)').run(p1, investorIds[4], 'Impressive margins for payments. Requesting data room access now.');
 
+// Founder updates
+const insUpd = db.prepare('INSERT INTO founder_updates (startup_id,headline,body,arr,mrr,growth) VALUES (?,?,?,?,?,?)');
+insUpd.run(startupIds[0], 'Q4: crossed $3.2M ARR, 14 bank integrations live', 'Processed volume grew 22% QoQ. Two enterprise platform deals signed (10k+ merchants each). Hiring a VP Engineering — intros welcome. Series A data room is fully refreshed.', 3200000, 290000, 18);
+insUpd.run(startupIds[0], 'November: enterprise pilot converted', 'Our largest pilot converted to a 3-year contract. Net revenue retention now 131%. Burn flat. Next: UPI credit lines GA in January.', null, 270000, 16);
+insUpd.run(startupIds[1], '60 hospitals live, SEA expansion started', 'First two Jakarta hospitals onboarded ahead of schedule. Median discharge time down 22% across the network. Raising continues — IM available in the data room.', 5100000, null, 11);
+insUpd.run(startupIds[2], 'Jaipur launch ahead of plan', 'First 200 retailers onboarded in 3 weeks. Contribution margin positive in Delhi NCR for the second straight quarter. Embedded credit book at ₹4.1Cr with zero NPAs.', 1100000, null, 26);
+
 // Access requests
 db.prepare("INSERT INTO access_requests (collateral_id,investor_id,status) VALUES (2,?, 'approved')").run(investorIds[0]);
 db.prepare("INSERT INTO access_requests (collateral_id,investor_id,status) VALUES (3,?, 'pending')").run(investorIds[4]);

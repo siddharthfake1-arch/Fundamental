@@ -136,6 +136,8 @@ export default function Discover() {
             <option value="recent">Recent</option>
             <option value="upvoted">Most Upvoted</option>
             <option value="viewed">Most Viewed</option>
+            <option value="score">Highest Score</option>
+            <option value="fit">Best Thesis Fit</option>
           </select>
         </div>
       </div>

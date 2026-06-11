@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, fmtMoney, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
-import { Avatar, BarBreakdown, Empty, LineChart, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, BarBreakdown, Empty, LineChart, Modal, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 const Section = ({ id, title, children }) => (
   <section id={id} className="card p-5 sm:p-6 fade-in">
@@ -79,9 +79,15 @@ export default function Startup() {
                 : s.raising_status === 'Round Closing'
                   ? <span className="chip-gold">◐ Round Closing{s.raising_amount && ` — ${s.raising_amount}`}</span>
                   : <span className="chip">Not Raising</span>}
+              {d.fit != null && <span className="chip-blue" title="Match with your declared thesis">◎ {d.fit}% thesis fit</span>}
               <span className="text-xs text-mist-500">{s.views.toLocaleString()} profile views</span>
             </div>
           </div>
+          {d.score && (
+            <div className="shrink-0 self-start" title={`Completeness ${d.score.breakdown.completeness}/40 · Traction ${d.score.breakdown.traction}/30 · Engagement ${d.score.breakdown.engagement}/20 · Trust ${d.score.breakdown.trust}/10`}>
+              <ScoreRing score={d.score.total} size={72} label="Fundamental Score" />
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2 flex-wrap mt-5 pt-5 border-t border-ink-700/60">
           {!is_owner && (
@@ -244,6 +250,33 @@ export default function Startup() {
         {is_owner && <PostSignal startupId={s.id} onPosted={load} />}
       </Section>
 
+      {/* ---- Founder Updates (investor updates feed) ---- */}
+      <Section id="updates" title="Founder Updates">
+        {d.updates.length === 0 ? (
+          <div className="text-sm text-mist-500">No investor updates yet.{is_owner && ' Post your first one below — startups that update monthly get materially more investor attention.'}</div>
+        ) : (
+          <div className="space-y-4">
+            {d.updates.map(u => (
+              <div key={u.id} className="bg-ink-850 border border-ink-700/50 rounded-xl p-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-semibold text-mist-100 text-sm">{u.headline}</span>
+                  <span className="text-[11px] text-mist-500">{timeAgo(u.created_at)}</span>
+                </div>
+                <p className="text-sm text-mist-300 leading-relaxed mt-1.5">{u.body}</p>
+                {(u.arr || u.mrr || u.growth) && (
+                  <div className="flex gap-2 flex-wrap mt-3">
+                    {u.arr != null && u.arr > 0 && <span className="chip-gold">ARR {fmtMoney(u.arr)}</span>}
+                    {u.mrr != null && u.mrr > 0 && <span className="chip-gold">MRR {fmtMoney(u.mrr)}</span>}
+                    {u.growth != null && u.growth > 0 && <span className="chip-green">+{u.growth}% MoM</span>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {is_owner && <UpdateComposer startupId={s.id} onPosted={load} />}
+      </Section>
+
       {/* ---- Section 7: Use of Funds ---- */}
       <Section id="funds" title="Section 7 — Use of Funds">
         {(!s.use_of_funds || s.use_of_funds.length === 0) && !s.deployment_timeline ? (
@@ -316,6 +349,45 @@ function AccessManager({ startupId, onChange }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function UpdateComposer({ startupId, onPosted }) {
+  const [open, setOpen] = useState(false);
+  const [f, setF] = useState({ headline: '', body: '', arr: '', mrr: '', growth: '' });
+  const toast = useToast();
+  const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
+  return (
+    <div className="mt-5">
+      {!open ? <button className="btn-primary btn-sm" onClick={() => setOpen(true)}>+ Post Investor Update</button> : (
+        <div className="card p-4 space-y-3">
+          <input className="input" maxLength={120} placeholder="Headline — e.g. October: crossed ₹2Cr MRR" value={f.headline} onChange={set('headline')} />
+          <div>
+            <textarea className="input min-h-[90px]" maxLength={400} value={f.body} onChange={set('body')}
+              placeholder="What happened, what's next, where you need help. Max 400 characters — investors read every word of short updates." />
+            <div className={`text-right text-[11px] mt-1 tabular-nums ${f.body.length > 360 ? 'text-amber-400' : 'text-mist-500'}`}>{f.body.length}/400</div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <input type="number" className="input" placeholder="ARR (USD)" value={f.arr} onChange={set('arr')} />
+            <input type="number" className="input" placeholder="MRR (USD)" value={f.mrr} onChange={set('mrr')} />
+            <input type="number" className="input" placeholder="Growth %" value={f.growth} onChange={set('growth')} />
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-primary btn-sm" disabled={!f.headline.trim() || !f.body.trim()} onClick={async () => {
+              try {
+                await api.post(`/api/startups/${startupId}/updates`, {
+                  headline: f.headline, body: f.body,
+                  arr: f.arr ? Number(f.arr) : null, mrr: f.mrr ? Number(f.mrr) : null, growth: f.growth ? Number(f.growth) : null,
+                });
+                setOpen(false); setF({ headline: '', body: '', arr: '', mrr: '', growth: '' });
+                onPosted(); toast('Update published — everyone tracking you was notified', 'success');
+              } catch (e) { toast(e.message, 'error'); }
+            }}>Publish Update</button>
+            <button className="btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -41,7 +41,7 @@ export default function Nav() {
   }, []);
 
   const links = [...LINKS];
-  if (user.role === 'investor') links.splice(5, 0, { to: '/watchlist', label: 'Watchlist' });
+  if (user.role === 'investor') links.splice(5, 0, { to: '/watchlist', label: 'Pipeline' });
   if (user.role === 'admin') links.push({ to: '/admin', label: 'Admin' });
 
   return (

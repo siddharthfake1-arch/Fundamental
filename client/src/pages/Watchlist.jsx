@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
+import { motion } from 'motion/react';
+import { ChevronLeft, ChevronRight, StickyNote } from 'lucide-react';
 import { api, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
-const STATUSES = ['Tracking', 'Intro Call Done', 'Due Diligence', 'Term Sheet', 'Passed'];
+const STAGES = ['Tracking', 'Intro Call Done', 'Due Diligence', 'Term Sheet', 'Passed'];
+const STAGE_TINT = {
+  'Tracking': 'border-t-mist-500', 'Intro Call Done': 'border-t-accent-400',
+  'Due Diligence': 'border-t-gold-400', 'Term Sheet': 'border-t-emerald-400', 'Passed': 'border-t-red-400',
+};
 
+// Investor Pipeline — a lightweight deal CRM over the watchlist.
 export default function Watchlist() {
   const { user } = useAuth();
   const [list, setList] = useState(null);
+  const [notesFor, setNotesFor] = useState(null);
   const toast = useToast();
 
   if (user.role !== 'investor') return <Navigate to="/dashboard" replace />;
@@ -18,87 +26,114 @@ export default function Watchlist() {
 
   if (!list) return <Spinner />;
 
+  const move = async (s, dir) => {
+    const idx = STAGES.indexOf(s.status);
+    const next = STAGES[idx + dir];
+    if (!next) return;
+    try { await api.post(`/api/startups/${s.id}/watchlist-status`, { status: next }); load(); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto fade-in">
-      <h1 className="h-display text-2xl">Watchlist</h1>
-      <p className="text-sm text-mist-400 mt-1 mb-6">Your tracked startups with private notes and live activity. Only you can see this.</p>
+    <div className="fade-in">
+      <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
+        <div>
+          <h1 className="h-display text-2xl">Pipeline</h1>
+          <p className="text-sm text-mist-400 mt-1">Your private deal flow, from first look to decision. Only you can see this board.</p>
+        </div>
+        <Link to="/discover" className="btn-ghost btn-sm">+ Source from Discover</Link>
+      </div>
 
       {list.length === 0 ? (
-        <Empty title="Your watchlist is empty" sub="Save startups from Discover to track their progress, keep notes and manage your pipeline status." />
+        <Empty title="Your pipeline is empty" sub="Save startups from Discover and manage them through Tracking → Diligence → Decision, with private notes at every step." />
       ) : (
-        <div className="space-y-4">
-          {list.map(s => <Row key={s.id} s={s} onChange={load} />)}
+        <div className="grid grid-flow-col auto-cols-[270px] lg:auto-cols-fr gap-4 overflow-x-auto pb-4">
+          {STAGES.map(stage => {
+            const items = list.filter(s => s.status === stage);
+            return (
+              <div key={stage} className={`card !rounded-xl border-t-2 ${STAGE_TINT[stage]} p-3 min-h-[200px]`}>
+                <div className="flex items-center justify-between px-1 mb-3">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-mist-400">{stage}</span>
+                  <span className="text-xs font-bold text-mist-500 tabular-nums">{items.length}</span>
+                </div>
+                <div className="space-y-2.5">
+                  {items.map(s => (
+                    <motion.div key={s.id} layout initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+                      className="bg-ink-850 border border-ink-700/50 rounded-xl p-3 group">
+                      <Link to={`/startup/${s.id}`} className="flex items-center gap-2.5">
+                        <Avatar src={s.logo} name={s.name} size={9} square />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1 text-sm font-semibold text-mist-100 truncate group-hover:text-gold-300 transition-colors">
+                            {s.name}{!!s.verified && <VerifiedBadge small />}
+                          </div>
+                          <div className="text-[11px] text-mist-500 truncate">{s.sector} · {s.stage}</div>
+                        </div>
+                      </Link>
+                      {s.recent_activity[0] && (
+                        <div className="text-[11px] text-mist-500 mt-2 line-clamp-1" title={s.recent_activity[0].text}>
+                          ⚡ {s.recent_activity[0].text}
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-ink-700/40">
+                        <button onClick={() => setNotesFor(s)}
+                          className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors">
+                          <StickyNote className="w-3 h-3" /> {s.notes.length} note{s.notes.length !== 1 ? 's' : ''}
+                        </button>
+                        <div className="flex gap-0.5">
+                          <button onClick={() => move(s, -1)} disabled={STAGES.indexOf(s.status) === 0}
+                            className="p-1 rounded text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Move back">
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => move(s, 1)} disabled={STAGES.indexOf(s.status) === STAGES.length - 1}
+                            className="p-1 rounded text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Advance">
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
+
+      <NotesModal s={notesFor} onClose={() => setNotesFor(null)} onChange={load} />
     </div>
   );
 }
 
-function Row({ s, onChange }) {
+function NotesModal({ s, onClose, onChange }) {
   const [note, setNote] = useState('');
-  const [open, setOpen] = useState(false);
   const toast = useToast();
-
+  if (!s) return null;
   return (
-    <div className="card p-5">
-      <div className="flex items-start gap-4 flex-wrap">
-        <Link to={`/startup/${s.id}`}><Avatar src={s.logo} name={s.name} size={13} square /></Link>
-        <div className="flex-1 min-w-[180px]">
-          <Link to={`/startup/${s.id}`} className="flex items-center gap-1.5 font-semibold text-mist-100 hover:text-gold-300">
-            {s.name}{!!s.verified && <VerifiedBadge small />}
-          </Link>
-          <div className="text-xs text-mist-400 mt-0.5">{s.sector} · {s.stage} · {s.city}</div>
-          <p className="text-xs text-mist-500 mt-1.5 line-clamp-1">{s.one_liner}</p>
-          <div className="text-[11px] text-mist-500 mt-1">Saved {timeAgo(s.saved_at)}</div>
-        </div>
-        <div className="flex flex-col gap-2 items-end">
-          <select className="input !w-auto !py-1.5 !text-xs" value={s.status}
-            onChange={async (e) => {
-              try { await api.post(`/api/startups/${s.id}/watchlist-status`, { status: e.target.value }); onChange(); }
-              catch (er) { toast(er.message, 'error'); }
-            }}>
-            {STATUSES.map(st => <option key={st}>{st}</option>)}
-          </select>
-          {s.raising_status === 'Actively Raising' && <span className="chip-green">Raising</span>}
-        </div>
-      </div>
-
-      {s.recent_activity.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-ink-700/50">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-1.5">Recent Activity</div>
-          {s.recent_activity.map(a => (
-            <div key={a.id} className="text-xs text-mist-400 py-0.5"><span className="text-gold-400/80">{a.type}</span> — {a.text} <span className="text-mist-600">· {timeAgo(a.created_at)}</span></div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-4 pt-3 border-t border-ink-700/50">
-        <button className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 hover:text-gold-300" onClick={() => setOpen(o => !o)}>
-          Personal Notes ({s.notes.length}) {open ? '▾' : '▸'}
-        </button>
-        {open && (
-          <div className="mt-2.5 space-y-2">
-            {s.notes.map(n => (
-              <div key={n.id} className="flex gap-3 bg-gold-500/5 border border-gold-500/20 rounded-xl px-3.5 py-2.5">
-                <div className="flex-1">
-                  <p className="text-sm text-mist-200">{n.text}</p>
-                  <div className="text-[10px] text-mist-500 mt-0.5">{timeAgo(n.created_at)}</div>
-                </div>
-                <button className="text-mist-500 hover:text-red-400 text-xs" onClick={async () => { await api.del(`/api/startups/notes/${n.id}`); onChange(); }}>✕</button>
-              </div>
-            ))}
-            <div className="flex gap-2">
-              <input className="input !py-2" placeholder="Add a private note…" value={note} onChange={(e) => setNote(e.target.value)}
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter' && note.trim()) {
-                    try { await api.post(`/api/startups/${s.id}/notes`, { text: note }); setNote(''); onChange(); }
-                    catch (er) { toast(er.message, 'error'); }
-                  }
-                }} />
+    <Modal open={!!s} onClose={onClose} title={`Private notes — ${s.name}`}>
+      <div className="space-y-3">
+        <div className="text-xs text-mist-500">Saved {timeAgo(s.saved_at)} · visible only to you</div>
+        {s.notes.map(n => (
+          <div key={n.id} className="flex gap-3 bg-gold-500/5 border border-gold-500/20 rounded-xl px-3.5 py-2.5">
+            <div className="flex-1">
+              <p className="text-sm text-mist-200">{n.text}</p>
+              <div className="text-[10px] text-mist-500 mt-0.5">{timeAgo(n.created_at)}</div>
             </div>
+            <button className="text-mist-500 hover:text-red-400 text-xs" onClick={async () => {
+              await api.del(`/api/startups/notes/${n.id}`); onChange(); onClose();
+            }}>✕</button>
           </div>
-        )}
+        ))}
+        <div className="flex gap-2">
+          <input className="input !py-2" placeholder="Add a note… (Enter to save)" value={note} autoFocus
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={async (e) => {
+              if (e.key === 'Enter' && note.trim()) {
+                try { await api.post(`/api/startups/${s.id}/notes`, { text: note }); setNote(''); onChange(); onClose(); toast('Note saved', 'success'); }
+                catch (er) { toast(er.message, 'error'); }
+              }
+            }} />
+        </div>
       </div>
-    </div>
+    </Modal>
   );
 }

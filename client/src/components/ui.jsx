@@ -209,6 +209,26 @@ function CountUp({ value }) {
   return n.toLocaleString();
 }
 
+// Fundamental Score gauge — explainable composite rating
+export function ScoreRing({ score, size = 64, label = 'Score' }) {
+  const r = (size - 10) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = Math.max(0, Math.min(100, score));
+  const color = pct >= 75 ? '#34d399' : pct >= 50 ? 'rgb(var(--acc-400))' : pct >= 30 ? '#fbbf24' : '#f87171';
+  return (
+    <div className="flex flex-col items-center gap-1" title={`Fundamental Score: ${pct}/100`}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--ink-700))" strokeWidth="5" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.22,1,0.36,1)' }} />
+        <text x="50%" y="50%" transform={`rotate(90 ${size / 2} ${size / 2})`} textAnchor="middle" dominantBaseline="central"
+          className="font-display" style={{ fill: 'rgb(var(--mist-100))', fontSize: size * 0.3, fontWeight: 700 }}>{pct}</text>
+      </svg>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-mist-500">{label}</span>
+    </div>
+  );
+}
+
 export const Stat = ({ label, value, sub }) => (
   <div className="card card-hover p-4">
     <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">{label}</div>

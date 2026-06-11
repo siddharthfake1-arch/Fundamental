@@ -4,20 +4,20 @@
 
 /* ---- Theme tokens (RGB triplets so Tailwind alpha works) ---- */
 :root, html.dark {
-  /* Deep navy surfaces */
-  --ink-950: 4 9 26;        /* page background */
-  --ink-900: 8 16 38;       /* cards */
-  --ink-850: 11 22 50;      /* inputs / wells */
-  --ink-800: 16 30 66;      /* raised elements */
-  --ink-700: 24 42 88;      /* borders */
-  --ink-600: 36 58 114;
-  --ink-500: 53 78 142;
-  /* Text */
-  --mist-100: 238 244 252;
-  --mist-200: 213 226 245;
-  --mist-300: 168 188 220;
-  --mist-400: 124 147 186;
-  --mist-500: 88 109 148;
+  /* Graphite / near-black surfaces — navy lives in accents, not backgrounds */
+  --ink-950: 9 9 11;        /* page background */
+  --ink-900: 16 16 19;      /* cards */
+  --ink-850: 22 22 26;      /* inputs / wells */
+  --ink-800: 30 30 35;      /* raised elements */
+  --ink-700: 42 42 49;      /* borders */
+  --ink-600: 58 58 67;
+  --ink-500: 77 77 88;
+  /* Text — clean neutral greys */
+  --mist-100: 245 246 248;
+  --mist-200: 220 222 228;
+  --mist-300: 172 176 186;
+  --mist-400: 128 132 144;
+  --mist-500: 94 98 110;
   /* Primary accent — light blue */
   --acc-300: 125 214 255;
   --acc-400: 76 195 255;
@@ -27,25 +27,25 @@
   --acc2-400: 110 168 255;
   --acc2-500: 77 141 255;
   --acc2-600: 58 114 219;
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(2,6,23,0.45);
-  --shadow-lift: 0 1px 0 rgba(255,255,255,0.06) inset, 0 16px 40px rgba(2,6,23,0.6);
-  --hero-orb-opacity: 0.5;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px rgba(0,0,0,0.4);
+  --shadow-lift: 0 1px 0 rgba(255,255,255,0.05) inset, 0 16px 40px rgba(0,0,0,0.55);
+  --hero-orb-opacity: 0.32;
   color-scheme: dark;
 }
 
 html.light {
-  --ink-950: 241 245 252;   /* page background */
+  --ink-950: 246 247 249;   /* page background */
   --ink-900: 255 255 255;   /* cards */
-  --ink-850: 238 243 251;   /* inputs / wells */
-  --ink-800: 226 234 248;
-  --ink-700: 207 219 240;   /* borders */
-  --ink-600: 178 195 226;
-  --ink-500: 144 165 204;
-  --mist-100: 10 21 48;     /* primary text — deep navy */
-  --mist-200: 28 42 77;
-  --mist-300: 62 80 117;
-  --mist-400: 94 112 153;
-  --mist-500: 130 146 181;
+  --ink-850: 240 241 245;   /* inputs / wells */
+  --ink-800: 230 232 238;
+  --ink-700: 213 216 224;   /* borders */
+  --ink-600: 185 189 200;
+  --ink-500: 150 155 168;
+  --mist-100: 17 18 22;     /* primary text */
+  --mist-200: 38 40 48;
+  --mist-300: 78 82 94;
+  --mist-400: 110 114 128;
+  --mist-500: 140 145 158;
   --acc-300: 14 116 198;
   --acc-400: 11 103 178;
   --acc-500: 9 90 158;
@@ -69,8 +69,8 @@ html.light {
 }
 
 @layer components {
-  .card { @apply bg-ink-900 border border-ink-700/60 rounded-2xl shadow-card; }
-  .card-hover { @apply transition-all duration-200 hover:border-gold-500/40 hover:shadow-lift hover:-translate-y-0.5; }
+  .card { @apply bg-ink-900 border border-ink-700/50 rounded-2xl shadow-card; }
+  .card-hover { @apply transition-all duration-200 hover:border-ink-500/70 hover:shadow-lift hover:-translate-y-0.5; }
   .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed select-none; }
   .btn-primary { @apply btn text-white active:scale-[0.98] shadow-glow;
     background-image: linear-gradient(120deg, rgb(var(--acc2-500)), rgb(var(--acc-500))); }
