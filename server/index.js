@@ -1,3 +1,12 @@
+// Friendly guard: running `npm start` before `npm install` gives a clear message
+try { require.resolve('express'); } catch {
+  console.error('\n  Dependencies are not installed yet.\n');
+  console.error('  Run these two commands:\n');
+  console.error('    npm install');
+  console.error('    npm start\n');
+  process.exit(1);
+}
+
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
