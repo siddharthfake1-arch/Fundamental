@@ -79,6 +79,7 @@ app.use('/api/startups', require('./routes/startups'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/messages', require('./routes/messages'));
 app.use('/api/social', require('./routes/social'));
+app.use('/api/communities', require('./routes/communities'));
 app.use('/api', require('./routes/misc'));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found' }));

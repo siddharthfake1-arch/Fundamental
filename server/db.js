@@ -229,7 +229,45 @@ CREATE TABLE IF NOT EXISTS founder_updates (
   arr REAL, mrr REAL, growth REAL,
   created_at TEXT DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS communities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('topic','city','role')),
+  description TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS community_members (
+  community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joined_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (community_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS community_posts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  community_id INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS community_replies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
 `);
+
+// Lightweight migrations for columns added after first release
+for (const stmt of [
+  "ALTER TABLE users ADD COLUMN cover TEXT DEFAULT ''",
+  "ALTER TABLE startups ADD COLUMN cover TEXT DEFAULT ''",
+]) { try { db.exec(stmt); } catch { /* column exists */ } }
 
 // ---- shared helpers ----
 function notify(userId, type, text, link = '') {
@@ -304,4 +342,19 @@ function thesisFit(startup, investorProfile) {
   return Math.min(100, fit);
 }
 
-module.exports = { db, notify, addActivity, areConnected, publicUser, profileCompletion, fundamentalScore, thesisFit };
+// Trust Score for people: verification, profile quality, network, contribution.
+// Explainable and anti-gamification: capped components, no like-counting.
+function trustScore(u) {
+  const tier = Math.min(3, u.verified || 0);
+  const verification = [0, 25, 33, 40][tier];
+  const fields = [u.photo, u.bio, u.headline, u.linkedin, u.education || u.experience, u.city].filter(Boolean).length;
+  const profile = Math.round((fields / 6) * 30);
+  const conns = db.prepare("SELECT COUNT(*) c FROM connections WHERE (requester_id=? OR recipient_id=?) AND status='accepted'").get(u.id, u.id).c;
+  const network = Math.min(15, conns * 3);
+  const posts = db.prepare('SELECT COUNT(*) c FROM posts WHERE user_id=? AND removed=0').get(u.id).c;
+  const replies = db.prepare('SELECT COUNT(*) c FROM community_replies WHERE user_id=?').get(u.id).c;
+  const contribution = Math.min(15, posts * 3 + replies * 2);
+  return { total: verification + profile + network + contribution, breakdown: { verification, profile, network, contribution } };
+}
+
+module.exports = { db, notify, addActivity, areConnected, publicUser, profileCompletion, fundamentalScore, thesisFit, trustScore };

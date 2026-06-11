@@ -47,6 +47,14 @@ function avatarFile(key, initials, [c1, c2]) {
   return `/uploads/${file}`;
 }
 
+// Wide cover banners: layered gradient + soft shapes (LinkedIn-style hero)
+function coverFile(key, [c1, c2]) {
+  const file = `${key}.svg`;
+  fs.writeFileSync(path.join(UP, file),
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="350" viewBox="0 0 1400 350"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient><radialGradient id="r1" cx="0.2" cy="0.1" r="0.6"><stop offset="0%" stop-color="#fff" stop-opacity="0.14"/><stop offset="100%" stop-color="#fff" stop-opacity="0"/></radialGradient></defs><rect width="1400" height="350" fill="url(#g)"/><rect width="1400" height="350" fill="url(#r1)"/><circle cx="1180" cy="60" r="190" fill="#fff" opacity="0.05"/><circle cx="1320" cy="270" r="130" fill="#fff" opacity="0.07"/><circle cx="180" cy="300" r="160" fill="#000" opacity="0.10"/><path d="M0 290 Q 350 220 700 270 T 1400 250 V350 H0 Z" fill="#000" opacity="0.16"/></svg>`);
+  return `/uploads/${file}`;
+}
+
 const VIDEO = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 const VIDEO2 = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4';
 
@@ -141,6 +149,65 @@ const startupIds = startups.map((s, i) => insStartup.run(
   120 + i * 47, 800 + i * 230, s.verified,
   JSON.stringify(s.uof.map(([label, pct]) => ({ label, pct }))), s.timeline, s.objectives
 ).lastInsertRowid);
+
+// Covers + verification tiers (1 Verified · 2 Enhanced · 3 Institution)
+const setUserCover = db.prepare('UPDATE users SET cover=?, verified=? WHERE id=?');
+founderIds.forEach((id, i) => setUserCover.run(coverFile(`cov-f${i + 1}`, AV_GRADS[i]), [2, 2, 1, 0, 1, 0, 2, 1][i], id));
+investorIds.forEach((id, i) => setUserCover.run(coverFile(`cov-i${i + 1}`, IV_GRADS[i]), [2, 3, 1, 0, 2][i], id));
+const setStartupCover = db.prepare('UPDATE startups SET cover=?, verified=? WHERE id=?');
+startupIds.forEach((id, i) => setStartupCover.run(coverFile(`cov-s${i + 1}`, LOGO_GRADS[i]), [2, 3, 1, 0, 1, 0, 2, 1][i], id));
+
+// Communities — topics, cities, roles
+const insCom = db.prepare('INSERT INTO communities (slug,name,kind,description) VALUES (?,?,?,?)');
+const COMMUNITIES = [
+  ...[['ai', 'AI', 'Building and applying AI — models, agents, infrastructure and real deployments.'],
+    ['saas', 'SaaS', 'Recurring revenue craft: pricing, retention, GTM and scaling playbooks.'],
+    ['fintech', 'Fintech', 'Payments, lending, infrastructure and regulation across markets.'],
+    ['healthtech', 'Healthtech', 'Clinical software, diagnostics and care delivery.'],
+    ['climate', 'Climate', 'Energy transition, sustainability and industrial decarbonisation.'],
+    ['consumer', 'Consumer', 'Brands, marketplaces and consumer behaviour.']].map(([s, n, d]) => [s, n, 'topic', d]),
+  ...[['mumbai', 'Mumbai'], ['bengaluru', 'Bengaluru'], ['delhi', 'Delhi'], ['singapore', 'Singapore'],
+    ['dubai', 'Dubai'], ['london', 'London'], ['new-york', 'New York']].map(([s, n]) => [s, n, 'city', `The ${n} startup ecosystem — founders, investors and operators on the ground.`]),
+  ...[['founders', 'Founders', 'Peer support and hard-won lessons from people building companies.'],
+    ['angels', 'Angels', 'First-cheque investing: sourcing, judgment and portfolio construction.'],
+    ['vcs', 'VCs', 'Institutional venture: theses, diligence and fund craft.'],
+    ['operators', 'Operators', 'The people who scale companies: product, growth, ops and finance.']].map(([s, n, d]) => [s, n, 'role', d]),
+];
+const comIds = {};
+COMMUNITIES.forEach(([slug, name, kind, desc]) => { comIds[slug] = insCom.run(slug, name, kind, desc).lastInsertRowid; });
+
+const insMem = db.prepare('INSERT INTO community_members (community_id,user_id) VALUES (?,?)');
+const joinAll = (uid, slugs) => slugs.forEach(s => insMem.run(comIds[s], uid));
+joinAll(founderIds[0], ['fintech', 'saas', 'mumbai', 'founders']);
+joinAll(founderIds[1], ['healthtech', 'bengaluru', 'founders']);
+joinAll(founderIds[2], ['consumer', 'delhi', 'founders']);
+joinAll(founderIds[4], ['ai', 'saas', 'founders']);
+joinAll(founderIds[6], ['fintech', 'singapore', 'founders']);
+joinAll(founderIds[7], ['ai', 'founders']);
+joinAll(investorIds[0], ['fintech', 'mumbai', 'vcs']);
+joinAll(investorIds[1], ['healthtech', 'london', 'vcs']);
+joinAll(investorIds[2], ['saas', 'ai', 'bengaluru', 'angels']);
+joinAll(investorIds[3], ['climate', 'singapore', 'vcs']);
+joinAll(investorIds[4], ['fintech', 'delhi', 'vcs', 'angels']);
+
+const insCPost = db.prepare('INSERT INTO community_posts (community_id,user_id,title,body) VALUES (?,?,?,?)');
+const insCReply = db.prepare('INSERT INTO community_replies (post_id,user_id,body) VALUES (?,?,?)');
+const cp1 = insCPost.run(comIds['fintech'], investorIds[0], 'What does the UPI credit line rollout mean for SME lenders?',
+  'RBI’s credit-line-on-UPI framework changes the distribution equation entirely. The moat shifts from origination to underwriting data. Founders in this space — how are you thinking about data partnerships vs building your own flow-based models?').lastInsertRowid;
+insCReply.run(cp1, founderIds[0], 'We see it as the biggest unlock since UPI itself. Distribution gets commoditised; the winners will own reconciliation and repayment behaviour data. That’s where we’re investing our roadmap.');
+insCReply.run(cp1, investorIds[4], 'Agree on underwriting data. The uncomfortable question is take-rate compression — pricing power will sit with whoever owns the merchant relationship.');
+const cp2 = insCPost.run(comIds['saas'], investorIds[2], 'Indian SaaS pricing: stop discounting for logos',
+  'Reviewed 40+ seed SaaS decks this quarter. The most common self-inflicted wound: 60–80% discounts for “strategic logos” that never convert to reference customers. Charge full price to 5 customers who feel the pain daily. Their renewal is your best fundraising slide.').lastInsertRowid;
+insCReply.run(cp2, founderIds[4], 'Painfully accurate. We cut our discount ceiling to 20% last year — churn dropped because the customers who stayed had real budget and real intent.');
+const cp3 = insCPost.run(comIds['bengaluru'], founderIds[1], 'AMA: scaling clinical software across 60 hospitals — ask me anything',
+  'We crossed 60 hospital deployments across India and SEA. Happy to share what worked (and what failed) on hospital sales cycles, clinical champions, NABH compliance, and pricing per bed. Ask away.').lastInsertRowid;
+insCReply.run(cp3, investorIds[1], 'What was your median sales cycle at hospital #5 vs hospital #50? And which stakeholder actually signs?');
+insCReply.run(cp3, founderIds[1], '11 months at #5, 4 months at #50 — references compound. The CMO champions, but the CFO signs. Price per bed per year, never per user.');
+const cp4 = insCPost.run(comIds['founders'], founderIds[6], 'Resource: our seed data room checklist (what investors actually opened)',
+  'After closing our round I pulled the data-room analytics. Most-opened docs: financial model (every investor), cohort retention (80%), cap table (70%). Least-opened: 40-page market study (12%). Build the docs investors actually read. Full checklist in the thread.').lastInsertRowid;
+insCReply.run(cp4, founderIds[2], 'This matches our experience exactly. The IM mattered less than a clean, honest model with assumptions exposed.');
+insCPost.run(comIds['ai'], investorIds[2], 'Emerging theme: applied AI in Indian logistics is underpriced',
+  'Everyone is funding horizontal copilots. Meanwhile route optimisation, warehouse autonomy and freight pricing models are quietly compounding with real revenue and zero hype premium. Watching this space closely — founders here, say hello.');
 
 // Collateral
 const docTypes = [['Investor Deck', 'Deck', 'Public'], ['Information Memorandum', 'IM', 'Request Access'], ['Financial Model (3-yr)', 'Financial Model', 'Request Access'], ['Industry Overview', 'Industry Overview', 'Public'], ['Product Demo Recording', 'Product Demo', 'Connected Only'], ['Cap Table', 'Cap Table', 'Request Access']];

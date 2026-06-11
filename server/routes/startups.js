@@ -21,10 +21,12 @@ function tile(s, userId, ip = null) {
   const recentUpvotes = db.prepare("SELECT COUNT(*) c FROM upvotes WHERE startup_id=? AND created_at > datetime('now','-7 days')").get(s.id).c;
   return {
     id: s.id, name: s.name, logo: s.logo, sector: s.sector, subsector: s.subsector,
-    stage: s.stage, city: s.city, arr: s.arr, mrr: s.mrr, verified: !!s.verified,
+    stage: s.stage, city: s.city, arr: s.arr, mrr: s.mrr, verified: s.verified,
     raising_status: s.raising_status, one_liner: s.one_liner,
     upvotes, views: s.views,
     score: score.total, fit,
+    spark: J(s.revenue_series).map(p => p.revenue),
+    growth: s.growth,
     momentum: Math.min(100, Math.round(recentUpvotes * 18 + recentViews * 3 + upvotes * 4 + (s.raising_status === 'Actively Raising' ? 10 : 0))),
     has_video: !!s.video_url,
     has_collateral: !!db.prepare('SELECT 1 FROM collateral WHERE startup_id=?').get(s.id),
@@ -110,7 +112,7 @@ function fireDealAlerts(s) {
 // ---- Create / update own startup (founder onboarding + settings) ----
 const FIELDS = ['name','sector','subsector','stage','city','founded_year','raising_status','raising_amount',
   'one_liner','problem','solution','business_model','market_size','competitive_advantage','round_details',
-  'arr','mrr','growth','gross_margin','burn','runway','cac','ltv','deployment_timeline','strategic_objectives','logo','video_url'];
+  'arr','mrr','growth','gross_margin','burn','runway','cac','ltv','deployment_timeline','strategic_objectives','logo','cover','video_url'];
 
 router.post('/mine', requireRole('founder'), (req, res) => {
   const existing = db.prepare('SELECT * FROM startups WHERE founder_id=?').get(req.user.id);

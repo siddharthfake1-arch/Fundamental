@@ -28,11 +28,30 @@ router.get('/types', (req, res) => {
   res.json({ types: POST_TYPES, allowed_for_me: allowed });
 });
 
+// Signal-ranked feed: relevance + author credibility + signal type — not likes.
 router.get('/', (req, res) => {
   const { type } = req.query;
   let rows = db.prepare('SELECT * FROM posts WHERE removed=0 ORDER BY id DESC LIMIT 100').all();
   if (type) rows = rows.filter(p => p.type === type);
-  res.json({ posts: rows.map(p => shapePost(p, req.user.id)) });
+  const ip = req.user.role === 'investor'
+    ? db.prepare('SELECT sector_focus FROM investor_profiles WHERE user_id=?').get(req.user.id) : null;
+  let mySectors = [];
+  try { mySectors = ip ? JSON.parse(ip.sector_focus) : []; } catch {}
+  const myStartup = req.user.role === 'founder'
+    ? db.prepare('SELECT sector FROM startups WHERE founder_id=?').get(req.user.id) : null;
+  if (myStartup) mySectors = [myStartup.sector];
+  const SIGNAL_WEIGHT = { 'Fundraising Announcement': 3, 'Round Closed': 3, 'Investor Insight': 3, 'Milestone': 2.5, 'Investment Made': 2.5, 'Product Launch': 2, 'Hiring': 1 };
+  const ranked = rows.map(p => {
+    const author = db.prepare('SELECT verified FROM users WHERE id=?').get(p.user_id);
+    const startup = p.startup_id ? db.prepare('SELECT sector FROM startups WHERE id=?').get(p.startup_id) : null;
+    const ageHours = (Date.now() - new Date(p.created_at + 'Z')) / 36e5;
+    const rank = (SIGNAL_WEIGHT[p.type] || 1)
+      + Math.min(3, (author?.verified || 0)) * 1.5            // credibility, capped
+      + (startup && mySectors.includes(startup.sector) ? 3 : 0) // relevance to viewer
+      - Math.min(8, ageHours / 24);                            // recency decay
+    return { p, rank };
+  }).sort((a, b) => b.rank - a.rank);
+  res.json({ posts: ranked.map(({ p }) => shapePost(p, req.user.id)) });
 });
 
 router.post('/', (req, res) => {

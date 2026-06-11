@@ -49,6 +49,39 @@ router.get('/dashboard/founder', requireRole('founder'), (req, res) => {
   res.json(out);
 });
 
+// ---- Market Pulse: aggregate ecosystem intelligence. Never exposes startup-level
+// confidential data — only platform-level aggregates. ----
+router.get('/pulse', (req, res) => {
+  const sectors = db.prepare(`SELECT sector, COUNT(*) startups,
+      SUM(CASE WHEN raising_status='Actively Raising' THEN 1 ELSE 0 END) raising,
+      ROUND(AVG(growth),1) avg_growth
+    FROM startups WHERE video_url != '' AND sector != '' GROUP BY sector`).all()
+    .map(row => ({
+      ...row,
+      upvotes_30d: db.prepare(`SELECT COUNT(*) c FROM upvotes u JOIN startups s ON s.id=u.startup_id
+        WHERE s.sector=? AND u.created_at > datetime('now','-30 days')`).get(row.sector).c,
+      views_7d: db.prepare(`SELECT COUNT(*) c FROM startup_views v JOIN startups s ON s.id=v.startup_id
+        WHERE s.sector=? AND v.created_at > datetime('now','-7 days')`).get(row.sector).c,
+      pipeline_adds_30d: db.prepare(`SELECT COUNT(*) c FROM watchlist w JOIN startups s ON s.id=w.startup_id
+        WHERE s.sector=? AND w.created_at > datetime('now','-30 days')`).get(row.sector).c,
+    }))
+    .map(row => ({ ...row, heat: row.upvotes_30d * 3 + row.views_7d + row.pipeline_adds_30d * 4 + row.raising * 5 }))
+    .sort((a, b) => b.heat - a.heat);
+  const stages = db.prepare(`SELECT stage, COUNT(*) c FROM startups WHERE video_url != '' AND stage != '' GROUP BY stage ORDER BY c DESC`).all();
+  const cities = db.prepare(`SELECT city, COUNT(*) c FROM startups WHERE video_url != '' AND city != '' GROUP BY city ORDER BY c DESC LIMIT 8`).all();
+  res.json({
+    totals: {
+      startups: db.prepare("SELECT COUNT(*) c FROM startups WHERE video_url != ''").get().c,
+      open_rounds: db.prepare("SELECT COUNT(*) c FROM startups WHERE video_url != '' AND raising_status='Actively Raising'").get().c,
+      investors: db.prepare("SELECT COUNT(*) c FROM users WHERE role='investor' AND onboarded=1").get().c,
+      connections_30d: db.prepare("SELECT COUNT(*) c FROM connections WHERE status='accepted' AND created_at > datetime('now','-30 days')").get().c,
+      updates_30d: db.prepare("SELECT COUNT(*) c FROM founder_updates WHERE created_at > datetime('now','-30 days')").get().c,
+    },
+    sectors, stages, cities,
+    emerging: [...sectors].filter(s => s.avg_growth > 0).sort((a, b) => b.avg_growth - a.avg_growth).slice(0, 4),
+  });
+});
+
 // ---- Founder analytics: who's looking, and at what ----
 router.get('/dashboard/founder/analytics', requireRole('founder'), (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE founder_id=?').get(req.user.id);
@@ -133,8 +166,13 @@ router.get('/admin/users', (req, res) => {
 router.get('/admin/startups', (req, res) => {
   res.json({ startups: db.prepare('SELECT id, name, sector, stage, verified, video_url, views FROM startups ORDER BY id DESC').all() });
 });
+// Verification tiers: 0 none → 1 Verified → 2 Enhanced → 3 Institution
 router.post('/admin/verify-user/:id', (req, res) => {
-  db.prepare('UPDATE users SET verified = 1 - verified WHERE id=?').run(req.params.id);
+  if (req.body && req.body.tier !== undefined) {
+    db.prepare('UPDATE users SET verified=? WHERE id=?').run(Math.max(0, Math.min(3, req.body.tier)), req.params.id);
+  } else {
+    db.prepare('UPDATE users SET verified = (verified + 1) % 4 WHERE id=?').run(req.params.id);
+  }
   res.json({ ok: true });
 });
 router.post('/admin/flag-user/:id', (req, res) => {
@@ -142,7 +180,11 @@ router.post('/admin/flag-user/:id', (req, res) => {
   res.json({ ok: true });
 });
 router.post('/admin/verify-startup/:id', (req, res) => {
-  db.prepare('UPDATE startups SET verified = 1 - verified WHERE id=?').run(req.params.id);
+  if (req.body && req.body.tier !== undefined) {
+    db.prepare('UPDATE startups SET verified=? WHERE id=?').run(Math.max(0, Math.min(3, req.body.tier)), req.params.id);
+  } else {
+    db.prepare('UPDATE startups SET verified = (verified + 1) % 4 WHERE id=?').run(req.params.id);
+  }
   res.json({ ok: true });
 });
 router.get('/admin/reports', (req, res) => {

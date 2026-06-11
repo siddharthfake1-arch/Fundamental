@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext, useCallback } from 'react';
+import { useEffect, useRef, useState, createContext, useContext, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../api';
 
@@ -14,11 +14,69 @@ export function Avatar({ src, name, size = 10, square = false }) {
   );
 }
 
-export const VerifiedBadge = ({ small }) => (
-  <span title="Verified by Fundamental" className={`inline-flex items-center justify-center rounded-full bg-accent-500 text-white shrink-0 ${small ? 'w-3.5 h-3.5' : 'w-4.5 h-4.5 w-[18px] h-[18px]'}`}>
-    <svg viewBox="0 0 24 24" fill="none" className={small ? 'w-2.5 h-2.5' : 'w-3 h-3'}><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-  </span>
-);
+const TIERS = {
+  1: { bg: 'bg-accent-500', label: 'Verified' },
+  2: { bg: 'bg-gold-500', label: 'Enhanced Verified — identity and metrics reviewed' },
+  3: { bg: 'bg-violet-500', label: 'Institution Verified — vetted at the institutional level' },
+};
+export const VerifiedBadge = ({ small, tier = 1 }) => {
+  const t = TIERS[Math.min(3, Math.max(1, Number(tier) || 1))];
+  return (
+    <span title={t.label} className={`inline-flex items-center justify-center rounded-full ${t.bg} text-white shrink-0 ${small ? 'w-3.5 h-3.5' : 'w-[18px] h-[18px]'}`}>
+      <svg viewBox="0 0 24 24" fill="none" className={small ? 'w-2.5 h-2.5' : 'w-3 h-3'}><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    </span>
+  );
+};
+
+// Tiny inline trend chart for cards — visual storytelling at a glance
+export function Sparkline({ data, w = 110, h = 30 }) {
+  if (!data || data.length < 2) return null;
+  const max = Math.max(...data), min = Math.min(...data);
+  const x = (i) => (i / (data.length - 1)) * (w - 4) + 2;
+  const y = (v) => h - 3 - ((v - min) / (max - min || 1)) * (h - 6);
+  const pts = data.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+  const up = data[data.length - 1] >= data[0];
+  const color = up ? '#34d399' : '#f87171';
+  return (
+    <svg width={w} height={h} className="shrink-0" aria-hidden>
+      <polyline points={`${pts} ${w - 2},${h - 1} 2,${h - 1}`} fill={color} opacity="0.10" stroke="none" />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// LinkedIn-style cover hero with gradient overlay and gentle parallax
+export function CoverHero({ cover, fallbackKey = '', height = 'h-44 sm:h-56', children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let raf = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const yy = Math.min(160, window.scrollY);
+        el.style.transform = `translateY(${yy * 0.28}px) scale(1.06)`;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf); };
+  }, []);
+  const hue = [...String(fallbackKey)].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+  return (
+    <div className="card overflow-hidden !rounded-2xl">
+      <div className={`relative ${height} overflow-hidden`}>
+        {cover ? (
+          <img ref={ref} src={cover} alt="" className="absolute inset-0 w-full h-full object-cover will-change-transform" style={{ transform: 'scale(1.06)' }} />
+        ) : (
+          <div ref={ref} className="absolute inset-0 will-change-transform" style={{ transform: 'scale(1.06)', background: `linear-gradient(120deg, hsl(${hue} 55% 24%), hsl(${(hue + 50) % 360} 65% 40%))` }} />
+        )}
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgb(var(--ink-900)) 2%, rgb(var(--ink-900) / 0.45) 35%, transparent 70%)' }} />
+      </div>
+      <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>
+    </div>
+  );
+}
 
 export const Spinner = ({ className = '' }) => (
   <div className={`flex justify-center py-12 ${className}`}>

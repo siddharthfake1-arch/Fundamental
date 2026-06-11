@@ -75,13 +75,16 @@ function Users() {
               <td className="px-4 py-3 text-mist-400">{u.city || '—'}</td>
               <td className="px-4 py-3 text-mist-500 text-xs">{timeAgo(u.created_at)}</td>
               <td className="px-4 py-3">
-                {!!u.verified && <span className="chip-green mr-1">Verified</span>}
+                {u.verified === 1 && <span className="chip-blue mr-1">Verified</span>}
+                {u.verified === 2 && <span className="chip-gold mr-1">Enhanced</span>}
+                {u.verified === 3 && <span className="chip mr-1 !border-violet-500/40 !text-violet-400">Institution</span>}
                 {!!u.flagged && <span className="chip-red">Flagged</span>}
               </td>
               <td className="px-4 py-3">
                 <div className="flex gap-2">
-                  <button className="btn-ghost btn-sm" onClick={async () => { await api.post(`/api/admin/verify-user/${u.id}`); load(); toast(u.verified ? 'Verification removed' : 'User verified', 'success'); }}>
-                    {u.verified ? 'Unverify' : 'Verify'}
+                  <button className="btn-ghost btn-sm" title="Cycle: None → Verified → Enhanced → Institution"
+                    onClick={async () => { await api.post(`/api/admin/verify-user/${u.id}`); load(); toast('Verification tier updated', 'success'); }}>
+                    Tier ↻
                   </button>
                   <button className="btn-danger btn-sm" onClick={async () => { await api.post(`/api/admin/flag-user/${u.id}`); load(); }}>
                     {u.flagged ? 'Unflag' : 'Flag Fraud'}
@@ -116,10 +119,16 @@ function StartupsAdmin() {
               <td className="px-4 py-3 text-mist-300">{s.stage}</td>
               <td className="px-4 py-3">{s.video_url ? <span className="chip-green">✓ Uploaded</span> : <span className="chip-red">Missing — unlisted</span>}</td>
               <td className="px-4 py-3 text-mist-400 tabular-nums">{s.views}</td>
-              <td className="px-4 py-3">{s.verified ? <span className="chip-green">Verified</span> : <span className="chip">Unverified</span>}</td>
               <td className="px-4 py-3">
-                <button className="btn-ghost btn-sm" onClick={async () => { await api.post(`/api/admin/verify-startup/${s.id}`); load(); toast('Updated', 'success'); }}>
-                  {s.verified ? 'Unverify' : 'Verify'}
+                {s.verified === 0 && <span className="chip">Unverified</span>}
+                {s.verified === 1 && <span className="chip-blue">Verified</span>}
+                {s.verified === 2 && <span className="chip-gold">Enhanced</span>}
+                {s.verified === 3 && <span className="chip !border-violet-500/40 !text-violet-400">Institution</span>}
+              </td>
+              <td className="px-4 py-3">
+                <button className="btn-ghost btn-sm" title="Cycle verification tier"
+                  onClick={async () => { await api.post(`/api/admin/verify-startup/${s.id}`); load(); toast('Tier updated', 'success'); }}>
+                  Tier ↻
                 </button>
               </td>
             </tr>

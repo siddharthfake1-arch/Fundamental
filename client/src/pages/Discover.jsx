@@ -127,7 +127,7 @@ export default function Discover() {
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="h-display text-2xl">Discover</h1>
-          <p className="text-sm text-mist-400 mt-1">The marketplace. Every startup here has a 12-minute pitch — watch before you reach out.</p>
+          <p className="text-sm text-mist-400 mt-1">The marketplace. Every startup here has a 12-minute pitch — watch before you reach out. <Link to="/startups" className="text-gold-300 hover:text-gold-200">Index view →</Link></p>
         </div>
         <div className="flex items-center gap-2">
           <button className="lg:hidden btn-ghost btn-sm" onClick={() => setFiltersOpen(o => !o)}>Filters{active ? ` (${active})` : ''}</button>

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { motion } from 'motion/react';
 import { api, fmtMoney, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
-import { Avatar, BarBreakdown, Empty, LineChart, Modal, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, BarBreakdown, CoverHero, Empty, LineChart, Modal, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 const Section = ({ id, title, children }) => (
-  <section id={id} className="card p-5 sm:p-6 fade-in">
+  <motion.section id={id} className="card p-5 sm:p-6"
+    initial={{ opacity: 0, y: 26 }} whileInView={{ opacity: 1, y: 0 }}
+    viewport={{ once: true, margin: '-40px' }} transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}>
     <h2 className="section-title mb-4">{title}</h2>
     {children}
-  </section>
+  </motion.section>
 );
 
 export default function Startup() {
@@ -78,14 +81,17 @@ export default function Startup() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-5">
-      {/* ---- Header ---- */}
-      <div className="card p-5 sm:p-6">
-        <div className="flex flex-col sm:flex-row gap-5">
-          <Avatar src={s.logo} name={s.name} size={20} square />
-          <div className="flex-1 min-w-0">
+      {/* ---- Header with cover hero ---- */}
+      <CoverHero cover={s.cover} fallbackKey={s.name}>
+        <div className="flex flex-col sm:flex-row gap-5 -mt-12 sm:-mt-14 relative">
+          <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+            className="rounded-2xl p-1 bg-ink-900 w-fit shadow-lift">
+            <Avatar src={s.logo} name={s.name} size={20} square />
+          </motion.div>
+          <div className="flex-1 min-w-0 sm:pt-14">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="h-display text-2xl sm:text-3xl">{s.name}</h1>
-              {!!s.verified && <VerifiedBadge />}
+              {!!s.verified && <VerifiedBadge tier={s.verified} />}
             </div>
             <div className="flex items-center gap-2 flex-wrap mt-2 text-sm text-mist-400">
               <span className="chip">{s.sector}</span><span className="chip">{s.stage}</span>
@@ -102,7 +108,7 @@ export default function Startup() {
             </div>
           </div>
           {d.score && (
-            <div className="shrink-0 self-start" title={`Completeness ${d.score.breakdown.completeness}/40 · Traction ${d.score.breakdown.traction}/30 · Engagement ${d.score.breakdown.engagement}/20 · Trust ${d.score.breakdown.trust}/10`}>
+            <div className="shrink-0 self-start sm:pt-14" title={`Completeness ${d.score.breakdown.completeness}/40 · Traction ${d.score.breakdown.traction}/30 · Engagement ${d.score.breakdown.engagement}/20 · Trust ${d.score.breakdown.trust}/10`}>
               <ScoreRing score={d.score.total} size={72} label="Fundamental Score" />
             </div>
           )}
@@ -148,7 +154,7 @@ export default function Startup() {
             </div>
           </div>
         )}
-      </div>
+      </CoverHero>
 
       {/* ---- Section 1: 12-Minute Pitch ---- */}
       <Section id="pitch" title="Section 1 — The 12-Minute Pitch">
@@ -248,7 +254,7 @@ export default function Startup() {
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <span className="h-display text-lg">{founder.name}</span>
-              {!!founder.verified && <VerifiedBadge small />}
+              {!!founder.verified && <VerifiedBadge small tier={founder.verified} />}
             </div>
             <div className="text-sm text-gold-300/90 font-medium">{founder.headline || 'Founder'}</div>
             {founder.bio && <p className="text-sm text-mist-300 leading-relaxed mt-2.5">{founder.bio}</p>}

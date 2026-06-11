@@ -18,6 +18,8 @@ import Watchlist from './pages/Watchlist';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
 import PublicStartup from './pages/PublicStartup';
+import Pulse from './pages/Pulse';
+import Communities from './pages/Communities';
 
 function RedirectToStartup() {
   const { id } = useParams();
@@ -61,6 +63,9 @@ export default function App() {
           <Route path="/startup/:id" element={<Startup />} />
           <Route path="/s/:id" element={<RedirectToStartup />} />
           <Route path="/profile/:id" element={<Profile />} />
+          <Route path="/pulse" element={<Pulse />} />
+          <Route path="/communities" element={<Communities />} />
+          <Route path="/communities/:slug" element={<Communities />} />
           <Route path="/network" element={<Network />} />
           <Route path="/messages" element={<Messages />} />
           <Route path="/dashboard" element={<Dashboard />} />

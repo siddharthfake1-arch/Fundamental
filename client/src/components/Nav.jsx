@@ -8,8 +8,9 @@ import { Avatar, Logo, VerifiedBadge } from './ui';
 
 const LINKS = [
   { to: '/discover', label: 'Discover' },
-  { to: '/startups', label: 'Startups' },
+  { to: '/pulse', label: 'Pulse' },
   { to: '/network', label: 'Network' },
+  { to: '/communities', label: 'Communities' },
   { to: '/social', label: 'Social' },
   { to: '/messages', label: 'Messages', badge: 'messages' },
   { to: '/dashboard', label: 'Dashboard' },
@@ -41,7 +42,7 @@ export default function Nav() {
   }, []);
 
   const links = [...LINKS];
-  if (user.role === 'investor') links.splice(5, 0, { to: '/watchlist', label: 'Pipeline' });
+  if (user.role === 'investor') links.splice(6, 0, { to: '/watchlist', label: 'Pipeline' });
   if (user.role === 'admin') links.push({ to: '/admin', label: 'Admin' });
 
   return (

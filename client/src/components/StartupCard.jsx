@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Flame, Bookmark, ChevronUp, PlayCircle, FolderLock, Target } from 'lucide-react';
 import { api, fmtMoney } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, VerifiedBadge, useToast } from './ui';
+import { Avatar, Sparkline, VerifiedBadge, useToast } from './ui';
 
 export default function StartupCard({ s }) {
   const { user } = useAuth();
@@ -41,7 +41,7 @@ export default function StartupCard({ s }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="h-display text-[15px] truncate group-hover:text-gold-300 transition-colors">{s.name}</span>
-            {!!s.verified && <VerifiedBadge small />}
+            {!!s.verified && <VerifiedBadge small tier={s.verified} />}
             {hot && <Flame className="w-3.5 h-3.5 text-orange-400 shrink-0" title={`Momentum ${s.momentum}`} />}
           </div>
           <div className="text-xs text-mist-400 mt-0.5 truncate">{s.sector} · {s.stage} · {s.city}</div>
@@ -54,7 +54,17 @@ export default function StartupCard({ s }) {
 
       {s.one_liner && <p className="text-sm text-mist-300 leading-relaxed line-clamp-2">{s.one_liner}</p>}
 
-      <div className="divider -mx-5 mt-auto" />
+      {s.spark?.length > 2 && (
+        <div className="flex items-end justify-between mt-auto">
+          <div className="text-[10px] text-mist-500 uppercase tracking-wider">Revenue trend</div>
+          <div className="flex items-center gap-2">
+            {s.growth > 0 && <span className="text-[11px] font-bold text-emerald-400 tabular-nums">+{s.growth}% MoM</span>}
+            <Sparkline data={s.spark} />
+          </div>
+        </div>
+      )}
+
+      <div className={`divider -mx-5 ${s.spark?.length > 2 ? '' : 'mt-auto'}`} />
       <div className="flex items-center justify-between text-xs -mb-1">
         <div className="flex items-center gap-3 text-mist-400 min-w-0">
           <span className="font-semibold text-mist-100 text-sm tabular-nums shrink-0">

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, BarBreakdown, CoverHero, Empty, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 const BADGE_STYLES = { 'Repeat Founder': 'chip-blue', 'Exited Founder': 'chip-gold', 'High Growth Founder': 'chip-green' };
 
@@ -26,15 +26,22 @@ export default function Profile() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="card p-6">
-        <div className="flex flex-col sm:flex-row gap-5">
-          <Avatar src={u.photo} name={u.name} size={22} />
-          <div className="flex-1 min-w-0">
+      {/* Header with cover hero */}
+      <CoverHero cover={u.cover} fallbackKey={u.name}>
+        <div className="flex flex-col sm:flex-row gap-5 -mt-12 sm:-mt-14 relative">
+          <div className="rounded-full p-1 bg-ink-900 w-fit shadow-lift shrink-0">
+            <Avatar src={u.photo} name={u.name} size={22} />
+          </div>
+          <div className="flex-1 min-w-0 sm:pt-14">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="h-display text-2xl">{u.name}</h1>
-              {!!u.verified && <VerifiedBadge />}
+              {!!u.verified && <VerifiedBadge tier={u.verified} />}
               <span className="chip capitalize">{u.role}</span>
+              {d.trust && (
+                <span className="chip-gold" title={`Trust Score — verification ${d.trust.breakdown.verification}/40 · profile ${d.trust.breakdown.profile}/30 · network ${d.trust.breakdown.network}/15 · contribution ${d.trust.breakdown.contribution}/15`}>
+                  ⛨ Trust {d.trust.total}
+                </span>
+              )}
             </div>
             {u.headline && <div className="text-sm text-gold-300/90 font-medium mt-1">{u.headline}</div>}
             <div className="text-xs text-mist-400 mt-1">{u.city}{d.investor?.fund_name && ` · ${d.investor.fund_name}`}</div>
@@ -75,7 +82,7 @@ export default function Profile() {
             }}>Report</button>
           </div>
         )}
-      </div>
+      </CoverHero>
 
       {/* Investor: fund header + thesis */}
       {u.role === 'investor' && d.investor && (
@@ -100,6 +107,35 @@ export default function Profile() {
             </div>
           )}
         </>
+      )}
+
+      {/* Investor visual intelligence — aggregate attention, never confidential data */}
+      {u.role === 'investor' && (d.interest_allocation?.length > 0 || d.stage_allocation?.length > 0) && (
+        <div className="card p-6">
+          <h2 className="section-title mb-1">Where Their Attention Goes</h2>
+          <p className="text-xs text-mist-500 mb-5">Based on aggregate platform activity — conviction signals and pipeline composition.</p>
+          <div className="grid sm:grid-cols-2 gap-8">
+            {d.interest_allocation?.length > 0 && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-3">Sector Conviction</div>
+                <BarBreakdown items={d.interest_allocation} />
+              </div>
+            )}
+            {d.stage_allocation?.length > 0 && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-3">Pipeline by Stage</div>
+                <BarBreakdown items={d.stage_allocation} />
+              </div>
+            )}
+          </div>
+          {d.activity_stats && (
+            <div className="flex gap-6 mt-6 pt-4 border-t border-ink-700/50 text-sm">
+              <span><span className="font-display font-bold text-mist-100">{d.activity_stats.upvotes}</span> <span className="text-mist-400">conviction votes</span></span>
+              <span><span className="font-display font-bold text-mist-100">{d.activity_stats.pipeline}</span> <span className="text-mist-400">in pipeline</span></span>
+              <span><span className="font-display font-bold text-mist-100">{d.activity_stats.posts}</span> <span className="text-mist-400">insights shared</span></span>
+            </div>
+          )}
+        </div>
       )}
 
       {/* About */}

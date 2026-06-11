@@ -35,12 +35,14 @@ export default function Settings() {
 }
 
 function Account({ user, refresh }) {
-  const [f, setF] = useState({ name: user.name, city: user.city, headline: user.headline, bio: user.bio, linkedin: user.linkedin, education: user.education, experience: user.experience, photo: user.photo });
+  const [f, setF] = useState({ name: user.name, city: user.city, headline: user.headline, bio: user.bio, linkedin: user.linkedin, education: user.education, experience: user.experience, photo: user.photo, cover: user.cover || '' });
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
   return (
     <div className="card p-6 space-y-4">
+      {f.cover && <img src={f.cover} alt="" className="w-full h-28 object-cover rounded-xl border border-ink-700/50" />}
+      <FileUpload label="Cover Banner (wide image, like LinkedIn)" accept="image/*" currentUrl={f.cover} onUploaded={(d) => setF(x => ({ ...x, cover: d.url }))} />
       <div className="flex items-center gap-4">
         <Avatar src={f.photo} name={f.name} size={16} />
         <div className="flex-1">
@@ -106,7 +108,10 @@ function StartupSettings() {
           <Field label="Raising Amount"><input className="input" value={s.raising_amount || ''} onChange={set('raising_amount')} /></Field>
         </div>
         <Field label="One-line Description"><input className="input" maxLength={140} value={s.one_liner || ''} onChange={set('one_liner')} /></Field>
-        <FileUpload label="Logo" accept="image/*" currentUrl={s.logo} onUploaded={(d) => setS(x => ({ ...x, logo: d.url }))} />
+        <div className="grid sm:grid-cols-2 gap-4">
+          <FileUpload label="Logo" accept="image/*" currentUrl={s.logo} onUploaded={(d) => setS(x => ({ ...x, logo: d.url }))} />
+          <FileUpload label="Cover Banner" accept="image/*" currentUrl={s.cover} onUploaded={(d) => setS(x => ({ ...x, cover: d.url }))} />
+        </div>
       </div>
 
       <div className="card p-6 space-y-4">

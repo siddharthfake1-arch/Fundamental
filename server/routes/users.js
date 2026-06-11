@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, notify, areConnected, publicUser } = require('../db');
+const { db, notify, areConnected, publicUser, trustScore } = require('../db');
 const { auth, requireRole } = require('../authmw');
 
 const router = express.Router();
@@ -90,7 +90,7 @@ router.post('/follow/:id', (req, res) => {
 router.get('/profile/:id', (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
   if (!u) return res.status(404).json({ error: 'User not found' });
-  const out = { user: publicUser(u) };
+  const out = { user: publicUser(u), trust: trustScore(u) };
 
   const myConns = db.prepare(
     `SELECT CASE WHEN requester_id=? THEN recipient_id ELSE requester_id END pid FROM connections WHERE (requester_id=? OR recipient_id=?) AND status='accepted'`
@@ -125,6 +125,20 @@ router.get('/profile/:id', (req, res) => {
         .map(pid => db.prepare('SELECT id, name, logo, sector, stage, one_liner FROM startups WHERE id=?').get(pid))
         .filter(Boolean);
     }
+    // Visual intelligence: where this investor's attention actually goes (aggregates only)
+    const interest = db.prepare(`SELECT s.sector label, COUNT(*) n FROM upvotes u JOIN startups s ON s.id=u.startup_id
+      WHERE u.user_id=? AND s.sector != '' GROUP BY s.sector ORDER BY n DESC`).all(u.id);
+    const totalInterest = interest.reduce((a, r) => a + r.n, 0) || 1;
+    out.interest_allocation = interest.map(r => ({ label: r.label, pct: Math.round((r.n / totalInterest) * 100) }));
+    const stageInterest = db.prepare(`SELECT s.stage label, COUNT(*) n FROM watchlist w JOIN startups s ON s.id=w.startup_id
+      WHERE w.user_id=? AND s.stage != '' GROUP BY s.stage ORDER BY n DESC`).all(u.id);
+    const totalStage = stageInterest.reduce((a, r) => a + r.n, 0) || 1;
+    out.stage_allocation = stageInterest.map(r => ({ label: r.label, pct: Math.round((r.n / totalStage) * 100) }));
+    out.activity_stats = {
+      upvotes: db.prepare('SELECT COUNT(*) c FROM upvotes WHERE user_id=?').get(u.id).c,
+      pipeline: db.prepare('SELECT COUNT(*) c FROM watchlist WHERE user_id=?').get(u.id).c,
+      posts: db.prepare('SELECT COUNT(*) c FROM posts WHERE user_id=? AND removed=0').get(u.id).c,
+    };
   }
   out.posts = db.prepare(`SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post_id=p.id) likes,
     (SELECT COUNT(*) FROM post_comments WHERE post_id=p.id) comments
@@ -139,7 +153,7 @@ router.get('/profile/:id', (req, res) => {
 
 // ---- Edit own profile / investor profile ----
 router.put('/me', (req, res) => {
-  const allowed = ['name', 'city', 'headline', 'bio', 'linkedin', 'education', 'experience', 'photo', 'email_alerts', 'inapp_alerts', 'onboarded'];
+  const allowed = ['name', 'city', 'headline', 'bio', 'linkedin', 'education', 'experience', 'photo', 'cover', 'email_alerts', 'inapp_alerts', 'onboarded'];
   const sets = [], vals = [];
   for (const k of allowed) if (req.body[k] !== undefined) { sets.push(`${k}=?`); vals.push(req.body[k]); }
   if (sets.length) db.prepare(`UPDATE users SET ${sets.join(',')} WHERE id=?`).run(...vals, req.user.id);
