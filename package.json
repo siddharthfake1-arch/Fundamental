@@ -8,8 +8,8 @@
   },
   "scripts": {
     "setup": "npm install",
-    "postinstall": "npm install --prefix client && npm run build --prefix client",
-    "build": "npm run build --prefix client",
+    "postinstall": "cd client && npm install && npm run build",
+    "build": "cd client && npm run build",
     "dev": "node server/index.js & npm run dev --prefix client",
     "seed": "node server/seed.js",
     "start": "node server/index.js"

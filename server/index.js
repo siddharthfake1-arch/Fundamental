@@ -111,6 +111,21 @@ if (fs.existsSync(DIST)) {
     res.send(html);
   });
   app.get(/^(?!\/api|\/uploads).*/, (req, res) => res.sendFile(path.join(DIST, 'index.html')));
+} else {
+  // Client not built yet — show instructions instead of "Cannot GET /"
+  app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
+    res.status(503).send(`<!doctype html><html><body style="font-family:system-ui;background:#09090b;color:#e5e7eb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+      <div style="max-width:560px;padding:32px;border:1px solid #2a2a31;border-radius:16px;background:#101013">
+        <h2 style="margin:0 0 12px">Fundamental — one more step</h2>
+        <p style="color:#9ca3af;line-height:1.6">The server is running, but the website files haven't been built yet. In your terminal, run these commands one by one, then restart:</p>
+        <pre style="background:#16161a;border:1px solid #2a2a31;border-radius:10px;padding:14px;overflow:auto">cd client
+npm install
+npm run build
+cd ..
+npm start</pre>
+        <p style="color:#9ca3af;font-size:13px">If <code>npm install</code> shows an error inside the client folder, that error is the real problem — copy it and ask for help.</p>
+      </div></body></html>`);
+  });
 }
 
 if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
