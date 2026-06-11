@@ -168,6 +168,8 @@ insConn.run(investorIds[2], founderIds[5], 'pending');
 insConn.run(investorIds[4], founderIds[0], 'pending');
 insConn.run(founderIds[2], investorIds[3], 'accepted');
 insConn.run(founderIds[6], investorIds[1], 'accepted');
+insConn.run(founderIds[0], founderIds[3], 'accepted');   // Ananya ↔ James (warm intro path demo)
+insConn.run(founderIds[0], founderIds[1], 'accepted');   // Ananya ↔ Rohan
 
 const insUp = db.prepare('INSERT INTO upvotes (user_id,startup_id) VALUES (?,?)');
 investorIds.forEach((iid, i) => startupIds.filter((_, j) => (i + j) % 2 === 0).forEach(sid => insUp.run(iid, sid)));
@@ -215,6 +217,15 @@ insUpd.run(startupIds[2], 'Jaipur launch ahead of plan', 'First 200 retailers on
 // Access requests
 db.prepare("INSERT INTO access_requests (collateral_id,investor_id,status) VALUES (2,?, 'approved')").run(investorIds[0]);
 db.prepare("INSERT INTO access_requests (collateral_id,investor_id,status) VALUES (3,?, 'pending')").run(investorIds[4]);
+
+// Profile view events (powers founder analytics)
+const insView = db.prepare("INSERT INTO startup_views (user_id, startup_id, created_at) VALUES (?,?,datetime('now', ?))");
+investorIds.forEach((iid, i) => {
+  startupIds.filter((_, j) => (i + j) % 2 === 0).forEach((sid, k) => {
+    insView.run(iid, sid, `-${(i + k) % 6} days`);
+    if ((i + k) % 3 === 0) insView.run(iid, sid, `-${(i + k) % 4} days`);
+  });
+});
 
 // Notifications
 const notif = db.prepare('INSERT INTO notifications (user_id,type,text,link) VALUES (?,?,?,?)');

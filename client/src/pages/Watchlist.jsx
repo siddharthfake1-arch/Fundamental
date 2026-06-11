@@ -18,12 +18,12 @@ export default function Watchlist() {
   const [list, setList] = useState(null);
   const [notesFor, setNotesFor] = useState(null);
   const toast = useToast();
-
-  if (user.role !== 'investor') return <Navigate to="/dashboard" replace />;
+  const isInvestor = user.role === 'investor';
 
   const load = () => api.get('/api/watchlist').then(d => setList(d.watchlist)).catch(e => toast(e.message, 'error'));
-  useEffect(load, []);
+  useEffect(() => { if (isInvestor) load(); }, [isInvestor]);
 
+  if (!isInvestor) return <Navigate to="/dashboard" replace />;
   if (!list) return <Spinner />;
 
   const move = async (s, dir) => {

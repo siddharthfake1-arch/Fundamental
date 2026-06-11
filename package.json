@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "description": "Fundamental — Fundraising? Fundamental. A serious fundraising marketplace and professional network for founders and investors.",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "setup": "npm install && npm install --prefix client && npm run build",
+    "setup": "npm install",
+    "postinstall": "npm install --prefix client && npm run build --prefix client",
     "build": "npm run build --prefix client",
     "dev": "node server/index.js & npm run dev --prefix client",
     "seed": "node server/seed.js",

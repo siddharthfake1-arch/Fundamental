@@ -129,7 +129,11 @@ router.get('/profile/:id', (req, res) => {
   out.posts = db.prepare(`SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post_id=p.id) likes,
     (SELECT COUNT(*) FROM post_comments WHERE post_id=p.id) comments
     FROM posts p WHERE p.user_id=? AND p.removed=0 ORDER BY p.id DESC LIMIT 10`).all(u.id);
-  if (u.id !== req.user.id) notify(u.id, 'Profile Viewed', `${req.user.name} viewed your profile`, `/profile/${req.user.id}`);
+  if (u.id !== req.user.id) {
+    const txt = `${req.user.name} viewed your profile`;
+    const dup = db.prepare("SELECT 1 FROM notifications WHERE user_id=? AND type='Profile Viewed' AND text=? AND created_at > datetime('now','-1 day')").get(u.id, txt);
+    if (!dup) notify(u.id, 'Profile Viewed', txt, `/profile/${req.user.id}`);
+  }
   res.json(out);
 });
 
@@ -150,6 +154,23 @@ router.put('/me', (req, res) => {
         ip.thesis ?? null, ip.portfolio ? JSON.stringify(ip.portfolio) : null, req.user.id);
   }
   res.json({ ok: true });
+});
+
+// Warm Intro Graph — mutual accepted connections who can introduce you to the target.
+router.get('/intro-path/:id', (req, res) => {
+  const targetId = Number(req.params.id);
+  if (targetId === req.user.id) return res.json({ connectors: [], direct: false });
+  if (areConnected(req.user.id, targetId)) return res.json({ connectors: [], direct: true });
+  const connsOf = (uid) => db.prepare(
+    `SELECT CASE WHEN requester_id=? THEN recipient_id ELSE requester_id END pid
+     FROM connections WHERE (requester_id=? OR recipient_id=?) AND status='accepted'`
+  ).all(uid, uid, uid).map(r => r.pid);
+  const mine = new Set(connsOf(req.user.id));
+  const theirs = connsOf(targetId);
+  const connectors = theirs.filter(id => mine.has(id)).slice(0, 3)
+    .map(id => db.prepare('SELECT id, name, role, photo, headline, verified FROM users WHERE id=?').get(id))
+    .filter(Boolean);
+  res.json({ connectors, direct: false });
 });
 
 router.post('/report', (req, res) => {

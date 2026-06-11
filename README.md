@@ -9,10 +9,12 @@ A serious fundraising marketplace and professional network. Every startup opens 
 ## Quick Start
 
 ```bash
-npm run setup     # installs server + client deps and builds the client
-npm run seed      # loads rich demo data (8 startups, 8 founders, 5 investors, admin)
+npm install       # installs everything and builds the client automatically
 npm start         # serves the full app on http://localhost:3000
 ```
+
+Demo data (8 startups, 8 founders, 5 investors, admin) seeds itself on first boot.
+Set `AUTO_SEED=false` to start empty. **Deploying to the internet?** See [DEPLOYMENT.md](DEPLOYMENT.md).
 
 **Demo logins** (password `demo1234`):
 

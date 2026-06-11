@@ -18,9 +18,13 @@ function AdminRedirect() {
 
 function FounderDash() {
   const [d, setD] = useState(null);
+  const [an, setAn] = useState(null);
   const toast = useToast();
   const load = () => api.get('/api/dashboard/founder').then(setD).catch(e => toast(e.message, 'error'));
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+    api.get('/api/dashboard/founder/analytics').then(setAn).catch(() => {});
+  }, []);
   if (!d) return <Spinner />;
 
   const act = async (fn) => { try { await fn(); load(); } catch (e) { toast(e.message, 'error'); } };
@@ -104,6 +108,47 @@ function FounderDash() {
               )}
             </div>
           </div>
+
+          {/* Founder analytics: who's looking + data room engagement */}
+          {an && (an.viewers.length > 0 || an.docs.length > 0) && (
+            <div className="grid lg:grid-cols-2 gap-5">
+              <div className="card p-5">
+                <span className="section-title">Investors Looking at You</span>
+                <div className="text-xs text-mist-500 mt-1">Recent profile viewers — your warmest leads.</div>
+                {an.viewers.length === 0 ? <div className="text-sm text-mist-500 mt-3">No investor views yet.</div> : (
+                  <div className="space-y-2 mt-3">
+                    {an.viewers.slice(0, 6).map(v => (
+                      <div key={v.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
+                        <Avatar src={v.photo} name={v.name} size={9} />
+                        <div className="flex-1 min-w-0">
+                          <Link to={`/profile/${v.id}`} className="flex items-center gap-1.5 text-sm font-semibold text-mist-100 hover:text-gold-300">
+                            {v.name}{!!v.verified && <VerifiedBadge small />}
+                          </Link>
+                          <div className="text-[11px] text-mist-500 truncate">{v.fund || v.headline} · viewed {v.views}× · {timeAgo(v.last_view)}</div>
+                        </div>
+                        {v.connected ? <span className="chip-green">Connected</span> : <span className="chip">Lead</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="card p-5">
+                <span className="section-title">Data Room Engagement</span>
+                <div className="text-xs text-mist-500 mt-1">Which documents investors actually open.</div>
+                {an.docs.length === 0 ? <div className="text-sm text-mist-500 mt-3">No documents yet.</div> : (
+                  <div className="space-y-2 mt-3">
+                    {an.docs.map(doc => (
+                      <div key={doc.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
+                        <span className="chip-blue shrink-0">{doc.type}</span>
+                        <span className="text-sm text-mist-100 flex-1 truncate">{doc.title}</span>
+                        <span className="text-[11px] text-mist-400 tabular-nums shrink-0">{doc.downloads} views · {doc.requests} requests</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Connection requests */}
           {d.connection_requests.length > 0 && (

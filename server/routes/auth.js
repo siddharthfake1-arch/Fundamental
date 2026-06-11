@@ -4,7 +4,12 @@ const { db, publicUser } = require('../db');
 const { sign, auth } = require('../authmw');
 
 const router = express.Router();
-const COOKIE = { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 3600 * 1000 };
+const COOKIE = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: process.env.NODE_ENV === 'production',
+  maxAge: 30 * 24 * 3600 * 1000,
+};
 
 function sessionPayload(user) {
   const me = publicUser(user);

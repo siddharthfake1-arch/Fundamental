@@ -20,11 +20,29 @@ export default function Startup() {
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [noteDoc, setNoteDoc] = useState(null);
+  const [memo, setMemo] = useState(null);
+  const [memoOpen, setMemoOpen] = useState(false);
+  const [intro, setIntro] = useState(null);
   const toast = useToast();
   const nav = useNavigate();
 
   const load = () => api.get(`/api/startups/${id}`).then(setD).catch(e => setErr(e.message));
-  useEffect(() => { setD(null); load(); }, [id]);
+  useEffect(() => { setD(null); setIntro(null); load(); }, [id]);
+
+  // Warm intro path — who in your network can introduce you to this founder
+  useEffect(() => {
+    if (d && !d.is_owner && !d.connected) {
+      api.get(`/api/users/intro-path/${d.founder.id}`).then(setIntro).catch(() => {});
+    }
+  }, [d?.founder?.id, d?.connected]);
+
+  const openMemo = async () => {
+    setMemoOpen(true);
+    if (!memo) {
+      try { setMemo(await api.get(`/api/startups/${id}/memo`)); }
+      catch (e) { toast(e.message, 'error'); setMemoOpen(false); }
+    }
+  };
 
   if (err) return <Empty title={err} />;
   if (!d) return <Spinner />;
@@ -40,8 +58,8 @@ export default function Startup() {
   }, d.connected ? null : 'Connection request sent');
 
   const share = async () => {
-    const url = window.location.href;
-    try { await navigator.clipboard.writeText(url); toast('Profile link copied to clipboard', 'success'); }
+    const url = `${window.location.origin}/s/${s.id}`;
+    try { await navigator.clipboard.writeText(url); toast('Public share link copied — anyone can view it, no login needed', 'success'); }
     catch { toast(url, 'info'); }
   };
 
@@ -108,9 +126,28 @@ export default function Startup() {
           {user.role === 'investor' && (
             <button className="btn-ghost btn-sm" onClick={() => { setNoteDoc(null); setNoteOpen(true); }}>+ Private Note</button>
           )}
+          {user.role === 'investor' && (
+            <button className="btn-ghost btn-sm !text-gold-300 !border-gold-500/40" onClick={openMemo}>✦ AI Memo</button>
+          )}
           <button className="btn-ghost btn-sm" onClick={share}>Share Profile Link</button>
           {is_owner && <Link to="/settings?tab=startup" className="btn-ghost btn-sm ml-auto">Edit Startup</Link>}
         </div>
+        {intro && !intro.direct && intro.connectors?.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap mt-4 bg-gold-500/5 border border-gold-500/20 rounded-xl px-4 py-3">
+            <div className="flex -space-x-2">
+              {intro.connectors.map(c => <Avatar key={c.id} src={c.photo} name={c.name} size={7} />)}
+            </div>
+            <div className="text-sm text-mist-200">
+              <span className="font-semibold text-gold-300">Warm intro available</span> — you're connected to{' '}
+              {intro.connectors.map((c, i) => (
+                <span key={c.id}>
+                  <Link to={`/profile/${c.id}`} className="font-semibold text-mist-100 hover:text-gold-300">{c.name}</Link>
+                  {i < intro.connectors.length - 1 ? ', ' : ''}
+                </span>
+              ))}, who {intro.connectors.length > 1 ? 'are' : 'is'} connected to {founder.name}.
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ---- Section 1: 12-Minute Pitch ---- */}
@@ -300,6 +337,41 @@ export default function Startup() {
           </div>
         )}
       </Section>
+
+      <Modal open={memoOpen} onClose={() => setMemoOpen(false)} title={memo ? memo.title : 'Generating memo…'} wide>
+        {!memo ? <Spinner /> : (
+          <div className="space-y-5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-[11px] text-mist-500">{memo.disclaimer}</span>
+              <div className="flex gap-2">
+                <button className="btn-ghost btn-sm" onClick={async () => {
+                  const md = `# ${memo.title}\n\n${memo.sections.map(sec => `## ${sec.h}\n${sec.body.map(b => `- ${b}`).join('\n')}`).join('\n\n')}`;
+                  try { await navigator.clipboard.writeText(md); toast('Memo copied as Markdown', 'success'); } catch { toast('Copy failed', 'error'); }
+                }}>Copy</button>
+                <button className="btn-primary btn-sm" onClick={() => {
+                  const md = `# ${memo.title}\n\n${memo.sections.map(sec => `## ${sec.h}\n${sec.body.map(b => `- ${b}`).join('\n')}`).join('\n\n')}`;
+                  const a = document.createElement('a');
+                  a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+                  a.download = `${s.name.replace(/\s+/g, '_')}_memo.md`;
+                  a.click();
+                }}>Download .md</button>
+              </div>
+            </div>
+            {memo.sections.map(sec => (
+              <div key={sec.h}>
+                <div className="section-title mb-2">{sec.h}</div>
+                <ul className="space-y-1.5">
+                  {sec.body.map((b, i) => (
+                    <li key={i} className="text-sm text-mist-200 leading-relaxed flex gap-2">
+                      <span className="text-gold-400/70 shrink-0 mt-0.5">·</span>{b}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title={noteDoc ? `Private note — ${noteDoc.title}` : 'Add Private Note'}>
         <div className="space-y-3">

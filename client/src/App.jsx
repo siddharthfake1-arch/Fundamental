@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import Nav from './components/Nav';
@@ -17,6 +17,12 @@ import Social from './pages/Social';
 import Watchlist from './pages/Watchlist';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
+import PublicStartup from './pages/PublicStartup';
+
+function RedirectToStartup() {
+  const { id } = useParams();
+  return <Navigate to={`/startup/${id}`} replace />;
+}
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -28,6 +34,7 @@ export default function App() {
     return (
       <Routes>
         <Route path="/" element={<Auth />} />
+        <Route path="/s/:id" element={<PublicStartup />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -52,6 +59,7 @@ export default function App() {
           <Route path="/discover" element={<Discover />} />
           <Route path="/startups" element={<Startups />} />
           <Route path="/startup/:id" element={<Startup />} />
+          <Route path="/s/:id" element={<RedirectToStartup />} />
           <Route path="/profile/:id" element={<Profile />} />
           <Route path="/network" element={<Network />} />
           <Route path="/messages" element={<Messages />} />

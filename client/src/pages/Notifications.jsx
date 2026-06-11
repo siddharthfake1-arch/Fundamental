@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { api, timeAgo } from '../api';
 import { Empty, Spinner, useToast } from '../components/ui';
 
-const TYPES = ['Profile Viewed', 'Upvote Received', 'Connection Request', 'Connection Accepted', 'Collateral Request', 'Access Approved', 'New Message'];
-const ICONS = { 'Profile Viewed': '👁', 'Upvote Received': '▲', 'Connection Request': '⇄', 'Connection Accepted': '✓', 'Collateral Request': '🔒', 'Access Approved': '🔓', 'New Message': '✉' };
+const TYPES = ['Profile Viewed', 'Upvote Received', 'Connection Request', 'Connection Accepted', 'Collateral Request', 'Access Approved', 'New Message', 'Deal Alert'];
+const ICONS = { 'Profile Viewed': '👁', 'Upvote Received': '▲', 'Connection Request': '⇄', 'Connection Accepted': '✓', 'Collateral Request': '🔒', 'Access Approved': '🔓', 'New Message': '✉', 'Deal Alert': '⚡' };
 
 export default function Notifications() {
   const [data, setData] = useState(null);

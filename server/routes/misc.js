@@ -49,6 +49,30 @@ router.get('/dashboard/founder', requireRole('founder'), (req, res) => {
   res.json(out);
 });
 
+// ---- Founder analytics: who's looking, and at what ----
+router.get('/dashboard/founder/analytics', requireRole('founder'), (req, res) => {
+  const s = db.prepare('SELECT * FROM startups WHERE founder_id=?').get(req.user.id);
+  if (!s) return res.json({ viewers: [], docs: [] });
+  const viewers = db.prepare(`
+    SELECT u.id, u.name, u.role, u.photo, u.headline, u.verified,
+           COUNT(*) views, MAX(sv.created_at) last_view
+    FROM startup_views sv JOIN users u ON u.id = sv.user_id
+    WHERE sv.startup_id=? AND u.id != ? AND u.role='investor'
+    GROUP BY u.id ORDER BY last_view DESC LIMIT 12`).all(s.id, req.user.id)
+    .map(v => ({
+      ...v,
+      fund: (db.prepare('SELECT fund_name FROM investor_profiles WHERE user_id=?').get(v.id) || {}).fund_name || '',
+      connected: db.prepare(`SELECT 1 FROM connections WHERE status='accepted' AND
+        ((requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?))`).get(v.id, req.user.id, req.user.id, v.id) ? 1 : 0,
+    }));
+  const docs = db.prepare(`
+    SELECT c.id, c.title, c.type, c.access_level, c.downloads,
+      (SELECT COUNT(*) FROM access_requests ar WHERE ar.collateral_id=c.id) requests,
+      (SELECT COUNT(*) FROM access_requests ar WHERE ar.collateral_id=c.id AND ar.status='approved') approved
+    FROM collateral c WHERE c.startup_id=? ORDER BY c.downloads DESC`).all(s.id);
+  res.json({ viewers, docs, video_views: s.video_views, total_views: s.views });
+});
+
 // ---- Investor dashboard ----
 router.get('/dashboard/investor', requireRole('investor'), (req, res) => {
   const watchlist = db.prepare(`SELECT w.status w_status, w.created_at saved_at, s.* FROM watchlist w

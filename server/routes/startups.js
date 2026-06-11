@@ -83,6 +83,30 @@ router.delete('/saved-searches/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Deal Alerts: when a startup becomes listed (gains its pitch video), notify every
+// user whose saved search matches it.
+function fireDealAlerts(s) {
+  const bands = { '0-100k': [0, 1e5], '100k-1m': [1e5, 1e6], '1m-10m': [1e6, 1e7], '10m+': [1e7, Infinity] };
+  const rows = db.prepare('SELECT * FROM saved_searches WHERE user_id != ?').all(s.founder_id);
+  for (const row of rows) {
+    let f = {};
+    try { f = (JSON.parse(row.params) || {}).filters || {}; } catch { continue; }
+    if (f.sector && f.sector !== s.sector) continue;
+    if (f.subsector && f.subsector !== s.subsector) continue;
+    if (f.stage && f.stage !== s.stage) continue;
+    if (f.geography && !s.city.toLowerCase().includes(f.geography.toLowerCase())) continue;
+    if (f.raising && f.raising !== s.raising_status) continue;
+    if (f.verified && !s.verified) continue;
+    if (f.q && !(s.name + ' ' + s.one_liner + ' ' + s.sector).toLowerCase().includes(f.q.toLowerCase())) continue;
+    if (f.revenue) {
+      const [lo, hi] = bands[f.revenue] || [0, Infinity];
+      const rev = s.arr || (s.mrr || 0) * 12;
+      if (!(rev >= lo && rev < hi)) continue;
+    }
+    notify(row.user_id, 'Deal Alert', `New match for "${row.name}": ${s.name} (${s.sector} · ${s.stage}) just listed`, `/startup/${s.id}`);
+  }
+}
+
 // ---- Create / update own startup (founder onboarding + settings) ----
 const FIELDS = ['name','sector','subsector','stage','city','founded_year','raising_status','raising_amount',
   'one_liner','problem','solution','business_model','market_size','competitive_advantage','round_details',
@@ -102,6 +126,10 @@ router.post('/mine', requireRole('founder'), (req, res) => {
       db.prepare(`UPDATE startups SET ${keys.map(k => `${k}=?`).join(',')} WHERE id=?`)
         .run(...keys.map(k => data[k]), existing.id);
     }
+    // Newly listed (video just added) → fire deal alerts for matching saved searches
+    if (!existing.video_url && data.video_url) {
+      fireDealAlerts(db.prepare('SELECT * FROM startups WHERE id=?').get(existing.id));
+    }
     return res.json({ id: existing.id });
   }
   if (!data.name) return res.status(400).json({ error: 'Startup name is required' });
@@ -110,6 +138,7 @@ router.post('/mine', requireRole('founder'), (req, res) => {
     .run(req.user.id, ...cols.map(k => data[k]));
   addActivity(info.lastInsertRowid, 'Round Opened',
     data.raising_status === 'Actively Raising' ? `${data.name} opened a round${data.raising_amount ? ' — raising ' + data.raising_amount : ''}` : `${data.name} joined Fundamental`);
+  if (data.video_url) fireDealAlerts(db.prepare('SELECT * FROM startups WHERE id=?').get(info.lastInsertRowid));
   res.json({ id: info.lastInsertRowid });
 });
 
@@ -127,7 +156,12 @@ router.get('/:id', (req, res) => {
   if (!isOwner) {
     db.prepare('UPDATE startups SET views = views + 1 WHERE id=?').run(s.id);
     db.prepare('INSERT INTO startup_views (user_id, startup_id) VALUES (?,?)').run(req.user.id, s.id);
-    if (req.user.role === 'investor') notify(s.founder_id, 'Profile Viewed', `${req.user.name} viewed your startup profile`, `/startup/${s.id}`);
+    if (req.user.role === 'investor') {
+      // De-duplicate: at most one view notification per viewer per day
+      const txt = `${req.user.name} viewed your startup profile`;
+      const dup = db.prepare("SELECT 1 FROM notifications WHERE user_id=? AND type='Profile Viewed' AND text=? AND created_at > datetime('now','-1 day')").get(s.founder_id, txt);
+      if (!dup) notify(s.founder_id, 'Profile Viewed', txt, `/startup/${s.id}`);
+    }
   }
   const founder = publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(s.founder_id));
   const connected = areConnected(req.user.id, s.founder_id);
@@ -208,6 +242,69 @@ router.post('/:id/notes', requireRole('investor'), (req, res) => {
 router.delete('/notes/:noteId', requireRole('investor'), (req, res) => {
   db.prepare('DELETE FROM notes WHERE id=? AND investor_id=?').run(req.params.noteId, req.user.id);
   res.json({ ok: true });
+});
+
+// ---- AI Investment Memo (structured-data synthesis engine) ----
+router.get('/:id/memo', requireRole('investor', 'admin'), (req, res) => {
+  const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  const score = fundamentalScore(s);
+  const fit = thesisFit(s, investorProfileOf(req.user));
+  const founder = db.prepare('SELECT name, headline, education, experience, verified FROM users WHERE id=?').get(s.founder_id);
+  const collateral = db.prepare('SELECT title, type, access_level FROM collateral WHERE startup_id=?').all(s.id);
+  const updates = db.prepare('SELECT * FROM founder_updates WHERE startup_id=? ORDER BY id DESC LIMIT 6').all(s.id);
+  const upvotes = db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c;
+
+  const money = (n) => n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}K` : `$${Math.round(n)}`;
+  const rev = s.arr || (s.mrr || 0) * 12;
+  const ltvCac = s.cac > 0 && s.ltv > 0 ? +(s.ltv / s.cac).toFixed(1) : null;
+  const burnRatio = s.burn > 0 && s.mrr > 0 ? +(s.burn / s.mrr).toFixed(1) : null;
+  const freshUpdate = updates[0] && (Date.now() - new Date(updates[0].created_at + 'Z')) < 45 * 864e5;
+
+  const strengths = [];
+  if (s.verified) strengths.push('Platform-verified profile and founder identity.');
+  if (s.growth >= 15) strengths.push(`Growth of ${s.growth}% MoM is top-decile for ${s.stage} companies.`);
+  if (s.gross_margin >= 60) strengths.push(`Gross margin of ${s.gross_margin}% supports venture-scale economics.`);
+  if (ltvCac && ltvCac >= 3) strengths.push(`LTV/CAC of ${ltvCac}x clears the 3x efficiency benchmark.`);
+  if (rev >= 1e6) strengths.push(`Revenue scale (${money(rev)} annualised) de-risks product-market fit.`);
+  if (freshUpdate) strengths.push('Founder publishes regular investor updates — strong communication signal.');
+  if (founder?.experience) strengths.push(`Founder background: ${founder.experience}.`);
+
+  const risks = [];
+  if (s.runway > 0 && s.runway < 12) risks.push(`Runway of ${s.runway} months is below the 12-month diligence threshold — confirm bridge plan.`);
+  if (!rev) risks.push('Pre-revenue: thesis rests entirely on team and market timing.');
+  if (rev && s.growth < 5) risks.push(`Growth of ${s.growth}% MoM is below venture pace — probe pipeline and churn.`);
+  if (s.gross_margin > 0 && s.gross_margin < 40) risks.push(`Gross margin of ${s.gross_margin}% — interrogate the path to software-grade margins.`);
+  if (ltvCac && ltvCac < 2) risks.push(`LTV/CAC of ${ltvCac}x is below 2x — unit economics not yet proven.`);
+  if (burnRatio && burnRatio > 1.5) risks.push(`Burning ${burnRatio}x monthly revenue — efficiency needs a clear inflection story.`);
+  if (!s.verified) risks.push('Not yet platform-verified — request verification before term sheet.');
+  if (!freshUpdate) risks.push('No investor update in 45+ days — ask why before progressing.');
+
+  const diligence = [];
+  const docTypes = collateral.map(c => c.type);
+  if (!docTypes.includes('Cap Table')) diligence.push('Request cap table (not in data room).');
+  if (!docTypes.includes('Financial Model')) diligence.push('Request 3-year financial model (not in data room).');
+  diligence.push('Validate revenue claims against bank/payment-provider statements.');
+  if (s.cac > 0) diligence.push('Request CAC cohort breakdown by channel.');
+  diligence.push(`Reference checks: 2–3 customers plus former colleagues of ${founder?.name || 'the founder'}.`);
+
+  res.json({
+    title: `Investment Memo — ${s.name}`,
+    generated_at: new Date().toISOString(),
+    disclaimer: 'Auto-generated from structured platform data. Not investment advice — verify all figures in diligence.',
+    sections: [
+      { h: 'Snapshot', body: [`${s.name} · ${s.sector}${s.subsector ? ' / ' + s.subsector : ''} · ${s.stage} · ${s.city} · Founded ${s.founded_year || '—'}`, `Round: ${s.raising_status}${s.raising_amount ? ' — ' + s.raising_amount : ''}`, `Fundamental Score: ${score.total}/100 (completeness ${score.breakdown.completeness}/40 · traction ${score.breakdown.traction}/30 · engagement ${score.breakdown.engagement}/20 · trust ${score.breakdown.trust}/10)`, fit != null ? `Thesis fit with your mandate: ${fit}%` : null, `Investor conviction on platform: ${upvotes} upvotes`].filter(Boolean) },
+      { h: 'Positioning', body: [s.one_liner, s.problem && `Problem — ${s.problem}`, s.solution && `Solution — ${s.solution}`].filter(Boolean) },
+      { h: 'Market & Model', body: [s.market_size && `Market — ${s.market_size}`, s.business_model && `Model — ${s.business_model}`, s.competitive_advantage && `Moat — ${s.competitive_advantage}`].filter(Boolean) },
+      { h: 'Traction & Unit Economics', body: [rev ? `Revenue: ${money(rev)} annualised${s.mrr ? ` (${money(s.mrr)} MRR)` : ''}, growing ${s.growth}% MoM` : 'Pre-revenue.', s.gross_margin > 0 && `Gross margin: ${s.gross_margin}%`, ltvCac && `LTV/CAC: ${ltvCac}x (${money(s.ltv)} / ${money(s.cac)})`, s.burn > 0 && `Burn: ${money(s.burn)}/mo${burnRatio ? ` (${burnRatio}x MRR)` : ''} · Runway: ${s.runway} months`].filter(Boolean) },
+      { h: 'The Round', body: [s.round_details || 'No round details provided.', s.deployment_timeline && s.deployment_timeline !== '—' && `Deployment — ${s.deployment_timeline}`, s.strategic_objectives && `Objectives — ${s.strategic_objectives}`].filter(Boolean) },
+      { h: 'Team', body: [`${founder?.name}${founder?.verified ? ' (verified)' : ''} — ${founder?.headline || 'Founder'}`, founder?.education && `Education: ${founder.education}`, founder?.experience && `Experience: ${founder.experience}`].filter(Boolean) },
+      { h: 'Strengths', body: strengths.length ? strengths : ['Insufficient data — request a complete profile.'] },
+      { h: 'Risks & Open Questions', body: risks.length ? risks : ['No automated flags raised — proceed to standard diligence.'] },
+      { h: 'Suggested Diligence', body: diligence },
+      { h: 'Recent Founder Updates', body: updates.length ? updates.map(u => `${u.headline} — ${u.body}`) : ['None published yet.'] },
+    ],
+  });
 });
 
 // ---- Collateral (structured data room) ----
