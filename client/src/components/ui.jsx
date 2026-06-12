@@ -207,13 +207,13 @@ export function LineChart({ data, xKey, yKey, height = 160, format = (v) => v })
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="none">
         <defs>
           <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#d9b15e" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#d9b15e" stopOpacity="0" />
+            <stop offset="0%" stopColor="#8052ff" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#8052ff" stopOpacity="0" />
           </linearGradient>
         </defs>
         <path d={area} fill="url(#lg)" />
-        <path d={path} fill="none" stroke="#d9b15e" strokeWidth="2.5" strokeLinejoin="round" />
-        {ys.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r="3" fill="#0b0d12" stroke="#d9b15e" strokeWidth="2" />)}
+        <path d={path} fill="none" stroke="#8052ff" strokeWidth="2.5" strokeLinejoin="round" />
+        {ys.map((v, i) => <circle key={i} cx={x(i)} cy={y(v)} r="3" fill="rgb(var(--ink-950))" stroke="#8052ff" strokeWidth="2" />)}
       </svg>
       <div className="flex justify-between text-[10px] text-mist-500 px-1 mt-1">
         {data.map((d, i) => <span key={i} className={data.length > 8 && i % 2 ? 'hidden sm:inline' : ''}>{d[xKey]}</span>)}
@@ -226,7 +226,7 @@ export function LineChart({ data, xKey, yKey, height = 160, format = (v) => v })
 }
 
 export function BarBreakdown({ items }) {
-  const colors = ['#d9b15e', '#4d8dff', '#34d399', '#a78bfa', '#f87171', '#fbbf24'];
+  const colors = ['#8052ff', '#ffb829', '#15846e', '#b79cff', '#f87171', '#34d399'];
   return (
     <div className="space-y-3">
       <div className="flex h-3 rounded-full overflow-hidden border border-ink-600/50">
@@ -298,7 +298,7 @@ export const Stat = ({ label, value, sub }) => (
 export const Logo = ({ className = 'h-7' }) => (
   <span className={`inline-flex items-center gap-2 ${className}`}>
     <svg viewBox="0 0 64 64" className="h-full w-auto">
-      <defs><linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#2658c4" /><stop offset="100%" stopColor="#2aaef5" /></linearGradient></defs>
+      <defs><linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#6a3fe0" /><stop offset="100%" stopColor="#9b6bff" /></linearGradient></defs>
       <rect width="64" height="64" rx="16" fill="url(#logo-g)" />
       <path d="M20 50V14h26v7H28.5v8.5H43v7H28.5V50H20z" fill="#fff" />
     </svg>

@@ -18,17 +18,17 @@
   --mist-300: 172 176 186;
   --mist-400: 128 132 144;
   --mist-500: 94 98 110;
-  /* Primary accent — light blue */
-  --acc-300: 125 214 255;
-  --acc-400: 76 195 255;
-  --acc-500: 42 174 245;
-  --acc-600: 27 140 208;
-  /* Secondary accent — softer blue */
-  --acc2-400: 110 168 255;
-  --acc2-500: 77 141 255;
-  --acc2-600: 58 114 219;
-  --shadow-card: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px rgba(0,0,0,0.4);
-  --shadow-lift: 0 1px 0 rgba(255,255,255,0.05) inset, 0 16px 40px rgba(0,0,0,0.55);
+  /* Primary accent — Plum Voltage, the single authority color of the system */
+  --acc-300: 183 156 255;
+  --acc-400: 150 113 255;
+  --acc-500: 128 82 255;
+  --acc-600: 103 60 219;
+  /* Secondary accent — deeper violet for gradient pairing */
+  --acc2-400: 140 104 255;
+  --acc2-500: 112 72 240;
+  --acc2-600: 90 54 200;
+  --shadow-card: 0 1px 0 rgba(255,255,255,0.04) inset;
+  --shadow-lift: 0 1px 0 rgba(255,255,255,0.06) inset, 0 12px 32px rgba(0,0,0,0.5);
   --hero-orb-opacity: 0.32;
   color-scheme: dark;
 }
@@ -46,13 +46,13 @@ html.light {
   --mist-300: 78 82 94;
   --mist-400: 110 114 128;
   --mist-500: 140 145 158;
-  --acc-300: 14 116 198;
-  --acc-400: 11 103 178;
-  --acc-500: 9 90 158;
-  --acc-600: 7 73 130;
-  --acc2-400: 47 104 220;
-  --acc2-500: 38 88 196;
-  --acc2-600: 29 70 160;
+  --acc-300: 104 58 215;
+  --acc-400: 95 50 205;
+  --acc-500: 86 42 190;
+  --acc-600: 70 32 158;
+  --acc2-400: 116 76 230;
+  --acc2-500: 100 62 208;
+  --acc2-600: 82 48 176;
   --shadow-card: 0 1px 2px rgba(15,33,71,0.06), 0 8px 24px rgba(15,33,71,0.07);
   --shadow-lift: 0 2px 4px rgba(15,33,71,0.08), 0 16px 40px rgba(15,33,71,0.12);
   --hero-orb-opacity: 0.25;
@@ -60,8 +60,9 @@ html.light {
 }
 
 @layer base {
-  html { @apply bg-ink-950; }
-  body { @apply bg-ink-950 text-mist-200 font-sans antialiased transition-colors duration-300; }
+  html { @apply bg-ink-950; text-rendering: optimizeLegibility; }
+  body { @apply bg-ink-950 text-mist-200 font-sans antialiased transition-colors duration-300;
+    font-feature-settings: 'cv11', 'ss01', 'tnum' 0; }
   ::selection { background: rgb(var(--acc-500) / 0.3); }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: rgb(var(--ink-950)); }
@@ -69,12 +70,15 @@ html.light {
 }
 
 @layer components {
+  /* A card is a hairline on the void — depth comes from contrast, not elevation */
   .card { @apply bg-ink-900 border border-ink-700/50 rounded-2xl shadow-card; }
+  html.dark .card { @apply border-white/[0.08]; }
   .card-hover { @apply transition-all duration-200 hover:border-ink-500/70 hover:shadow-lift hover:-translate-y-0.5; }
-  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed select-none; }
-  .btn-primary { @apply btn text-white active:scale-[0.98] shadow-glow;
-    background-image: linear-gradient(120deg, rgb(var(--acc2-500)), rgb(var(--acc-500))); }
-  .btn-primary:hover { filter: brightness(1.12); }
+  html.dark .card-hover:hover { border-color: rgb(var(--acc-500) / 0.35); }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold tracking-[0.01em] transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed select-none; }
+  /* The single filled chromatic surface in the system */
+  .btn-primary { @apply btn text-white active:scale-[0.98]; background-color: rgb(var(--acc-500)); }
+  .btn-primary:hover { background-color: rgb(var(--acc-400)); }
   .btn-accent { @apply btn bg-accent-500 text-white hover:bg-accent-400 active:scale-[0.98]; }
   .btn-ghost { @apply btn bg-ink-800 text-mist-200 border border-ink-600/70 hover:bg-ink-700 hover:border-ink-500; }
   .btn-danger { @apply btn bg-red-900/40 text-red-300 border border-red-800/50 hover:bg-red-900/70; }
@@ -90,7 +94,7 @@ html.light {
   .chip-red { @apply chip bg-red-500/10 border-red-500/40 text-red-400; }
   html.dark .chip-red { @apply text-red-300; }
   .section-title { @apply font-display text-[11px] font-bold uppercase tracking-[0.18em] text-gold-400; }
-  .h-display { @apply font-display font-bold text-mist-100; }
+  .h-display { @apply font-display font-bold text-mist-100 tracking-[-0.02em]; }
   .divider { @apply border-t border-ink-700/60; }
   .nav-link { @apply relative px-3 py-2 rounded-lg text-sm font-medium text-mist-400 hover:text-mist-100 hover:bg-ink-800 transition-colors; }
   .nav-link-active { @apply text-gold-300 bg-ink-800; }
