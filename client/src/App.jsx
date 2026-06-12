@@ -4,6 +4,7 @@ import { useAuth } from './AuthContext';
 import Nav from './components/Nav';
 import { Spinner } from './components/ui';
 import Auth from './pages/Auth';
+import Landing from './pages/Landing';
 import Onboarding from './pages/Onboarding';
 import Discover from './pages/Discover';
 import Startups from './pages/Startups';
@@ -35,7 +36,8 @@ export default function App() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/" element={<Auth />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Auth />} />
         <Route path="/s/:id" element={<PublicStartup />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
