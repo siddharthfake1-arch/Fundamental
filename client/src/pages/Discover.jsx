@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Flame } from 'lucide-react';
 import { api } from '../api';
 import StartupCard from '../components/StartupCard';
+import Constellation from '../components/Constellation';
 import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 function TrendingStrip({ startups }) {
@@ -125,9 +126,15 @@ export default function Discover() {
   return (
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
-        <div>
-          <h1 className="h-display text-2xl">Discover</h1>
-          <p className="text-sm text-mist-400 mt-1">The marketplace. Every startup here has a 12-minute pitch — watch before you reach out. <Link to="/startups" className="text-gold-300 hover:text-gold-200">Index view →</Link></p>
+        <div className="flex items-center gap-4">
+          {/* Live brand mark — the same morphing constellation from the landing page */}
+          <div className="hidden sm:block w-[84px] h-[84px] shrink-0" title="Every idea becomes a company">
+            <Constellation count={320} cycleMs={3000} />
+          </div>
+          <div>
+            <h1 className="h-display text-2xl">Discover</h1>
+            <p className="text-sm text-mist-400 mt-1">The marketplace. Every startup here has a 12-minute pitch — watch before you reach out. <Link to="/startups" className="text-gold-300 hover:text-gold-200">Index view →</Link></p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button className="lg:hidden btn-ghost btn-sm" onClick={() => setFiltersOpen(o => !o)}>Filters{active ? ` (${active})` : ''}</button>

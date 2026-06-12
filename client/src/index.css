@@ -4,12 +4,12 @@
 
 /* ---- Theme tokens (RGB triplets so Tailwind alpha works) ---- */
 :root, html.dark {
-  /* Graphite / near-black surfaces — navy lives in accents, not backgrounds */
-  --ink-950: 9 9 11;        /* page background */
-  --ink-900: 16 16 19;      /* cards */
-  --ink-850: 22 22 26;      /* inputs / wells */
-  --ink-800: 30 30 35;      /* raised elements */
-  --ink-700: 42 42 49;      /* borders */
+  /* The void — pure black canvas (matches the landing page), surfaces barely lift off it */
+  --ink-950: 0 0 0;         /* page background */
+  --ink-900: 12 12 15;      /* cards */
+  --ink-850: 18 18 22;      /* inputs / wells */
+  --ink-800: 26 26 31;      /* raised elements */
+  --ink-700: 40 40 47;      /* borders */
   --ink-600: 58 58 67;
   --ink-500: 77 77 88;
   /* Text — clean neutral greys */

@@ -5,6 +5,7 @@ import { MoveRight, PlayCircle, ShieldCheck, FolderLock, TrendingUp, Globe2 } fr
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { Logo, useToast } from '../components/ui';
+import Constellation from '../components/Constellation';
 
 // Animated hero — adapted from the provided shadcn/framer-motion component
 // into this codebase's native stack (motion/react + design tokens).
@@ -104,8 +105,12 @@ export default function Auth() {
       <div className="orb animate-float w-[300px] h-[300px] top-[12%] right-[-90px]" style={{ background: 'radial-gradient(circle, rgb(var(--acc-400)), transparent 65%)', animationDelay: '-4s' }} />
 
       {/* Brand panel */}
-      <div className="lg:w-[52%] relative flex flex-col justify-between p-8 lg:p-14 border-b lg:border-b-0 lg:border-r border-ink-700/50">
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+      <div className="lg:w-[52%] relative flex flex-col justify-between p-8 lg:p-14 border-b lg:border-b-0 lg:border-r border-ink-700/50 overflow-hidden">
+        {/* The constellation lives behind the brand copy — same morphing field as the landing page */}
+        <div className="absolute inset-0 pointer-events-none opacity-45">
+          <Constellation count={900} cycleMs={3800} />
+        </div>
+        <motion.div className="relative" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <Logo className="h-9" />
         </motion.div>
 
