@@ -59,6 +59,13 @@ Use `pm2` to keep it running: `npm i -g pm2 && pm2 start server/index.js --name 
 | `PORT` | No | Defaults to 3000. Render/Railway set it automatically. |
 | `AUTO_SEED` | No | `false` to start with an empty database instead of demo data. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | No | Enables the "Sign in with Google" button. |
+| `RESEND_API_KEY` (+ optional `OTP_FROM`) | Recommended | Sends signup verification codes by **email** via [Resend](https://resend.com). |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | No | Sends signup verification codes by **SMS** via Twilio. |
+
+**Signup OTP:** new accounts must verify their email or phone with a 6-digit code.
+With no provider configured the app runs in **demo mode** — the code is shown on
+screen so signup keeps working. Set `RESEND_API_KEY` (email) and/or the Twilio
+variables (SMS) for real delivery before launch.
 
 ## Going to real production (beyond demo)
 

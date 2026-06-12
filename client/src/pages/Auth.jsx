@@ -48,21 +48,41 @@ const FEATURES = [
 export default function Auth() {
   const [mode, setMode] = useState('login');
   const [role, setRole] = useState('founder');
-  const [form, setForm] = useState({ name: '', email: '', password: '', city: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', city: '', phone: '' });
+  const [otp, setOtp] = useState({ channel: 'email', sent: false, sending: false, code: '', demo_code: '' });
   const [busy, setBusy] = useState(false);
   const { setUser } = useAuth();
   const toast = useToast();
   const nav = useNavigate();
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const otpIdentifier = otp.channel === 'email' ? form.email : form.phone;
+
+  const sendCode = async () => {
+    if (!otpIdentifier) return toast(otp.channel === 'email' ? 'Enter your email first' : 'Enter your phone number first', 'error');
+    setOtp(o => ({ ...o, sending: true }));
+    try {
+      const d = await api.post('/api/auth/send-otp', { channel: otp.channel, identifier: otpIdentifier });
+      setOtp(o => ({ ...o, sent: true, sending: false, demo_code: d.demo_code || '' }));
+      toast(d.demo ? 'Demo mode — your code is shown below' : `Code sent to your ${otp.channel}`, 'success');
+    } catch (err) {
+      setOtp(o => ({ ...o, sending: false }));
+      toast(err.message, 'error');
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     try {
-      const { user } = mode === 'login'
-        ? await api.post('/api/auth/login', { email: form.email, password: form.password })
-        : await api.post('/api/auth/signup', { ...form, role });
+      let user;
+      if (mode === 'login') {
+        ({ user } = await api.post('/api/auth/login', { email: form.email, password: form.password }));
+      } else {
+        if (!otp.sent || !otp.code) throw new Error('Verify your email or phone first — request a code and enter it.');
+        const { otp_token } = await api.post('/api/auth/verify-otp', { identifier: otpIdentifier, code: otp.code });
+        ({ user } = await api.post('/api/auth/signup', { ...form, role, otp_token }));
+      }
       setUser(user);
       nav(user.onboarded ? '/discover' : '/onboarding');
     } catch (err) {
@@ -167,6 +187,36 @@ export default function Auth() {
             <div><span className="label">Password</span><input type="password" className="input" value={form.password} onChange={set('password')} placeholder={mode === 'signup' ? 'Minimum 8 characters' : '••••••••'} required /></div>
             {mode === 'signup' && (
               <div><span className="label">City</span><input className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
+            )}
+            {mode === 'signup' && (
+              <div className="card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-mist-100">Verify it's you</span>
+                  <div className="flex rounded-lg bg-ink-850 border border-ink-600/60 p-0.5">
+                    {[['email', 'Email'], ['phone', 'Phone']].map(([v, l]) => (
+                      <button type="button" key={v}
+                        onClick={() => setOtp(o => ({ ...o, channel: v, sent: false, code: '', demo_code: '' }))}
+                        className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${otp.channel === v ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
+                    ))}
+                  </div>
+                </div>
+                {otp.channel === 'phone' && (
+                  <input className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="Phone with country code, e.g. +966 5x xxx xxxx" />
+                )}
+                <div className="flex gap-2">
+                  <input className="input flex-1" inputMode="numeric" maxLength={6} value={otp.code}
+                    onChange={(e) => setOtp(o => ({ ...o, code: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="6-digit code" disabled={!otp.sent} />
+                  <button type="button" className="btn-ghost whitespace-nowrap" onClick={sendCode} disabled={otp.sending}>
+                    {otp.sending ? 'Sending…' : otp.sent ? 'Resend Code' : 'Send Code'}
+                  </button>
+                </div>
+                {otp.demo_code && (
+                  <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">
+                    Demo mode (no email/SMS provider configured): your code is <code className="font-bold">{otp.demo_code}</code>
+                  </div>
+                )}
+              </div>
             )}
             <button disabled={busy} className="btn-primary w-full !py-3 group">
               {busy ? 'Please wait…' : mode === 'login' ? 'Sign In' : `Create ${role === 'founder' ? 'Founder' : 'Investor'} Account`}

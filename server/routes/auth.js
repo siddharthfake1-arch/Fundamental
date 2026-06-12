@@ -1,12 +1,15 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { db, publicUser } = require('../db');
-const { sign, auth } = require('../authmw');
+const { sign, auth, JWT_SECRET } = require('../authmw');
 const { rateLimit } = require('../security');
+const { sendOtp, verifyOtp, normalizePhone } = require('../otp');
 
 const router = express.Router();
 // Brute-force protection: credential endpoints get a tight per-IP budget.
 const authLimiter = rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: 25 });
+const otpLimiter = rateLimit({ name: 'otp', windowMs: 10 * 60_000, max: 15 });
 const BCRYPT_ROUNDS = 12; // fintech-grade work factor; existing 10-round hashes still verify
 const COOKIE = {
   httpOnly: true,
@@ -17,7 +20,8 @@ const COOKIE = {
 
 function sessionPayload(user) {
   const me = publicUser(user);
-  me.email = user.email; // own session only — publicUser strips it for everyone else
+  me.email = user.email; // own session only — publicUser strips these for everyone else
+  me.phone = user.phone || '';
   if (user.role === 'investor') {
     const ip = db.prepare('SELECT * FROM investor_profiles WHERE user_id=?').get(user.id);
     if (ip) {
@@ -35,18 +39,52 @@ function sessionPayload(user) {
   return me;
 }
 
+// ---- Signup verification (OTP via email or phone) ----
+router.post('/send-otp', otpLimiter, async (req, res) => {
+  const { channel, identifier } = req.body;
+  // For signup we can tell the user early that the email is taken
+  if (channel === 'email' && typeof identifier === 'string' &&
+      db.prepare('SELECT 1 FROM users WHERE email=?').get(identifier.toLowerCase())) {
+    return res.status(409).json({ error: 'An account with this email already exists — sign in instead' });
+  }
+  const out = await sendOtp(channel, identifier);
+  if (out.error) return res.status(400).json({ error: out.error });
+  res.json({ ok: true, demo: !!out.demo_code, demo_code: out.demo_code });
+});
+
+router.post('/verify-otp', otpLimiter, (req, res) => {
+  const { identifier, code } = req.body;
+  const out = verifyOtp(identifier, code);
+  if (out.error) return res.status(400).json({ error: out.error });
+  // Short-lived proof of verification, consumed by /signup
+  const otp_token = jwt.sign({ otp: out.identifier, ch: out.channel }, JWT_SECRET, { expiresIn: '30m' });
+  res.json({ ok: true, otp_token });
+});
+
 router.post('/signup', authLimiter, (req, res) => {
-  const { role, name, email, password, city } = req.body;
+  const { role, name, email, password, city, phone, otp_token } = req.body;
   if (!['founder', 'investor'].includes(role)) return res.status(400).json({ error: 'Select a role: Founder or Investor' });
   if (!name || !String(name).trim() || String(name).length > 120) return res.status(400).json({ error: 'Full name is required' });
   if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'A valid email is required' });
   if (typeof password !== 'string' || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+
+  // OTP proof must match the email or the phone on this signup
+  let verifiedChannel = null;
+  try {
+    const p = jwt.verify(otp_token || '', JWT_SECRET);
+    const normPhone = phone ? normalizePhone(phone) : null;
+    if (p.ch === 'email' && p.otp === email.toLowerCase()) verifiedChannel = 'email';
+    else if (p.ch === 'phone' && normPhone && p.otp === normPhone) verifiedChannel = 'phone';
+  } catch { /* missing/expired/invalid token */ }
+  if (!verifiedChannel) return res.status(400).json({ error: 'Please verify your email or phone with the code we sent before creating the account' });
+
   if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase())) {
     return res.status(409).json({ error: 'An account with this email already exists' });
   }
   const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
-  const info = db.prepare('INSERT INTO users (role, name, email, password_hash, city) VALUES (?,?,?,?,?)')
-    .run(role, String(name).trim(), email.toLowerCase(), hash, String(city || '').slice(0, 120));
+  const info = db.prepare('INSERT INTO users (role, name, email, password_hash, city, phone, email_verified, phone_verified) VALUES (?,?,?,?,?,?,?,?)')
+    .run(role, String(name).trim(), email.toLowerCase(), hash, String(city || '').slice(0, 120),
+      phone ? normalizePhone(phone) || '' : '', verifiedChannel === 'email' ? 1 : 0, verifiedChannel === 'phone' ? 1 : 0);
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid);
   if (role === 'investor') db.prepare('INSERT INTO investor_profiles (user_id) VALUES (?)').run(user.id);
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });

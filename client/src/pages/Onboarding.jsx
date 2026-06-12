@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
@@ -20,7 +20,7 @@ function videoDuration(file) {
 
 export default function Onboarding() {
   const { user, refresh } = useAuth();
-  return user.role === 'founder' ? <FounderFlow refresh={refresh} /> : <InvestorFlow refresh={refresh} />;
+  return user.role === 'founder' ? <FounderFlow user={user} refresh={refresh} /> : <InvestorFlow user={user} refresh={refresh} />;
 }
 
 function Shell({ step, total, title, sub, children, completion }) {
@@ -50,36 +50,122 @@ function Shell({ step, total, title, sub, children, completion }) {
   );
 }
 
-const Field = ({ label, children }) => <div><span className="label">{label}</span>{children}</div>;
+const Field = ({ label, hint, children }) => (
+  <div>
+    <span className="label">{label}{hint && <span className="text-mist-500 font-normal normal-case tracking-normal"> — {hint}</span>}</span>
+    {children}
+  </div>
+);
 
-function FounderFlow({ refresh }) {
+const Optional = () => <span className="text-[10px] uppercase tracking-wider text-mist-500 ml-1.5">optional</span>;
+
+// "About you" — the personal profile fields that show on /profile later.
+function AboutYouStep({ me, setMe }) {
+  const set = (k) => (e) => setMe(x => ({ ...x, [k]: e.target.value }));
+  return (
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 gap-4">
+        <FileUpload label="Profile Photo" accept="image/*" currentUrl={me.photo} hint="Shown across the platform"
+          onUploaded={(d) => setMe(x => ({ ...x, photo: d.url }))} />
+        <FileUpload label="Cover Image" accept="image/*" currentUrl={me.cover} hint="Banner on your profile page"
+          onUploaded={(d) => setMe(x => ({ ...x, cover: d.url }))} />
+      </div>
+      <Field label="Headline"><input className="input" value={me.headline} onChange={set('headline')} placeholder="e.g. Co-founder & CEO, PayLane" /></Field>
+      <Field label="Bio"><textarea className="input min-h-[100px]" value={me.bio} onChange={set('bio')} placeholder="Your story in a few sentences — investors and founders read this on your profile." /></Field>
+      <div className="grid sm:grid-cols-2 gap-4">
+        <Field label="City"><input className="input" value={me.city} onChange={set('city')} placeholder="e.g. Riyadh, Bengaluru, London…" /></Field>
+        <Field label="LinkedIn URL"><input className="input" value={me.linkedin} onChange={set('linkedin')} placeholder="https://linkedin.com/in/you" /></Field>
+      </div>
+      <Field label="Education"><input className="input" value={me.education} onChange={set('education')} placeholder="e.g. B.Tech CS, IIT Bombay" /></Field>
+      <Field label="Experience"><input className="input" value={me.experience} onChange={set('experience')} placeholder="e.g. ex-Product at Stripe; 2x founder" /></Field>
+    </div>
+  );
+}
+
+const ME_FIELDS = ['photo', 'cover', 'headline', 'bio', 'city', 'linkedin', 'education', 'experience'];
+const meFromUser = (user) => Object.fromEntries(ME_FIELDS.map(k => [k, user[k] || '']));
+// Server only accepts real http(s) links — quietly add the protocol people omit.
+const normalizeMe = (me) => ({
+  ...me,
+  linkedin: me.linkedin && !/^(https?:\/\/|\/uploads\/)/.test(me.linkedin) ? `https://${me.linkedin}` : me.linkedin,
+});
+
+// ---------------------------------------------------------------- Founder ----
+
+const S_TEXT = ['name', 'sector', 'subsector', 'stage', 'city', 'raising_status', 'raising_amount', 'one_liner',
+  'problem', 'solution', 'business_model', 'market_size', 'competitive_advantage', 'round_details',
+  'deployment_timeline', 'strategic_objectives', 'logo', 'cover', 'video_url'];
+const S_NUM = ['founded_year', 'arr', 'mrr', 'growth', 'gross_margin', 'burn', 'runway', 'cac', 'ltv'];
+
+function emptyStartup() {
+  const s = Object.fromEntries([...S_TEXT, ...S_NUM].map(k => [k, '']));
+  s.raising_status = 'Actively Raising';
+  s.video_minutes = null;
+  return s;
+}
+
+function FounderFlow({ user, refresh }) {
+  const draftKey = `onb_founder_${user.id}`;
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [s, setS] = useState({
-    name: '', sector: '', stage: '', city: '', raising_status: 'Actively Raising', raising_amount: '',
-    one_liner: '', logo: '', arr: '', mrr: '', growth: '', burn: '', video_url: '', video_minutes: null,
-  });
+  const [loaded, setLoaded] = useState(false);
+  const [me, setMe] = useState(meFromUser(user));
+  const [s, setS] = useState(emptyStartup());
   const [docs, setDocs] = useState([]);
   const toast = useToast();
   const nav = useNavigate();
   const set = (k) => (e) => setS(x => ({ ...x, [k]: e.target.value }));
 
-  const completion = Math.round(
-    ([s.name, s.sector, s.stage, s.city, s.raising_status, s.one_liner, s.logo, s.arr || s.mrr, s.video_url].filter(Boolean).length / 9) * 100
-  );
+  // Resume a saved draft: server data is the source of truth, localStorage keeps
+  // step position and not-yet-uploaded document list.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { startup } = await api.get('/api/startups/mine');
+        if (startup) {
+          const next = emptyStartup();
+          for (const k of S_TEXT) next[k] = startup[k] || (k === 'raising_status' ? 'Actively Raising' : '');
+          for (const k of S_NUM) next[k] = startup[k] ? String(startup[k]) : '';
+          setS(next);
+        }
+      } catch { /* no draft yet */ }
+      try {
+        const local = JSON.parse(localStorage.getItem(draftKey) || '{}');
+        if (local.step) setStep(Math.min(local.step, 6));
+        if (Array.isArray(local.docs)) setDocs(local.docs);
+      } catch { /* no local draft */ }
+      setLoaded(true);
+    })();
+  }, []);
+
+  const startupPayload = () => ({
+    ...Object.fromEntries(S_TEXT.map(k => [k, s[k]])),
+    ...Object.fromEntries(S_NUM.map(k => [k, s[k] === '' ? 0 : Number(s[k]) || 0])),
+    founded_year: Number(s.founded_year) || new Date().getFullYear(),
+  });
+
+  const saveDraft = async (silent = false) => {
+    try {
+      await api.put('/api/users/me', normalizeMe(me));
+      if (s.name) await api.post('/api/startups/mine', startupPayload());
+      localStorage.setItem(draftKey, JSON.stringify({ step, docs }));
+      if (!silent) toast(s.name
+        ? 'Progress saved — you can sign out and continue any time. We\'ll bring you right back here.'
+        : 'Profile details saved. Add your startup name to save the startup draft too.', 'success');
+    } catch (e) { if (!silent) toast(e.message, 'error'); }
+  };
 
   const finish = async () => {
+    if (!s.name.trim()) return toast('Your startup needs a name.', 'error');
+    if (!s.one_liner.trim()) return toast('The one-line description is required — it\'s how investors find you.', 'error');
     if (!s.video_url) return toast('The 12-minute pitch video is mandatory — your startup will not be listed without it.', 'error');
     setBusy(true);
     try {
-      const { id } = await api.post('/api/startups/mine', {
-        ...s, arr: Number(s.arr) || 0, mrr: Number(s.mrr) || 0, growth: Number(s.growth) || 0, burn: Number(s.burn) || 0,
-        founded_year: new Date().getFullYear(),
-      });
-      for (const d of docs) {
-        await api.post(`/api/startups/${id}/collateral`, d);
-      }
+      await api.put('/api/users/me', normalizeMe(me));
+      const { id } = await api.post('/api/startups/mine', startupPayload());
+      for (const d of docs) await api.post(`/api/startups/${id}/collateral`, d);
       await api.put('/api/users/me', { onboarded: 1 });
+      localStorage.removeItem(draftKey);
       await refresh();
       toast('Welcome to Fundamental — your startup is live.', 'success');
       nav('/dashboard');
@@ -88,51 +174,95 @@ function FounderFlow({ refresh }) {
     } finally { setBusy(false); }
   };
 
+  const filled = [...ME_FIELDS.map(k => me[k]), ...S_TEXT.map(k => s[k]), ...S_NUM.map(k => s[k])].filter(Boolean).length;
+  const completion = Math.round((filled / (ME_FIELDS.length + S_TEXT.length + S_NUM.length)) * 100);
+
   const steps = [
     {
-      title: 'Tell us about your startup', sub: 'This becomes your public profile in the Discover marketplace.',
-      valid: s.name && s.sector && s.stage,
+      title: 'About you', sub: 'All optional — this is your personal profile, shown alongside your startup. You can edit everything later in Settings.',
+      valid: true,
+      body: <AboutYouStep me={me} setMe={setMe} />,
+    },
+    {
+      title: 'Startup basics', sub: 'This becomes your public profile in the Discover marketplace. Only the name and one-line description are required.',
+      valid: !!s.name.trim(),
       body: (
         <div className="space-y-4">
           <Field label="Startup Name"><input className="input" value={s.name} onChange={set('name')} placeholder="e.g. PayLane" /></Field>
+          <Field label="One-line Description" hint="required"><input className="input" maxLength={140} value={s.one_liner} onChange={set('one_liner')} placeholder="What you do, in one sharp sentence" /></Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Sector">
+            <Field label={<>Sector<Optional /></>}>
               <select className="input" value={s.sector} onChange={set('sector')}><option value="">Select…</option>{SECTORS.map(x => <option key={x}>{x}</option>)}</select>
             </Field>
-            <Field label="Stage">
+            <Field label={<>Sub-sector<Optional /></>}><input className="input" value={s.subsector} onChange={set('subsector')} placeholder="e.g. Payments, B2B SaaS" /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={<>Stage<Optional /></>}>
               <select className="input" value={s.stage} onChange={set('stage')}><option value="">Select…</option>{STAGES.map(x => <option key={x}>{x}</option>)}</select>
             </Field>
+            <Field label={<>Founded Year<Optional /></>}><input type="number" className="input" value={s.founded_year} onChange={set('founded_year')} placeholder={String(new Date().getFullYear())} /></Field>
           </div>
-          <Field label="City"><input className="input" value={s.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Raising Status">
-              <select className="input" value={s.raising_status} onChange={set('raising_status')}>
-                {['Actively Raising', 'Round Closing', 'Not Raising'].map(x => <option key={x}>{x}</option>)}
-              </select>
-            </Field>
-            <Field label="Raising Amount"><input className="input" value={s.raising_amount} onChange={set('raising_amount')} placeholder="e.g. $3M" /></Field>
+            <Field label={<>City<Optional /></>}><input className="input" value={s.city} onChange={set('city')} placeholder="e.g. Bengaluru, Riyadh, London…" /></Field>
+            <Field label={<>Raising Amount<Optional /></>}><input className="input" value={s.raising_amount} onChange={set('raising_amount')} placeholder="e.g. $3M" /></Field>
           </div>
-          <Field label="One-line Description"><input className="input" maxLength={140} value={s.one_liner} onChange={set('one_liner')} placeholder="What you do, in one sharp sentence" /></Field>
-          <FileUpload label="Upload Logo" accept="image/*" currentUrl={s.logo} hint="PNG, JPG or SVG"
-            onUploaded={(d) => setS(x => ({ ...x, logo: d.url }))} />
+          <Field label="Raising Status">
+            <select className="input" value={s.raising_status} onChange={set('raising_status')}>
+              {['Actively Raising', 'Round Closing', 'Not Raising'].map(x => <option key={x}>{x}</option>)}
+            </select>
+          </Field>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <FileUpload label="Logo (optional)" accept="image/*" currentUrl={s.logo} hint="PNG, JPG or SVG"
+              onUploaded={(d) => setS(x => ({ ...x, logo: d.url }))} />
+            <FileUpload label="Cover Image (optional)" accept="image/*" currentUrl={s.cover} hint="Banner on your startup page"
+              onUploaded={(d) => setS(x => ({ ...x, cover: d.url }))} />
+          </div>
         </div>
       ),
     },
     {
-      title: 'Add your metrics', sub: 'Investors on Fundamental expect real numbers. Leave blank if pre-revenue.',
+      title: 'Your story', sub: 'All optional — these power your startup page sections and the AI investment memo investors generate.',
+      valid: true,
+      body: (
+        <div className="space-y-4">
+          <Field label={<>The Problem<Optional /></>}><textarea className="input min-h-[80px]" value={s.problem} onChange={set('problem')} placeholder="What's broken, and for whom?" /></Field>
+          <Field label={<>Your Solution<Optional /></>}><textarea className="input min-h-[80px]" value={s.solution} onChange={set('solution')} placeholder="How you fix it." /></Field>
+          <Field label={<>Business Model<Optional /></>}><textarea className="input min-h-[64px]" value={s.business_model} onChange={set('business_model')} placeholder="How you make money." /></Field>
+          <Field label={<>Market Size<Optional /></>}><textarea className="input min-h-[64px]" value={s.market_size} onChange={set('market_size')} placeholder="TAM/SAM and why now." /></Field>
+          <Field label={<>Competitive Advantage<Optional /></>}><textarea className="input min-h-[64px]" value={s.competitive_advantage} onChange={set('competitive_advantage')} placeholder="Your moat." /></Field>
+        </div>
+      ),
+    },
+    {
+      title: 'Metrics', sub: 'All optional — leave blank if pre-revenue. Real numbers raise your Fundamental Score and investor trust.',
       valid: true,
       body: (
         <div className="grid grid-cols-2 gap-4">
           <Field label="ARR (USD)"><input type="number" className="input" value={s.arr} onChange={set('arr')} placeholder="0" /></Field>
           <Field label="MRR (USD)"><input type="number" className="input" value={s.mrr} onChange={set('mrr')} placeholder="0" /></Field>
           <Field label="Growth % (MoM)"><input type="number" className="input" value={s.growth} onChange={set('growth')} placeholder="0" /></Field>
+          <Field label="Gross Margin %"><input type="number" className="input" value={s.gross_margin} onChange={set('gross_margin')} placeholder="0" /></Field>
           <Field label="Monthly Burn (USD)"><input type="number" className="input" value={s.burn} onChange={set('burn')} placeholder="0" /></Field>
+          <Field label="Runway (months)"><input type="number" className="input" value={s.runway} onChange={set('runway')} placeholder="0" /></Field>
+          <Field label="CAC (USD)"><input type="number" className="input" value={s.cac} onChange={set('cac')} placeholder="0" /></Field>
+          <Field label="LTV (USD)"><input type="number" className="input" value={s.ltv} onChange={set('ltv')} placeholder="0" /></Field>
+        </div>
+      ),
+    },
+    {
+      title: 'The round', sub: 'All optional — context investors see in the "Use of Funds" and round sections.',
+      valid: true,
+      body: (
+        <div className="space-y-4">
+          <Field label={<>Round Details<Optional /></>}><textarea className="input min-h-[80px]" value={s.round_details} onChange={set('round_details')} placeholder="e.g. Raising $3M seed at $15M cap; $1.2M committed." /></Field>
+          <Field label={<>Deployment Timeline<Optional /></>}><input className="input" value={s.deployment_timeline} onChange={set('deployment_timeline')} placeholder="e.g. 18 months to Series A metrics" /></Field>
+          <Field label={<>Strategic Objectives<Optional /></>}><textarea className="input min-h-[64px]" value={s.strategic_objectives} onChange={set('strategic_objectives')} placeholder="What this round unlocks." /></Field>
         </div>
       ),
     },
     {
       title: 'Upload your 12-minute pitch', sub: 'Mandatory. Every startup on Fundamental opens with a video pitch — it is the first thing investors see.',
-      valid: !!s.video_url,
+      valid: true,
       body: (
         <div className="space-y-4">
           <div className="card p-4 border-gold-500/30 bg-gold-500/5 text-sm text-mist-300 leading-relaxed">
@@ -149,6 +279,7 @@ function FounderFlow({ refresh }) {
     },
   ];
 
+  if (!loaded) return null;
   const cur = steps[step];
   return (
     <Shell step={step} total={steps.length} title={cur.title} sub={cur.sub} completion={completion}>
@@ -156,9 +287,13 @@ function FounderFlow({ refresh }) {
       <div className="flex gap-3 mt-8">
         {step > 0 && <button className="btn-ghost" onClick={() => setStep(step - 1)}>Back</button>}
         {step < steps.length - 1
-          ? <button className="btn-primary flex-1" disabled={!cur.valid} onClick={() => setStep(step + 1)}>Continue</button>
-          : <button className="btn-primary flex-1" disabled={busy || !s.video_url} onClick={finish}>{busy ? 'Launching…' : 'Launch My Startup'}</button>}
+          ? <button className="btn-primary flex-1" disabled={!cur.valid} onClick={() => { setStep(step + 1); saveDraft(true); }}>Continue</button>
+          : <button className="btn-primary flex-1" disabled={busy} onClick={finish}>{busy ? 'Launching…' : 'Launch My Startup'}</button>}
       </div>
+      <button className="btn-ghost w-full mt-3 !text-mist-400" onClick={() => saveDraft()}>
+        Save progress & finish later
+      </button>
+      <p className="text-[11px] text-mist-500 text-center mt-2">Everything except the one-line description and the pitch video is optional — you can fill in the rest any time from Settings.</p>
     </Shell>
   );
 }
@@ -224,57 +359,113 @@ function CollateralStep({ docs, setDocs }) {
   );
 }
 
-function InvestorFlow({ refresh }) {
+// --------------------------------------------------------------- Investor ----
+
+function InvestorFlow({ user, refresh }) {
+  const draftKey = `onb_investor_${user.id}`;
+  const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [f, setF] = useState({ fund_name: '', fund_size: '', check_size: '', stage_focus: [], sector_focus: [], thesis: '', portfolio_text: '' });
+  const [me, setMe] = useState(meFromUser(user));
+  const [f, setF] = useState({
+    fund_name: user.investor?.fund_name || '',
+    fund_size: user.investor?.fund_size || '',
+    check_size: user.investor?.check_size || '',
+    stage_focus: user.investor?.stage_focus || [],
+    sector_focus: user.investor?.sector_focus || [],
+    thesis: user.investor?.thesis || '',
+  });
   const toast = useToast();
   const nav = useNavigate();
   const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
   const toggle = (k, v) => setF(x => ({ ...x, [k]: x[k].includes(v) ? x[k].filter(i => i !== v) : [...x[k], v] }));
 
+  useEffect(() => {
+    try {
+      const local = JSON.parse(localStorage.getItem(draftKey) || '{}');
+      if (local.step) setStep(Math.min(local.step, 1));
+    } catch { /* no draft */ }
+  }, []);
+
+  const payload = (extra = {}) => ({
+    ...normalizeMe(me), ...extra,
+    investor: { ...f, portfolio: user.investor?.portfolio || [] },
+  });
+
+  const saveDraft = async () => {
+    try {
+      await api.put('/api/users/me', payload());
+      localStorage.setItem(draftKey, JSON.stringify({ step }));
+      toast('Progress saved — you can sign out and continue any time.', 'success');
+    } catch (e) { toast(e.message, 'error'); }
+  };
+
   const finish = async () => {
-    if (!f.fund_name) return toast('Fund name is required', 'error');
     setBusy(true);
     try {
-      await api.put('/api/users/me', {
-        onboarded: 1,
-        investor: { fund_name: f.fund_name, fund_size: f.fund_size, check_size: f.check_size, stage_focus: f.stage_focus, sector_focus: f.sector_focus, thesis: f.thesis, portfolio: [] },
-      });
+      await api.put('/api/users/me', payload({ onboarded: 1 }));
+      localStorage.removeItem(draftKey);
       await refresh();
       toast('Welcome to Fundamental.', 'success');
       nav('/discover');
     } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   };
 
-  return (
-    <Shell step={0} total={1} title="Set up your investor profile" sub="Founders see this when you connect. Your focus powers your suggested deal flow.">
-      <div className="space-y-4">
-        <Field label="Fund Name"><input className="input" value={f.fund_name} onChange={set('fund_name')} placeholder="e.g. Tuwaiq Ventures (or Angel / Family Office)" /></Field>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Fund Size"><input className="input" value={f.fund_size} onChange={set('fund_size')} placeholder="e.g. $100M" /></Field>
-          <Field label="Check Size Range"><input className="input" value={f.check_size} onChange={set('check_size')} placeholder="e.g. $250K – $2M" /></Field>
+  const filled = [...ME_FIELDS.map(k => me[k]), f.fund_name, f.fund_size, f.check_size, f.thesis,
+    f.stage_focus.length, f.sector_focus.length].filter(Boolean).length;
+  const completion = Math.round((filled / (ME_FIELDS.length + 6)) * 100);
+
+  const steps = [
+    {
+      title: 'About you', sub: 'All optional — founders see this profile when you connect. You can edit everything later in Settings.',
+      body: <AboutYouStep me={me} setMe={setMe} />,
+    },
+    {
+      title: 'Your fund & focus', sub: 'All optional — your focus powers suggested deal flow and Thesis-Fit matching, so the more you share, the better your sourcing.',
+      body: (
+        <div className="space-y-4">
+          <Field label={<>Fund Name<Optional /></>}><input className="input" value={f.fund_name} onChange={set('fund_name')} placeholder="e.g. Tuwaiq Ventures (or Angel / Family Office)" /></Field>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label={<>Fund Size<Optional /></>}><input className="input" value={f.fund_size} onChange={set('fund_size')} placeholder="e.g. $100M" /></Field>
+            <Field label={<>Check Size Range<Optional /></>}><input className="input" value={f.check_size} onChange={set('check_size')} placeholder="e.g. $250K – $2M" /></Field>
+          </div>
+          <Field label={<>Stage Focus<Optional /></>}>
+            <div className="flex flex-wrap gap-2">
+              {STAGES.map(st => (
+                <button type="button" key={st} onClick={() => toggle('stage_focus', st)}
+                  className={f.stage_focus.includes(st) ? 'chip-gold !py-1.5 !px-3 !text-xs' : 'chip !py-1.5 !px-3 !text-xs hover:border-ink-400'}>{st}</button>
+              ))}
+            </div>
+          </Field>
+          <Field label={<>Sector Focus<Optional /></>}>
+            <div className="flex flex-wrap gap-2">
+              {SECTORS.map(sc => (
+                <button type="button" key={sc} onClick={() => toggle('sector_focus', sc)}
+                  className={f.sector_focus.includes(sc) ? 'chip-gold !py-1.5 !px-3 !text-xs' : 'chip !py-1.5 !px-3 !text-xs hover:border-ink-400'}>{sc}</button>
+              ))}
+            </div>
+          </Field>
+          <Field label={<>Investment Thesis<Optional /></>}>
+            <textarea className="input min-h-[110px]" value={f.thesis} onChange={set('thesis')} placeholder="What you back and why — founders read this before accepting your connection." />
+          </Field>
         </div>
-        <Field label="Stage Focus">
-          <div className="flex flex-wrap gap-2">
-            {STAGES.map(st => (
-              <button type="button" key={st} onClick={() => toggle('stage_focus', st)}
-                className={f.stage_focus.includes(st) ? 'chip-gold !py-1.5 !px-3 !text-xs' : 'chip !py-1.5 !px-3 !text-xs hover:border-ink-400'}>{st}</button>
-            ))}
-          </div>
-        </Field>
-        <Field label="Sector Focus">
-          <div className="flex flex-wrap gap-2">
-            {SECTORS.map(sc => (
-              <button type="button" key={sc} onClick={() => toggle('sector_focus', sc)}
-                className={f.sector_focus.includes(sc) ? 'chip-gold !py-1.5 !px-3 !text-xs' : 'chip !py-1.5 !px-3 !text-xs hover:border-ink-400'}>{sc}</button>
-            ))}
-          </div>
-        </Field>
-        <Field label="Investment Thesis">
-          <textarea className="input min-h-[110px]" value={f.thesis} onChange={set('thesis')} placeholder="What you back and why — founders read this before accepting your connection." />
-        </Field>
-        <button className="btn-primary w-full !py-3" disabled={busy} onClick={finish}>{busy ? 'Saving…' : 'Enter Fundamental'}</button>
+      ),
+    },
+  ];
+
+  const cur = steps[step];
+  return (
+    <Shell step={step} total={steps.length} title={cur.title} sub={cur.sub} completion={completion}>
+      {cur.body}
+      <div className="flex gap-3 mt-8">
+        {step > 0 && <button className="btn-ghost" onClick={() => setStep(step - 1)}>Back</button>}
+        {step < steps.length - 1
+          ? <button className="btn-primary flex-1" onClick={() => setStep(step + 1)}>Continue</button>
+          : <button className="btn-primary flex-1" disabled={busy} onClick={finish}>{busy ? 'Saving…' : 'Enter Fundamental'}</button>}
       </div>
+      <button className="btn-ghost w-full mt-3 !text-mist-400" onClick={saveDraft}>
+        Save progress & finish later
+      </button>
+      <p className="text-[11px] text-mist-500 text-center mt-2">Nothing here is compulsory — you can complete your profile any time from Settings.</p>
     </Shell>
   );
 }

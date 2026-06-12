@@ -268,7 +268,25 @@ for (const stmt of [
   "ALTER TABLE users ADD COLUMN cover TEXT DEFAULT ''",
   "ALTER TABLE startups ADD COLUMN cover TEXT DEFAULT ''",
   "ALTER TABLE users ADD COLUMN pwd_changed_at TEXT DEFAULT NULL", // session invalidation after password change
+  "ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0",
 ]) { try { db.exec(stmt); } catch { /* column exists */ } }
+
+// One-time codes for signup verification (email or SMS). Only the hash is stored.
+db.exec(`
+CREATE TABLE IF NOT EXISTS otp_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  identifier TEXT NOT NULL,
+  channel TEXT NOT NULL CHECK(channel IN ('email','phone')),
+  code_hash TEXT NOT NULL,
+  attempts INTEGER DEFAULT 0,
+  verified INTEGER DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_otp_identifier ON otp_codes(identifier, created_at);
+`);
 
 // Indexes for every hot lookup path — without these each request full-scans tables
 // that grow linearly with usage (notifications, views, messages).
@@ -315,7 +333,7 @@ function areConnected(u1, u2) {
 // email stays private (only the session owner and admins see it — harvesting defense).
 function publicUser(u) {
   if (!u) return null;
-  const { password_hash, pwd_changed_at, email, email_alerts, inapp_alerts, ...rest } = u;
+  const { password_hash, pwd_changed_at, email, phone, email_alerts, inapp_alerts, ...rest } = u;
   rest.badges = JSON.parse(rest.badges || '[]');
   return rest;
 }
