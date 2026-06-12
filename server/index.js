@@ -13,11 +13,16 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { auth } = require('./authmw');
+const { rateLimit, csrfOriginCheck, securityHeaders, randomFileName } = require('./security');
 
 const app = express();
 app.set('trust proxy', 1); // correct protocol/IP behind Render/Railway/nginx proxies
+app.disable('x-powered-by');
+app.use(securityHeaders);
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
+app.use('/api', csrfOriginCheck); // reject state-changing requests from foreign origins
+app.use('/api', rateLimit({ name: 'api', windowMs: 5 * 60_000, max: 1500 })); // generous global ceiling
 
 // Health check for hosting platforms
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'fundamental' }));
@@ -38,18 +43,30 @@ const UPLOAD_DIR = path.join(__dirname, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
-  filename: (req, file, cb) => {
-    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80);
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
-  },
+  // CSPRNG filenames: /uploads is unauthenticated (public logos/videos need it),
+  // so unguessable names are the access control for non-public objects.
+  filename: (req, file, cb) => cb(null, randomFileName(file.originalname)),
 });
+// Allowlist of content we actually have features for. Executables, scripts and
+// unknown formats are rejected outright.
+const ALLOWED_EXT = /\.(png|jpe?g|gif|webp|svg|mp4|webm|mov|m4v|pdf|pptx?|docx?|xlsx?|csv|key|zip)$/i;
 const upload = multer({
   storage,
   limits: { fileSize: 500 * 1024 * 1024 }, // 12-minute pitch videos
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_EXT.test(file.originalname || '')) {
+      return cb(new Error('File type not supported. Allowed: images, video, PDF, Office documents, ZIP.'));
+    }
+    cb(null, true);
+  },
 });
-app.post('/api/upload', auth, upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file received' });
-  res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname, size: req.file.size });
+const uploadLimiter = rateLimit({ name: 'upload', windowMs: 60 * 60_000, max: 60 });
+app.post('/api/upload', auth, uploadLimiter, (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
+    if (!req.file) return res.status(400).json({ error: 'No file received' });
+    res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname, size: req.file.size });
+  });
 });
 app.use('/uploads', express.static(UPLOAD_DIR, {
   setHeaders: (res, filePath) => {
@@ -138,9 +155,7 @@ npm start</pre>
   });
 }
 
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  console.warn('WARNING: JWT_SECRET is not set. Set a long random JWT_SECRET in production.');
-}
+// (JWT_SECRET is validated in authmw.js — the server refuses to boot in production without it.)
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Fundamental running on http://localhost:${PORT}`));

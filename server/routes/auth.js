@@ -2,8 +2,12 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db, publicUser } = require('../db');
 const { sign, auth } = require('../authmw');
+const { rateLimit } = require('../security');
 
 const router = express.Router();
+// Brute-force protection: credential endpoints get a tight per-IP budget.
+const authLimiter = rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: 25 });
+const BCRYPT_ROUNDS = 12; // fintech-grade work factor; existing 10-round hashes still verify
 const COOKIE = {
   httpOnly: true,
   sameSite: 'lax',
@@ -13,6 +17,7 @@ const COOKIE = {
 
 function sessionPayload(user) {
   const me = publicUser(user);
+  me.email = user.email; // own session only — publicUser strips it for everyone else
   if (user.role === 'investor') {
     const ip = db.prepare('SELECT * FROM investor_profiles WHERE user_id=?').get(user.id);
     if (ip) {
@@ -30,27 +35,27 @@ function sessionPayload(user) {
   return me;
 }
 
-router.post('/signup', (req, res) => {
+router.post('/signup', authLimiter, (req, res) => {
   const { role, name, email, password, city } = req.body;
   if (!['founder', 'investor'].includes(role)) return res.status(400).json({ error: 'Select a role: Founder or Investor' });
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Full name is required' });
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'A valid email is required' });
-  if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!name || !String(name).trim() || String(name).length > 120) return res.status(400).json({ error: 'Full name is required' });
+  if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'A valid email is required' });
+  if (typeof password !== 'string' || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase())) {
     return res.status(409).json({ error: 'An account with this email already exists' });
   }
-  const hash = bcrypt.hashSync(password, 10);
+  const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
   const info = db.prepare('INSERT INTO users (role, name, email, password_hash, city) VALUES (?,?,?,?,?)')
-    .run(role, name.trim(), email.toLowerCase(), hash, city || '');
+    .run(role, String(name).trim(), email.toLowerCase(), hash, String(city || '').slice(0, 120));
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid);
   if (role === 'investor') db.prepare('INSERT INTO investor_profiles (user_id) VALUES (?)').run(user.id);
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
 });
 
-router.post('/login', (req, res) => {
+router.post('/login', authLimiter, (req, res) => {
   const { email, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE email=?').get((email || '').toLowerCase());
-  if (!user || !bcrypt.compareSync(password || '', user.password_hash)) {
+  const user = db.prepare('SELECT * FROM users WHERE email=?').get(String(email || '').toLowerCase());
+  if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash)) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
@@ -65,21 +70,26 @@ router.post('/google', (req, res) => {
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie('token').json({ ok: true });
+  // Options must match the set-cookie attributes or some browsers won't clear it
+  res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' }).json({ ok: true });
 });
 
 router.get('/me', auth, (req, res) => {
   res.json({ user: sessionPayload(req.user) });
 });
 
-router.post('/change-password', auth, (req, res) => {
+router.post('/change-password', auth, authLimiter, (req, res) => {
   const { current, next } = req.body;
-  if (!bcrypt.compareSync(current || '', req.user.password_hash)) {
+  if (!bcrypt.compareSync(String(current || ''), req.user.password_hash)) {
     return res.status(400).json({ error: 'Current password is incorrect' });
   }
-  if (!next || next.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
-  db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(bcrypt.hashSync(next, 10), req.user.id);
-  res.json({ ok: true });
+  if (typeof next !== 'string' || next.length < 8 || next.length > 200) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  // pwd_changed_at invalidates every token issued before this moment (kills stolen
+  // sessions); we then issue a fresh cookie so the current device stays signed in.
+  db.prepare("UPDATE users SET password_hash=?, pwd_changed_at=datetime('now') WHERE id=?")
+    .run(bcrypt.hashSync(next, BCRYPT_ROUNDS), req.user.id);
+  const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
+  res.cookie('token', sign(user), COOKIE).json({ ok: true });
 });
 
 module.exports = router;

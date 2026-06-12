@@ -1,6 +1,7 @@
 const express = require('express');
 const { db, notify, addActivity, areConnected, publicUser, fundamentalScore, thesisFit } = require('../db');
 const { auth, requireRole } = require('../authmw');
+const { validateUrlFields, validateNumericFields, clampStrings } = require('../security');
 
 const router = express.Router();
 router.use(auth);
@@ -117,6 +118,13 @@ const FIELDS = ['name','sector','subsector','stage','city','founded_year','raisi
 router.post('/mine', requireRole('founder'), (req, res) => {
   const existing = db.prepare('SELECT * FROM startups WHERE founder_id=?').get(req.user.id);
   const b = req.body;
+  // URLs render as src/href in the client — reject javascript: and friends (stored XSS)
+  const urlErr = validateUrlFields(b, ['logo', 'cover', 'video_url']);
+  if (urlErr) return res.status(400).json({ error: urlErr });
+  const numErr = validateNumericFields(b, ['arr', 'mrr', 'growth', 'gross_margin', 'burn', 'runway', 'cac', 'ltv', 'founded_year']);
+  if (numErr) return res.status(400).json({ error: numErr });
+  clampStrings(b, ['name', 'sector', 'subsector', 'stage', 'city', 'raising_status', 'raising_amount', 'one_liner'], 200);
+  clampStrings(b, ['problem', 'solution', 'business_model', 'market_size', 'competitive_advantage', 'round_details', 'deployment_timeline', 'strategic_objectives'], 5000);
   const data = {};
   for (const f of FIELDS) if (b[f] !== undefined) data[f] = b[f];
   for (const jf of ['revenue_series', 'video_chapters', 'use_of_funds']) {
@@ -172,7 +180,11 @@ router.get('/:id', (req, res) => {
     const can = isOwner || c.access_level === 'Public' ||
       (c.access_level === 'Connected Only' && connected) ||
       (myReq && myReq.status === 'approved');
-    return { ...c, can_view: !!can, my_request: myReq ? myReq.status : null };
+    const out = { ...c, can_view: !!can, my_request: myReq ? myReq.status : null };
+    // SECURITY: the file URL IS the document. It must never leave the server for
+    // viewers who haven't been granted access, or the data room is decorative.
+    if (!can) out.file_url = '';
+    return out;
   });
   const conn = db.prepare(
     'SELECT * FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)'
@@ -315,9 +327,13 @@ router.post('/:id/collateral', requireRole('founder'), (req, res) => {
   if (!s) return res.status(403).json({ error: 'Not your startup' });
   const { title, type, access_level, file_url } = req.body;
   const TYPES = ['Deck', 'IM', 'Financial Model', 'Industry Overview', 'Product Demo', 'Cap Table'];
+  const LEVELS = ['Public', 'Request Access', 'Connected Only'];
   if (!title || !TYPES.includes(type)) return res.status(400).json({ error: 'Title and a valid document type are required' });
+  if (access_level && !LEVELS.includes(access_level)) return res.status(400).json({ error: 'Invalid access level' });
+  const urlErr = validateUrlFields(req.body, ['file_url']);
+  if (urlErr) return res.status(400).json({ error: urlErr });
   db.prepare('INSERT INTO collateral (startup_id, title, type, access_level, file_url) VALUES (?,?,?,?,?)')
-    .run(s.id, title, type, access_level || 'Public', file_url || '');
+    .run(s.id, String(title).slice(0, 200), type, access_level || 'Public', req.body.file_url || '');
   addActivity(s.id, 'Collateral Uploaded', `New ${type} added: ${title}`);
   res.json({ ok: true });
 });
@@ -325,8 +341,11 @@ router.put('/collateral/:cid', requireRole('founder'), (req, res) => {
   const c = db.prepare('SELECT c.*, s.founder_id FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
   if (!c || c.founder_id !== req.user.id) return res.status(403).json({ error: 'Not your document' });
   const { title, access_level } = req.body;
+  if (access_level && !['Public', 'Request Access', 'Connected Only'].includes(access_level)) {
+    return res.status(400).json({ error: 'Invalid access level' });
+  }
   db.prepare('UPDATE collateral SET title=COALESCE(?,title), access_level=COALESCE(?,access_level) WHERE id=?')
-    .run(title || null, access_level || null, c.id);
+    .run(title ? String(title).slice(0, 200) : null, access_level || null, c.id);
   res.json({ ok: true });
 });
 router.delete('/collateral/:cid', requireRole('founder'), (req, res) => {
@@ -367,7 +386,16 @@ router.get('/:id/access-requests', requireRole('founder'), (req, res) => {
 });
 
 router.post('/collateral/:cid/download', (req, res) => {
-  db.prepare('UPDATE collateral SET downloads = downloads + 1 WHERE id=?').run(req.params.cid);
+  // Verify the caller is actually allowed to see this document before counting —
+  // mirrors the can_view rules used when listing the data room.
+  const c = db.prepare('SELECT c.*, s.founder_id FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
+  if (!c) return res.status(404).json({ error: 'Document not found' });
+  const isOwner = c.founder_id === req.user.id;
+  const approved = db.prepare("SELECT 1 FROM access_requests WHERE collateral_id=? AND investor_id=? AND status='approved'").get(c.id, req.user.id);
+  const can = isOwner || c.access_level === 'Public' ||
+    (c.access_level === 'Connected Only' && areConnected(req.user.id, c.founder_id)) || !!approved;
+  if (!can) return res.status(403).json({ error: 'You do not have access to this document' });
+  db.prepare('UPDATE collateral SET downloads = downloads + 1 WHERE id=?').run(c.id);
   res.json({ ok: true });
 });
 
@@ -375,6 +403,8 @@ router.post('/collateral/:cid/download', (req, res) => {
 router.post('/:id/updates', requireRole('founder'), (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=? AND founder_id=?').get(req.params.id, req.user.id);
   if (!s) return res.status(403).json({ error: 'Not your startup' });
+  const numErr = validateNumericFields(req.body, ['arr', 'mrr', 'growth']);
+  if (numErr) return res.status(400).json({ error: numErr });
   const { headline, body, arr, mrr, growth } = req.body;
   if (!headline || !headline.trim()) return res.status(400).json({ error: 'Headline is required' });
   if (!body || !body.trim()) return res.status(400).json({ error: 'Update body is required' });

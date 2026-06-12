@@ -169,7 +169,9 @@ router.get('/admin/startups', (req, res) => {
 // Verification tiers: 0 none → 1 Verified → 2 Enhanced → 3 Institution
 router.post('/admin/verify-user/:id', (req, res) => {
   if (req.body && req.body.tier !== undefined) {
-    db.prepare('UPDATE users SET verified=? WHERE id=?').run(Math.max(0, Math.min(3, req.body.tier)), req.params.id);
+    const tier = Number(req.body.tier);
+    if (!Number.isInteger(tier)) return res.status(400).json({ error: 'Tier must be 0–3' });
+    db.prepare('UPDATE users SET verified=? WHERE id=?').run(Math.max(0, Math.min(3, tier)), req.params.id);
   } else {
     db.prepare('UPDATE users SET verified = (verified + 1) % 4 WHERE id=?').run(req.params.id);
   }
@@ -181,7 +183,9 @@ router.post('/admin/flag-user/:id', (req, res) => {
 });
 router.post('/admin/verify-startup/:id', (req, res) => {
   if (req.body && req.body.tier !== undefined) {
-    db.prepare('UPDATE startups SET verified=? WHERE id=?').run(Math.max(0, Math.min(3, req.body.tier)), req.params.id);
+    const tier = Number(req.body.tier);
+    if (!Number.isInteger(tier)) return res.status(400).json({ error: 'Tier must be 0–3' });
+    db.prepare('UPDATE startups SET verified=? WHERE id=?').run(Math.max(0, Math.min(3, tier)), req.params.id);
   } else {
     db.prepare('UPDATE startups SET verified = (verified + 1) % 4 WHERE id=?').run(req.params.id);
   }

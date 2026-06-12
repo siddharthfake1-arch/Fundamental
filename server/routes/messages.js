@@ -1,6 +1,7 @@
 const express = require('express');
 const { db, notify, areConnected } = require('../db');
 const { auth } = require('../authmw');
+const { validateUrlFields, clampStrings } = require('../security');
 
 const router = express.Router();
 router.use(auth);
@@ -65,10 +66,14 @@ router.post('/:id/send', (req, res) => {
   if (!areConnected(req.user.id, otherId)) {
     return res.status(403).json({ error: 'Messaging requires an accepted connection.' });
   }
+  // Attachments render as <a href> for the recipient — must be a real link (stored XSS)
+  const urlErr = validateUrlFields(req.body, ['attachment']);
+  if (urlErr) return res.status(400).json({ error: urlErr });
+  clampStrings(req.body, ['text'], 5000);
   const { text, attachment, ref_startup_id } = req.body;
   if (!text && !attachment && !ref_startup_id) return res.status(400).json({ error: 'Message is empty' });
   db.prepare('INSERT INTO messages (conversation_id, sender_id, text, attachment, ref_startup_id) VALUES (?,?,?,?,?)')
-    .run(c.id, req.user.id, text || '', attachment || '', ref_startup_id || null);
+    .run(c.id, req.user.id, text || '', attachment || '', Number(ref_startup_id) || null);
   db.prepare("UPDATE conversations SET updated_at=datetime('now') WHERE id=?").run(c.id);
   notify(otherId, 'New Message', `New message from ${req.user.name}`, `/messages?c=${c.id}`);
   res.json({ ok: true });

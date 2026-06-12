@@ -1,6 +1,7 @@
 const express = require('express');
 const { db, notify, areConnected, publicUser, trustScore } = require('../db');
 const { auth, requireRole } = require('../authmw');
+const { validateUrlFields, clampStrings } = require('../security');
 
 const router = express.Router();
 router.use(auth);
@@ -154,11 +155,21 @@ router.get('/profile/:id', (req, res) => {
 // ---- Edit own profile / investor profile ----
 router.put('/me', (req, res) => {
   const allowed = ['name', 'city', 'headline', 'bio', 'linkedin', 'education', 'experience', 'photo', 'cover', 'email_alerts', 'inapp_alerts', 'onboarded'];
+  // photo/cover/linkedin render as src/href — block javascript: et al. (stored XSS)
+  const urlErr = validateUrlFields(req.body, ['photo', 'cover', 'linkedin']);
+  if (urlErr) return res.status(400).json({ error: urlErr });
+  clampStrings(req.body, ['name', 'city', 'headline'], 200);
+  clampStrings(req.body, ['bio', 'education', 'experience'], 5000);
   const sets = [], vals = [];
   for (const k of allowed) if (req.body[k] !== undefined) { sets.push(`${k}=?`); vals.push(req.body[k]); }
   if (sets.length) db.prepare(`UPDATE users SET ${sets.join(',')} WHERE id=?`).run(...vals, req.user.id);
   if (req.user.role === 'investor' && req.body.investor) {
     const ip = req.body.investor;
+    clampStrings(ip, ['fund_name', 'fund_size', 'check_size'], 200);
+    clampStrings(ip, ['thesis'], 5000);
+    for (const k of ['stage_focus', 'sector_focus', 'portfolio']) {
+      if (ip[k] !== undefined && !Array.isArray(ip[k])) return res.status(400).json({ error: `"${k}" must be a list` });
+    }
     db.prepare(`UPDATE investor_profiles SET fund_name=COALESCE(?,fund_name), fund_size=COALESCE(?,fund_size),
       check_size=COALESCE(?,check_size), stage_focus=COALESCE(?,stage_focus), sector_focus=COALESCE(?,sector_focus),
       thesis=COALESCE(?,thesis), portfolio=COALESCE(?,portfolio) WHERE user_id=?`)
@@ -190,8 +201,9 @@ router.get('/intro-path/:id', (req, res) => {
 router.post('/report', (req, res) => {
   const { target_type, target_id, reason } = req.body;
   if (!target_type || !target_id || !reason) return res.status(400).json({ error: 'Reason required' });
+  if (!['user', 'startup', 'post'].includes(target_type)) return res.status(400).json({ error: 'Invalid report target' });
   db.prepare('INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?,?,?,?)')
-    .run(req.user.id, target_type, target_id, reason);
+    .run(req.user.id, target_type, Number(target_id) || 0, String(reason).slice(0, 2000));
   res.json({ ok: true });
 });
 

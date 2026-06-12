@@ -54,7 +54,7 @@ Use `pm2` to keep it running: `npm i -g pm2 && pm2 start server/index.js --name 
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `JWT_SECRET` | **Yes (production)** | Signs login sessions. Long random string. |
+| `JWT_SECRET` | **Yes (production)** | Signs login sessions. Long random string. The server **refuses to start** in production without it. |
 | `NODE_ENV` | Yes | Set `production` (enables secure cookies). |
 | `PORT` | No | Defaults to 3000. Render/Railway set it automatically. |
 | `AUTO_SEED` | No | `false` to start with an empty database instead of demo data. |

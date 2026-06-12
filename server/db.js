@@ -267,7 +267,31 @@ CREATE TABLE IF NOT EXISTS community_replies (
 for (const stmt of [
   "ALTER TABLE users ADD COLUMN cover TEXT DEFAULT ''",
   "ALTER TABLE startups ADD COLUMN cover TEXT DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN pwd_changed_at TEXT DEFAULT NULL", // session invalidation after password change
 ]) { try { db.exec(stmt); } catch { /* column exists */ } }
+
+// Indexes for every hot lookup path — without these each request full-scans tables
+// that grow linearly with usage (notifications, views, messages).
+db.exec(`
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read);
+CREATE INDEX IF NOT EXISTS idx_messages_convo ON messages(conversation_id, read);
+CREATE INDEX IF NOT EXISTS idx_startup_views_startup ON startup_views(startup_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_upvotes_startup ON upvotes(startup_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_watchlist_startup ON watchlist(startup_id);
+CREATE INDEX IF NOT EXISTS idx_connections_recipient ON connections(recipient_id, status);
+CREATE INDEX IF NOT EXISTS idx_connections_requester ON connections(requester_id, status);
+CREATE INDEX IF NOT EXISTS idx_posts_user ON posts(user_id, removed);
+CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id);
+CREATE INDEX IF NOT EXISTS idx_collateral_startup ON collateral(startup_id);
+CREATE INDEX IF NOT EXISTS idx_access_requests_investor ON access_requests(investor_id, status);
+CREATE INDEX IF NOT EXISTS idx_activities_startup ON activities(startup_id);
+CREATE INDEX IF NOT EXISTS idx_founder_updates_startup ON founder_updates(startup_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_startups_founder ON startups(founder_id);
+CREATE INDEX IF NOT EXISTS idx_notes_inv_startup ON notes(investor_id, startup_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_a ON conversations(a_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_b ON conversations(b_id);
+CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
+`);
 
 // ---- shared helpers ----
 function notify(userId, type, text, link = '') {
@@ -287,9 +311,11 @@ function areConnected(u1, u2) {
   ).get(u1, u2, u2, u1);
 }
 
+// Shape a user row for exposure to OTHER members. Strips credentials and PII:
+// email stays private (only the session owner and admins see it — harvesting defense).
 function publicUser(u) {
   if (!u) return null;
-  const { password_hash, email_alerts, inapp_alerts, ...rest } = u;
+  const { password_hash, pwd_changed_at, email, email_alerts, inapp_alerts, ...rest } = u;
   rest.badges = JSON.parse(rest.badges || '[]');
   return rest;
 }

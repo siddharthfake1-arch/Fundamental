@@ -1,6 +1,7 @@
 const express = require('express');
 const { db } = require('../db');
 const { auth } = require('../authmw');
+const { validateUrlFields } = require('../security');
 
 const router = express.Router();
 router.use(auth);
@@ -55,6 +56,9 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
+  // Post media renders as <img>/<video>/<a href> for every feed viewer (stored XSS)
+  const urlErr = validateUrlFields(req.body, ['media']);
+  if (urlErr) return res.status(400).json({ error: urlErr });
   const { type, text, startup_id, media } = req.body;
   if (!POST_TYPES.includes(type)) return res.status(400).json({ error: 'Posts must use one of the allowed professional categories.' });
   if (!text || text.trim().length < 10) return res.status(400).json({ error: 'Write a substantive update (min 10 characters).' });
@@ -64,10 +68,14 @@ router.post('/', (req, res) => {
   if (req.user.role === 'founder' && !founderTypes.includes(type)) return res.status(403).json({ error: 'This post type is for investors.' });
   if (req.user.role === 'investor' && !investorTypes.includes(type)) return res.status(403).json({ error: 'This post type is for founders.' });
   const info = db.prepare('INSERT INTO posts (user_id, type, text, startup_id, media) VALUES (?,?,?,?,?)')
-    .run(req.user.id, type, text.trim(), startup_id || null, media || '');
+    .run(req.user.id, type, text.trim(), Number(startup_id) || null, media || '');
   if (startup_id && ['Round Closed', 'Milestone', 'Hiring'].includes(type)) {
-    const map = { 'Round Closed': 'Round Closed', 'Milestone': 'Milestone Achieved', 'Hiring': 'Hiring Announcement' };
-    db.prepare('INSERT INTO activities (startup_id, type, text) VALUES (?,?,?)').run(startup_id, map[type], text.trim());
+    // Only the startup's own founder may write to its official activity timeline
+    const own = db.prepare('SELECT 1 FROM startups WHERE id=? AND founder_id=?').get(startup_id, req.user.id);
+    if (own) {
+      const map = { 'Round Closed': 'Round Closed', 'Milestone': 'Milestone Achieved', 'Hiring': 'Hiring Announcement' };
+      db.prepare('INSERT INTO activities (startup_id, type, text) VALUES (?,?,?)').run(startup_id, map[type], text.trim());
+    }
   }
   res.json({ post: shapePost(db.prepare('SELECT * FROM posts WHERE id=?').get(info.lastInsertRowid), req.user.id) });
 });
@@ -82,7 +90,7 @@ router.post('/:id/like', (req, res) => {
 router.post('/:id/comment', (req, res) => {
   const { text } = req.body;
   if (!text || !text.trim()) return res.status(400).json({ error: 'Comment is empty' });
-  db.prepare('INSERT INTO post_comments (post_id, user_id, text) VALUES (?,?,?)').run(req.params.id, req.user.id, text.trim());
+  db.prepare('INSERT INTO post_comments (post_id, user_id, text) VALUES (?,?,?)').run(req.params.id, req.user.id, text.trim().slice(0, 1000));
   const post = db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id);
   if (post && post.user_id !== req.user.id) {
     db.prepare('INSERT INTO notifications (user_id, type, text, link) VALUES (?,?,?,?)')
