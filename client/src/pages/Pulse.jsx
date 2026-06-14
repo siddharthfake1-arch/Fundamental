@@ -15,9 +15,11 @@ const Bar = ({ pct, color = 'rgb(var(--acc-500))' }) => (
 // Market Pulse — aggregate ecosystem intelligence. No confidential startup data.
 export default function Pulse() {
   const [d, setD] = useState(null);
+  const [q, setQ] = useState('');
   const toast = useToast();
   useEffect(() => { api.get('/api/pulse').then(setD).catch(e => toast(e.message, 'error')); }, []);
   if (!d) return <Spinner />;
+  const match = (name) => !q || name.toLowerCase().includes(q.toLowerCase());
 
   const maxHeat = Math.max(...d.sectors.map(s => s.heat), 1);
   const maxStage = Math.max(...d.stages.map(s => s.c), 1);
@@ -26,9 +28,12 @@ export default function Pulse() {
 
   return (
     <div className="fade-in space-y-6">
-      <div>
-        <h1 className="h-display text-2xl flex items-center gap-2"><Activity className="w-6 h-6 text-gold-400" /> Market Pulse</h1>
-        <p className="text-sm text-mist-400 mt-1">Live intelligence from the Fundamental ecosystem. Aggregate signals only — never individual startup data.</p>
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="h-display text-2xl flex items-center gap-2"><Activity className="w-6 h-6 text-gold-400" /> Market Pulse</h1>
+          <p className="text-sm text-mist-400 mt-1">Live intelligence from the Fundamental ecosystem. Aggregate signals only — never individual startup data.</p>
+        </div>
+        <input className="input !w-56" placeholder="Search sectors…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -48,7 +53,7 @@ export default function Pulse() {
           </div>
           <p className="text-xs text-mist-500 mb-4">Composite of investor conviction, pipeline adds, views and open rounds.</p>
           <div className="space-y-3.5">
-            {d.sectors.map((s, i) => (
+            {d.sectors.filter(s => match(s.sector)).map((s, i) => (
               <div key={s.sector} className="flex items-center gap-3">
                 <span className="w-6 text-xs font-bold text-mist-500 tabular-nums">{i + 1}</span>
                 <Link to={`/discover?sector=${encodeURIComponent(s.sector)}`} className="w-28 text-sm font-semibold text-mist-100 hover:text-gold-300 truncate">{s.sector}</Link>
@@ -69,7 +74,7 @@ export default function Pulse() {
           </div>
           <p className="text-xs text-mist-500 mb-4">Categories with the fastest-growing companies right now.</p>
           <div className="space-y-3">
-            {d.emerging.map(s => (
+            {d.emerging.filter(s => match(s.sector)).map(s => (
               <div key={s.sector} className="flex items-center justify-between bg-ink-850 border border-ink-700/50 rounded-xl px-4 py-3">
                 <span className="text-sm font-semibold text-mist-100">{s.sector}</span>
                 <span className="text-sm font-bold text-emerald-400 tabular-nums">+{s.avg_growth}% avg MoM</span>
@@ -85,7 +90,7 @@ export default function Pulse() {
           <span className="section-title">Investor Interest · 30d</span>
           <p className="text-xs text-mist-500 mt-1 mb-4">Conviction votes + pipeline adds by sector.</p>
           <div className="space-y-3">
-            {[...d.sectors].sort((a, b) => (b.pipeline_adds_30d + b.upvotes_30d) - (a.pipeline_adds_30d + a.upvotes_30d)).slice(0, 6).map(s => (
+            {[...d.sectors].filter(s => match(s.sector)).sort((a, b) => (b.pipeline_adds_30d + b.upvotes_30d) - (a.pipeline_adds_30d + a.upvotes_30d)).slice(0, 6).map(s => (
               <div key={s.sector} className="flex items-center gap-3">
                 <span className="w-24 text-xs font-medium text-mist-300 truncate">{s.sector}</span>
                 <Bar pct={((s.pipeline_adds_30d + s.upvotes_30d) / maxInterest) * 100} color="rgb(var(--acc2-500))" />

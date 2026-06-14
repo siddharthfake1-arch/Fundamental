@@ -56,21 +56,178 @@ function drawEmoji(glyph) {
   };
 }
 
+// A bold dollar sign — cleaner and more on-brand for fintech than the card emoji.
+function drawDollar(c, S) {
+  c.fillStyle = '#fff';
+  c.font = `bold ${S * 0.92}px Georgia, "Times New Roman", serif`;
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText('$', S / 2, S * 0.54);
+}
+
+// Stylised brain: two scalloped hemispheres, a central fissure and a few gyri,
+// drawn as strokes so the particles trace a recognisable brain rather than a blob.
+function drawBrain(c, S) {
+  const u = S / 300;
+  c.save();
+  c.translate(S / 2, S / 2);
+  c.strokeStyle = '#fff';
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  c.lineWidth = 13 * u;
+  // overall scalloped silhouette
+  c.beginPath();
+  c.moveTo(-92 * u, 16 * u);
+  c.bezierCurveTo(-114 * u, -52 * u, -56 * u, -96 * u, -14 * u, -72 * u);
+  c.bezierCurveTo(-2 * u, -98 * u, 42 * u, -96 * u, 44 * u, -68 * u);
+  c.bezierCurveTo(98 * u, -86 * u, 116 * u, -28 * u, 90 * u, 10 * u);
+  c.bezierCurveTo(112 * u, 50 * u, 72 * u, 92 * u, 30 * u, 80 * u);
+  c.bezierCurveTo(12 * u, 98 * u, -30 * u, 94 * u, -36 * u, 72 * u);
+  c.bezierCurveTo(-88 * u, 86 * u, -112 * u, 44 * u, -92 * u, 16 * u);
+  c.closePath();
+  c.stroke();
+  // central fissure
+  c.beginPath();
+  c.moveTo(2 * u, -70 * u);
+  c.bezierCurveTo(-10 * u, -30 * u, 14 * u, 20 * u, 4 * u, 76 * u);
+  c.stroke();
+  // a few interior gyri (folds)
+  c.lineWidth = 8 * u;
+  c.beginPath(); c.moveTo(-66 * u, -22 * u); c.bezierCurveTo(-42 * u, -38 * u, -44 * u, 2 * u, -64 * u, 18 * u); c.stroke();
+  c.beginPath(); c.moveTo(-58 * u, 40 * u); c.bezierCurveTo(-38 * u, 30 * u, -34 * u, 56 * u, -50 * u, 60 * u); c.stroke();
+  c.beginPath(); c.moveTo(46 * u, -26 * u); c.bezierCurveTo(72 * u, -12 * u, 58 * u, 22 * u, 40 * u, 26 * u); c.stroke();
+  c.beginPath(); c.moveTo(44 * u, 44 * u); c.bezierCurveTo(64 * u, 38 * u, 60 * u, 62 * u, 44 * u, 64 * u); c.stroke();
+  c.restore();
+}
+
+// Industrial robotic arm: base, two articulated segments with joints, and a gripper.
+function drawRoboArm(c, S) {
+  const u = S / 300;
+  c.fillStyle = '#fff';
+  c.strokeStyle = '#fff';
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  // base
+  c.fillRect(70 * u, 250 * u, 130 * u, 26 * u);
+  c.fillRect(105 * u, 214 * u, 60 * u, 42 * u);
+  // articulated segments
+  c.lineWidth = 20 * u;
+  c.beginPath();
+  c.moveTo(135 * u, 224 * u);
+  c.lineTo(188 * u, 140 * u);
+  c.lineTo(120 * u, 78 * u);
+  c.stroke();
+  // joints
+  for (const [x, y] of [[135, 224], [188, 140], [120, 78]]) {
+    c.beginPath(); c.arc(x * u, y * u, 15 * u, 0, Math.PI * 2); c.fill();
+  }
+  // gripper claws
+  c.lineWidth = 11 * u;
+  c.beginPath(); c.moveTo(120 * u, 78 * u); c.lineTo(88 * u, 44 * u); c.stroke();
+  c.beginPath(); c.moveTo(120 * u, 78 * u); c.lineTo(150 * u, 40 * u); c.stroke();
+  c.beginPath(); c.moveTo(88 * u, 44 * u); c.lineTo(104 * u, 30 * u); c.stroke();
+  c.beginPath(); c.moveTo(150 * u, 40 * u); c.lineTo(134 * u, 26 * u); c.stroke();
+}
+
+// Fighter jet — top-down delta silhouette (nose up, swept wings, twin tail).
+function drawJet(c, S) {
+  const u = S / 300;
+  c.fillStyle = '#fff';
+  c.save();
+  c.translate(S / 2, S / 2);
+  c.beginPath();
+  c.moveTo(0, -130 * u);          // nose
+  c.lineTo(13 * u, -48 * u);
+  c.lineTo(13 * u, -16 * u);
+  c.lineTo(126 * u, 40 * u);      // right wing tip
+  c.lineTo(126 * u, 60 * u);
+  c.lineTo(13 * u, 36 * u);
+  c.lineTo(13 * u, 86 * u);
+  c.lineTo(50 * u, 120 * u);      // right tailplane
+  c.lineTo(50 * u, 134 * u);
+  c.lineTo(8 * u, 116 * u);
+  c.lineTo(8 * u, 138 * u);       // right exhaust
+  c.lineTo(-8 * u, 138 * u);      // left exhaust
+  c.lineTo(-8 * u, 116 * u);
+  c.lineTo(-50 * u, 134 * u);     // left tailplane
+  c.lineTo(-50 * u, 120 * u);
+  c.lineTo(-13 * u, 86 * u);
+  c.lineTo(-13 * u, 36 * u);
+  c.lineTo(-126 * u, 60 * u);     // left wing tip
+  c.lineTo(-126 * u, 40 * u);
+  c.lineTo(-13 * u, -16 * u);
+  c.lineTo(-13 * u, -48 * u);
+  c.closePath();
+  c.fill();
+  c.restore();
+}
+
+// Battery — outlined cell with a terminal nub and a charge bolt inside.
+function drawBattery(c, S) {
+  const u = S / 300;
+  c.fillStyle = '#fff';
+  c.strokeStyle = '#fff';
+  c.lineJoin = 'round';
+  // body
+  c.lineWidth = 15 * u;
+  const x = 66 * u, y = 78 * u, bw = 168 * u, bh = 150 * u, r = 16 * u;
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + bw, y, x + bw, y + bh, r);
+  c.arcTo(x + bw, y + bh, x, y + bh, r);
+  c.arcTo(x, y + bh, x, y, r);
+  c.arcTo(x, y, x + bw, y, r);
+  c.closePath();
+  c.stroke();
+  // positive terminal
+  c.fillRect(122 * u, 52 * u, 56 * u, 26 * u);
+  // charge bolt
+  c.beginPath();
+  c.moveTo(168 * u, 100 * u);
+  c.lineTo(120 * u, 162 * u);
+  c.lineTo(150 * u, 162 * u);
+  c.lineTo(134 * u, 206 * u);
+  c.lineTo(188 * u, 140 * u);
+  c.lineTo(156 * u, 140 * u);
+  c.closePath();
+  c.fill();
+}
+
+// Earth — globe with latitude/longitude graticule and a few continent landmasses.
+function drawEarth(c, S) {
+  const u = S / 300, cx = S / 2, cy = S / 2, r = 112 * u;
+  c.strokeStyle = '#fff';
+  c.lineWidth = 9 * u;
+  c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2); c.stroke();            // limb
+  c.beginPath(); c.ellipse(cx, cy, r * 0.42, r, 0, 0, Math.PI * 2); c.stroke(); // meridian
+  c.beginPath(); c.moveTo(cx - r, cy); c.lineTo(cx + r, cy); c.stroke();        // equator
+  c.beginPath(); c.ellipse(cx, cy, r, r * 0.5, 0, 0, Math.PI * 2); c.stroke();  // tropics
+  // continents (filled blobs, clipped to the globe)
+  c.save();
+  c.beginPath(); c.arc(cx, cy, r - 4 * u, 0, Math.PI * 2); c.clip();
+  c.fillStyle = '#fff';
+  c.beginPath(); c.ellipse(cx - 34 * u, cy - 36 * u, 34 * u, 24 * u, 0.4, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.ellipse(cx + 38 * u, cy + 16 * u, 28 * u, 40 * u, -0.2, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.ellipse(cx - 50 * u, cy + 52 * u, 22 * u, 16 * u, 0.1, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.ellipse(cx + 56 * u, cy - 48 * u, 18 * u, 14 * u, 0, 0, Math.PI * 2); c.fill();
+  c.restore();
+}
+
 export const SHAPES = [
-  { draw: drawEmoji('🧠'), kicker: 'IDEAS', label: 'Deeptech & AI' },
+  { draw: drawBrain, kicker: 'IDEAS', label: 'Deeptech & AI' },
   { draw: drawEmoji('🚀'), kicker: 'VELOCITY', label: 'Space & Mobility' },
   { draw: drawEmoji('⚛️'), kicker: 'ENERGY', label: 'Fusion & Nuclear' },
   { draw: drawChip, kicker: 'COMPUTE', label: 'Semiconductors' },
   { draw: drawQuantum, kicker: 'SUPERPOSITION', label: 'Quantum' },
-  { draw: drawEmoji('🦾'), kicker: 'AUTOMATION', label: 'Robotics' },
-  { draw: drawEmoji('🛡️'), kicker: 'DEFENSE', label: 'Cyber & Defense' },
-  { draw: drawEmoji('💳'), kicker: 'CAPITAL', label: 'Fintech' },
+  { draw: drawRoboArm, kicker: 'AUTOMATION', label: 'Robotics' },
+  { draw: drawJet, kicker: 'DEFENSE', label: 'Defense & Aerospace' },
+  { draw: drawDollar, kicker: 'CAPITAL', label: 'Fintech' },
   { draw: drawEmoji('🌱'), kicker: 'PLANET', label: 'Climatetech' },
-  { draw: drawEmoji('🔋'), kicker: 'STORAGE', label: 'Energy Storage' },
+  { draw: drawBattery, kicker: 'STORAGE', label: 'Energy Storage' },
   { draw: drawEmoji('🧬'), kicker: 'BIOLOGY', label: 'Biotech & Genomics' },
   { draw: drawEmoji('💎'), kicker: 'MATTER', label: 'Advanced Materials' },
   { draw: drawEmoji('🥦'), kicker: 'LIFE', label: 'Food & Health' },
-  { draw: drawEmoji('🌍'), kicker: 'EVERYWHERE', label: 'Global Markets' },
+  { draw: drawEarth, kicker: 'EVERYWHERE', label: 'Global Markets' },
 ];
 
 function samplePoints(draw, count) {
@@ -92,7 +249,7 @@ function samplePoints(draw, count) {
   return out;
 }
 
-export default function Constellation({ count = 1500, cycleMs = 3400, onShape, className = 'w-full h-full', interactive = true }) {
+export default function Constellation({ count = 1500, cycleMs = 5600, onShape, className = 'w-full h-full', interactive = true }) {
   const ref = useRef(null);
   const onShapeRef = useRef(onShape);
   onShapeRef.current = onShape;

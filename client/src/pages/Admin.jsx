@@ -56,18 +56,22 @@ function Analytics() {
 
 function Users() {
   const [users, setUsers] = useState(null);
+  const [q, setQ] = useState('');
   const toast = useToast();
   const load = () => api.get('/api/admin/users').then(d => setUsers(d.users)).catch(() => {});
   useEffect(load, []);
   if (!users) return <Spinner />;
+  const shown = users.filter(u => (u.name + ' ' + u.email + ' ' + u.role + ' ' + (u.city || '')).toLowerCase().includes(q.toLowerCase()));
   return (
-    <div className="card overflow-x-auto">
+    <div>
+      <input className="input !w-72 mb-4" placeholder="Search users by name, email, role…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="card overflow-x-auto">
       <table className="w-full text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-mist-500 border-b border-ink-700/60">
           {['Name', 'Email', 'Role', 'City', 'Joined', 'Status', 'Actions'].map(h => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}
         </tr></thead>
         <tbody>
-          {users.map(u => (
+          {shown.map(u => (
             <tr key={u.id} className="border-b border-ink-700/40 last:border-0 hover:bg-ink-850">
               <td className="px-4 py-3"><Link to={`/profile/${u.id}`} className="font-medium text-mist-100 hover:text-gold-300">{u.name}</Link></td>
               <td className="px-4 py-3 text-mist-400">{u.email}</td>
@@ -95,24 +99,29 @@ function Users() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
 
 function StartupsAdmin() {
   const [list, setList] = useState(null);
+  const [q, setQ] = useState('');
   const toast = useToast();
   const load = () => api.get('/api/admin/startups').then(d => setList(d.startups)).catch(() => {});
   useEffect(load, []);
   if (!list) return <Spinner />;
+  const shown = list.filter(s => (s.name + ' ' + s.sector + ' ' + s.stage).toLowerCase().includes(q.toLowerCase()));
   return (
-    <div className="card overflow-x-auto">
+    <div>
+      <input className="input !w-72 mb-4" placeholder="Search startups by name, sector, stage…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="card overflow-x-auto">
       <table className="w-full text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-mist-500 border-b border-ink-700/60">
           {['Startup', 'Sector', 'Stage', 'Pitch Video', 'Views', 'Status', 'Action'].map(h => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}
         </tr></thead>
         <tbody>
-          {list.map(s => (
+          {shown.map(s => (
             <tr key={s.id} className="border-b border-ink-700/40 last:border-0 hover:bg-ink-850">
               <td className="px-4 py-3"><Link to={`/startup/${s.id}`} className="font-medium text-mist-100 hover:text-gold-300">{s.name}</Link></td>
               <td className="px-4 py-3 text-mist-300">{s.sector}</td>
@@ -135,6 +144,7 @@ function StartupsAdmin() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

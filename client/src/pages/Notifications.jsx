@@ -9,6 +9,7 @@ const ICONS = { 'Profile Viewed': '👁', 'Upvote Received': '▲', 'Connection 
 export default function Notifications() {
   const [data, setData] = useState(null);
   const [filter, setFilter] = useState('');
+  const [q, setQ] = useState('');
   const toast = useToast();
   const nav = useNavigate();
 
@@ -17,6 +18,7 @@ export default function Notifications() {
   useEffect(load, [filter]);
 
   if (!data) return <Spinner />;
+  const shown = data.notifications.filter(n => !q || n.text.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="max-w-2xl mx-auto fade-in">
@@ -26,6 +28,7 @@ export default function Notifications() {
           <p className="text-sm text-mist-400 mt-1">{data.unread} unread</p>
         </div>
         <div className="flex gap-2">
+          <input className="input !w-40 !py-2 !text-xs" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="input !w-auto !py-2 !text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All types</option>
             {TYPES.map(t => <option key={t}>{t}</option>)}
@@ -35,11 +38,11 @@ export default function Notifications() {
         </div>
       </div>
 
-      {data.notifications.length === 0 ? (
+      {shown.length === 0 ? (
         <Empty title="All quiet" sub="Profile views, upvotes, connection and data room activity will appear here." />
       ) : (
         <div className="card overflow-hidden">
-          {data.notifications.map(n => (
+          {shown.map(n => (
             <button key={n.id}
               onClick={async () => { await api.post('/api/notifications/read', { id: n.id }); n.link ? nav(n.link) : load(); }}
               className={`w-full flex items-start gap-3.5 px-5 py-4 text-left border-b border-ink-700/40 last:border-0 transition-colors hover:bg-ink-850 ${n.read ? 'opacity-60' : ''}`}>

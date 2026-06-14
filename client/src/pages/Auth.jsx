@@ -108,7 +108,7 @@ export default function Auth() {
       <div className="lg:w-[52%] relative flex flex-col justify-between p-8 lg:p-14 border-b lg:border-b-0 lg:border-r border-ink-700/50 overflow-hidden">
         {/* The constellation lives behind the brand copy — same morphing field as the landing page */}
         <div className="absolute inset-0 pointer-events-none opacity-45">
-          <Constellation count={900} cycleMs={3800} />
+          <Constellation count={900} cycleMs={5600} />
         </div>
         <motion.div className="relative" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <Logo className="h-9" />

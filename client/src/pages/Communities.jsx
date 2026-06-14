@@ -14,6 +14,7 @@ export default function Communities() {
 
 function CommunityIndex() {
   const [list, setList] = useState(null);
+  const [q, setQ] = useState('');
   const toast = useToast();
   const load = () => api.get('/api/communities').then(d => setList(d.communities)).catch(e => toast(e.message, 'error'));
   useEffect(load, []);
@@ -24,15 +25,25 @@ function CommunityIndex() {
     catch (e) { toast(e.message, 'error'); }
   };
 
+  const filtered = list.filter(c => (c.name + ' ' + c.description).toLowerCase().includes(q.toLowerCase()));
+  const kinds = ['topic', 'city', 'role'].filter(kind => filtered.some(c => c.kind === kind));
+
   return (
     <div className="fade-in">
-      <h1 className="h-display text-2xl">Communities</h1>
-      <p className="text-sm text-mist-400 mt-1 mb-7">Knowledge sharing among founders, investors and operators. Substance over networking spam.</p>
-      {['topic', 'city', 'role'].map(kind => (
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="h-display text-2xl">Communities</h1>
+          <p className="text-sm text-mist-400 mt-1">Knowledge sharing among founders, investors and operators. Substance over networking spam.</p>
+        </div>
+        <input className="input !w-64" placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <div className="mb-7" />
+      {kinds.length === 0 && <Empty title="No communities match your search" />}
+      {kinds.map(kind => (
         <div key={kind} className="mb-8">
           <div className="section-title mb-3">{KIND_LABEL[kind]}</div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-            {list.filter(c => c.kind === kind).map((c, i) => (
+            {filtered.filter(c => c.kind === kind).map((c, i) => (
               <motion.div key={c.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: Math.min(i, 6) * 0.04 }}
                 className="card card-hover p-4 flex flex-col">

@@ -19,6 +19,7 @@ export default function Social() {
   const [types, setTypes] = useState({ types: [], allowed_for_me: [] });
   const [filter, setFilter] = useState('');
   const [format, setFormat] = useState('all');
+  const [q, setQ] = useState('');
   const [composer, setComposer] = useState(false);
   const toast = useToast();
 
@@ -27,7 +28,9 @@ export default function Social() {
   useEffect(load, [filter]);
   useEffect(() => { api.get('/api/social/types').then(setTypes).catch(() => {}); }, []);
 
-  const visible = posts && (format === 'all' ? posts : posts.filter(p => mediaKind(p.media) === format));
+  const visible = posts && posts
+    .filter(p => format === 'all' || mediaKind(p.media) === format)
+    .filter(p => !q || (p.text + ' ' + (p.author?.name || '') + ' ' + (p.startup?.name || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="max-w-2xl mx-auto fade-in">
@@ -36,10 +39,13 @@ export default function Social() {
           <h1 className="h-display text-2xl">Social</h1>
           <p className="text-sm text-mist-400 mt-1">A controlled professional feed. 400 characters max — every word earns its place.</p>
         </div>
-        <select className="input !w-auto !py-2 !text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="">All categories</option>
-          {types.types.map(t => <option key={t}>{t}</option>)}
-        </select>
+        <div className="flex gap-2">
+          <input className="input !w-44 !py-2 !text-xs" placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <select className="input !w-auto !py-2 !text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="">All categories</option>
+            {types.types.map(t => <option key={t}>{t}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="flex rounded-xl bg-ink-850 border border-ink-600/50 p-1 mb-5 w-fit">

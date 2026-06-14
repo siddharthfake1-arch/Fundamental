@@ -17,6 +17,7 @@ export default function Watchlist() {
   const { user } = useAuth();
   const [list, setList] = useState(null);
   const [shared, setShared] = useState([]);
+  const [q, setQ] = useState('');
   const [notesFor, setNotesFor] = useState(null);
   const [tagsFor, setTagsFor] = useState(null);
   const toast = useToast();
@@ -44,7 +45,10 @@ export default function Watchlist() {
           <h1 className="h-display text-2xl">Pipeline</h1>
           <p className="text-sm text-mist-400 mt-1">Your private deal flow, from first look to decision. Only you can see this board.</p>
         </div>
-        <Link to="/discover" className="btn-ghost btn-sm">+ Source from Discover</Link>
+        <div className="flex items-center gap-2">
+          <input className="input !w-56 !py-2" placeholder="Search pipeline…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Link to="/discover" className="btn-ghost btn-sm whitespace-nowrap">+ Source</Link>
+        </div>
       </div>
 
       {shared.length > 0 && (
@@ -75,7 +79,8 @@ export default function Watchlist() {
       ) : (
         <div className="grid grid-flow-col auto-cols-[270px] lg:auto-cols-fr gap-4 overflow-x-auto pb-4">
           {STAGES.map(stage => {
-            const items = list.filter(s => s.status === stage);
+            const items = list.filter(s => s.status === stage)
+              .filter(s => !q || (s.name + ' ' + s.sector + ' ' + (s.tags || []).join(' ')).toLowerCase().includes(q.toLowerCase()));
             return (
               <div key={stage} className={`card !rounded-xl border-t-2 ${STAGE_TINT[stage]} p-3 min-h-[200px]`}>
                 <div className="flex items-center justify-between px-1 mb-3">

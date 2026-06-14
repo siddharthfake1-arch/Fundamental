@@ -174,9 +174,6 @@ export default function Startup() {
         )}
       </CoverHero>
 
-      {/* ---- Funding Journey ---- */}
-      {d.journey && <FundingJourney journey={d.journey} isOwner={is_owner} startupId={s.id} name={s.name} onChange={load} />}
-
       {/* ---- Section 1: 12-Minute Pitch ---- */}
       <Section id="pitch" title="Section 1 — The 12-Minute Pitch">
         {s.video_url ? (
@@ -515,48 +512,6 @@ function ReactionBar({ update, onReact }) {
         );
       })}
     </div>
-  );
-}
-
-function FundingJourney({ journey, isOwner, startupId, name, onChange }) {
-  const { ladder, current } = journey;
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const next = current >= 0 && current < ladder.length - 1 ? ladder[current + 1] : null;
-  const advance = async (stage) => {
-    setBusy(true);
-    try { await api.post(`/api/startups/${startupId}/advance-stage`, { stage }); toast(`🎉 ${name} reached ${stage}`, 'success'); onChange(); }
-    catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
-  };
-  return (
-    <motion.section className="card p-5 sm:p-6"
-      initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-40px' }} transition={{ duration: 0.45 }}>
-      <h2 className="section-title mb-4">Funding Journey</h2>
-      <div className="flex items-center">
-        {ladder.map((stage, i) => {
-          const done = current >= 0 && i <= current;
-          const isCurrent = i === current;
-          return (
-            <div key={stage} className="flex items-center flex-1 last:flex-none">
-              <div className="flex flex-col items-center text-center">
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors
-                  ${isCurrent ? 'bg-gold-500 border-gold-400 text-ink-950' : done ? 'bg-gold-500/20 border-gold-500/50 text-gold-300' : 'bg-ink-850 border-ink-600/60 text-mist-500'}`}>
-                  {done ? '✓' : i + 1}
-                </div>
-                <span className={`mt-1.5 text-[10px] sm:text-[11px] font-medium whitespace-nowrap ${isCurrent ? 'text-gold-300' : done ? 'text-mist-300' : 'text-mist-500'}`}>{stage}</span>
-              </div>
-              {i < ladder.length - 1 && <div className={`h-0.5 flex-1 mx-1 mb-5 rounded ${i < current ? 'bg-gold-500/50' : 'bg-ink-700/60'}`} />}
-            </div>
-          );
-        })}
-      </div>
-      {isOwner && next && (
-        <div className="mt-5 pt-4 border-t border-ink-700/50 flex items-center gap-3 flex-wrap">
-          <span className="text-sm text-mist-400">Reached a new stage?</span>
-          <button className="btn-primary btn-sm" disabled={busy} onClick={() => advance(next)}>🎉 Advance to {next}</button>
-        </div>
-      )}
-    </motion.section>
   );
 }
 
