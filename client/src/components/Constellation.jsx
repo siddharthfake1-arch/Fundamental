@@ -65,68 +65,96 @@ function drawDollar(c, S) {
   c.fillText('$', S / 2, S * 0.54);
 }
 
-// Stylised brain: two scalloped hemispheres, a central fissure and a few gyri,
-// drawn as strokes so the particles trace a recognisable brain rather than a blob.
+// Full brain: a solid lumpy mass built from a base ellipse plus scalloped
+// perimeter and interior bumps (gyri), then folds are carved out so the dot
+// cloud shows real brain texture rather than a flat blob.
 function drawBrain(c, S) {
   const u = S / 300;
   c.save();
   c.translate(S / 2, S / 2);
-  c.strokeStyle = '#fff';
+  c.fillStyle = '#fff';
+  const rx = 94 * u, ry = 80 * u;
+  // base mass
+  c.beginPath(); c.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2); c.fill();
+  // scalloped perimeter bumps (the lobes/gyri)
+  const n = 20;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const bx = Math.cos(a) * rx * 0.97;
+    const by = Math.sin(a) * ry * 0.97;
+    const br = (15 + (i % 2) * 7) * u;
+    c.beginPath(); c.arc(bx, by, br, 0, Math.PI * 2); c.fill();
+  }
+  // interior bump clusters for extra texture
+  for (const [x, y, r] of [[-42, -20, 20], [42, -22, 20], [-46, 28, 18], [48, 30, 18], [0, -48, 17], [0, 46, 17], [-20, 4, 16], [22, 6, 16]]) {
+    c.beginPath(); c.arc(x * u, y * u, r * u, 0, Math.PI * 2); c.fill();
+  }
+  // carve the gyri folds (channels between bumps)
+  c.globalCompositeOperation = 'destination-out';
+  c.strokeStyle = '#000';
   c.lineCap = 'round';
-  c.lineJoin = 'round';
-  c.lineWidth = 13 * u;
-  // overall scalloped silhouette
-  c.beginPath();
-  c.moveTo(-92 * u, 16 * u);
-  c.bezierCurveTo(-114 * u, -52 * u, -56 * u, -96 * u, -14 * u, -72 * u);
-  c.bezierCurveTo(-2 * u, -98 * u, 42 * u, -96 * u, 44 * u, -68 * u);
-  c.bezierCurveTo(98 * u, -86 * u, 116 * u, -28 * u, 90 * u, 10 * u);
-  c.bezierCurveTo(112 * u, 50 * u, 72 * u, 92 * u, 30 * u, 80 * u);
-  c.bezierCurveTo(12 * u, 98 * u, -30 * u, 94 * u, -36 * u, 72 * u);
-  c.bezierCurveTo(-88 * u, 86 * u, -112 * u, 44 * u, -92 * u, 16 * u);
-  c.closePath();
-  c.stroke();
-  // central fissure
-  c.beginPath();
-  c.moveTo(2 * u, -70 * u);
-  c.bezierCurveTo(-10 * u, -30 * u, 14 * u, 20 * u, 4 * u, 76 * u);
-  c.stroke();
-  // a few interior gyri (folds)
-  c.lineWidth = 8 * u;
-  c.beginPath(); c.moveTo(-66 * u, -22 * u); c.bezierCurveTo(-42 * u, -38 * u, -44 * u, 2 * u, -64 * u, 18 * u); c.stroke();
-  c.beginPath(); c.moveTo(-58 * u, 40 * u); c.bezierCurveTo(-38 * u, 30 * u, -34 * u, 56 * u, -50 * u, 60 * u); c.stroke();
-  c.beginPath(); c.moveTo(46 * u, -26 * u); c.bezierCurveTo(72 * u, -12 * u, 58 * u, 22 * u, 40 * u, 26 * u); c.stroke();
-  c.beginPath(); c.moveTo(44 * u, 44 * u); c.bezierCurveTo(64 * u, 38 * u, 60 * u, 62 * u, 44 * u, 64 * u); c.stroke();
+  c.lineWidth = 6 * u;
+  c.beginPath(); c.moveTo(0, -94 * u); c.lineTo(0, 94 * u); c.stroke(); // central fissure
+  for (let s = -1; s <= 1; s += 2) {
+    for (let row = -2; row <= 2; row++) {
+      c.beginPath();
+      for (let t = 0; t <= 1.001; t += 0.05) {
+        const x = s * (14 * u + t * 86 * u);
+        const y = row * 26 * u + Math.sin(t * 7 + row * 1.3) * 8 * u;
+        t === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+      }
+      c.stroke();
+    }
+  }
+  c.globalCompositeOperation = 'source-over';
   c.restore();
 }
 
-// Industrial robotic arm: base, two articulated segments with joints, and a gripper.
-function drawRoboArm(c, S) {
+// Rounded-rectangle path helper (works without the native roundRect API).
+function roundRectPath(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+// A full robot: antenna, head with eyes & mouth, body with a chest panel, arms
+// and legs. Features are carved out so the dot cloud reads as a friendly robot.
+function drawRobot(c, S) {
   const u = S / 300;
+  c.save();
+  c.translate(S / 2, 0);
   c.fillStyle = '#fff';
   c.strokeStyle = '#fff';
-  c.lineCap = 'round';
   c.lineJoin = 'round';
-  // base
-  c.fillRect(70 * u, 250 * u, 130 * u, 26 * u);
-  c.fillRect(105 * u, 214 * u, 60 * u, 42 * u);
-  // articulated segments
-  c.lineWidth = 20 * u;
-  c.beginPath();
-  c.moveTo(135 * u, 224 * u);
-  c.lineTo(188 * u, 140 * u);
-  c.lineTo(120 * u, 78 * u);
-  c.stroke();
-  // joints
-  for (const [x, y] of [[135, 224], [188, 140], [120, 78]]) {
-    c.beginPath(); c.arc(x * u, y * u, 15 * u, 0, Math.PI * 2); c.fill();
-  }
-  // gripper claws
-  c.lineWidth = 11 * u;
-  c.beginPath(); c.moveTo(120 * u, 78 * u); c.lineTo(88 * u, 44 * u); c.stroke();
-  c.beginPath(); c.moveTo(120 * u, 78 * u); c.lineTo(150 * u, 40 * u); c.stroke();
-  c.beginPath(); c.moveTo(88 * u, 44 * u); c.lineTo(104 * u, 30 * u); c.stroke();
-  c.beginPath(); c.moveTo(150 * u, 40 * u); c.lineTo(134 * u, 26 * u); c.stroke();
+  c.lineCap = 'round';
+  // antenna
+  c.lineWidth = 8 * u;
+  c.beginPath(); c.moveTo(0, 58 * u); c.lineTo(0, 38 * u); c.stroke();
+  c.beginPath(); c.arc(0, 30 * u, 11 * u, 0, Math.PI * 2); c.fill();
+  // head
+  roundRectPath(c, -56 * u, 58 * u, 112 * u, 74 * u, 18 * u); c.fill();
+  // arms
+  roundRectPath(c, -96 * u, 150 * u, 26 * u, 78 * u, 12 * u); c.fill();
+  roundRectPath(c, 70 * u, 150 * u, 26 * u, 78 * u, 12 * u); c.fill();
+  // body
+  roundRectPath(c, -64 * u, 140 * u, 128 * u, 98 * u, 20 * u); c.fill();
+  // legs
+  roundRectPath(c, -42 * u, 244 * u, 30 * u, 42 * u, 8 * u); c.fill();
+  roundRectPath(c, 12 * u, 244 * u, 30 * u, 42 * u, 8 * u); c.fill();
+  // carve features
+  c.globalCompositeOperation = 'destination-out';
+  c.fillStyle = '#000';
+  c.strokeStyle = '#000';
+  c.beginPath(); c.arc(-22 * u, 96 * u, 11 * u, 0, Math.PI * 2); c.fill();  // left eye
+  c.beginPath(); c.arc(22 * u, 96 * u, 11 * u, 0, Math.PI * 2); c.fill();   // right eye
+  c.lineWidth = 7 * u; c.beginPath(); c.moveTo(-18 * u, 118 * u); c.lineTo(18 * u, 118 * u); c.stroke(); // mouth
+  c.lineWidth = 6 * u; roundRectPath(c, -34 * u, 162 * u, 68 * u, 50 * u, 8 * u); c.stroke(); // chest panel
+  c.globalCompositeOperation = 'source-over';
+  c.restore();
 }
 
 // Fighter jet — top-down delta silhouette (nose up, swept wings, twin tail).
@@ -162,33 +190,28 @@ function drawJet(c, S) {
   c.restore();
 }
 
-// Battery — outlined cell with a terminal nub and a charge bolt inside.
+// Battery — a clearly rectangular (landscape) cell with a side terminal nub
+// and a charge bolt inside.
 function drawBattery(c, S) {
   const u = S / 300;
   c.fillStyle = '#fff';
   c.strokeStyle = '#fff';
   c.lineJoin = 'round';
-  // body
+  // body (wider than tall so it reads as a battery, not a square)
   c.lineWidth = 15 * u;
-  const x = 66 * u, y = 78 * u, bw = 168 * u, bh = 150 * u, r = 16 * u;
-  c.beginPath();
-  c.moveTo(x + r, y);
-  c.arcTo(x + bw, y, x + bw, y + bh, r);
-  c.arcTo(x + bw, y + bh, x, y + bh, r);
-  c.arcTo(x, y + bh, x, y, r);
-  c.arcTo(x, y, x + bw, y, r);
-  c.closePath();
+  const x = 50 * u, y = 100 * u, bw = 184 * u, bh = 100 * u, r = 16 * u;
+  roundRectPath(c, x, y, bw, bh, r);
   c.stroke();
-  // positive terminal
-  c.fillRect(122 * u, 52 * u, 56 * u, 26 * u);
+  // positive terminal on the right side
+  c.fillRect(x + bw, y + bh * 0.3, 18 * u, bh * 0.4);
   // charge bolt
   c.beginPath();
-  c.moveTo(168 * u, 100 * u);
-  c.lineTo(120 * u, 162 * u);
-  c.lineTo(150 * u, 162 * u);
-  c.lineTo(134 * u, 206 * u);
-  c.lineTo(188 * u, 140 * u);
-  c.lineTo(156 * u, 140 * u);
+  c.moveTo(152 * u, 116 * u);
+  c.lineTo(120 * u, 156 * u);
+  c.lineTo(142 * u, 156 * u);
+  c.lineTo(128 * u, 188 * u);
+  c.lineTo(168 * u, 142 * u);
+  c.lineTo(146 * u, 142 * u);
   c.closePath();
   c.fill();
 }
@@ -219,7 +242,7 @@ export const SHAPES = [
   { draw: drawEmoji('⚛️'), kicker: 'ENERGY', label: 'Fusion & Nuclear' },
   { draw: drawChip, kicker: 'COMPUTE', label: 'Semiconductors' },
   { draw: drawQuantum, kicker: 'SUPERPOSITION', label: 'Quantum' },
-  { draw: drawRoboArm, kicker: 'AUTOMATION', label: 'Robotics' },
+  { draw: drawRobot, kicker: 'AUTOMATION', label: 'Robotics' },
   { draw: drawJet, kicker: 'DEFENSE', label: 'Defense & Aerospace' },
   { draw: drawDollar, kicker: 'CAPITAL', label: 'Fintech' },
   { draw: drawEmoji('🌱'), kicker: 'PLANET', label: 'Climatetech' },
