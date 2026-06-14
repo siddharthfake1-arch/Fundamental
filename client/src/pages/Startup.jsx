@@ -25,6 +25,7 @@ export default function Startup() {
   const [noteDoc, setNoteDoc] = useState(null);
   const [memo, setMemo] = useState(null);
   const [memoOpen, setMemoOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [intro, setIntro] = useState(null);
   const toast = useToast();
   const nav = useNavigate();
@@ -119,16 +120,33 @@ export default function Startup() {
               {d.connected ? 'Message Founder' : d.connection_status === 'pending' ? 'Request Pending' : 'Connect Founder'}
             </button>
           )}
+          {user.role === 'investor' && !is_owner && (
+            <button className={`btn-ghost btn-sm ${s.interested ? '!text-emerald-300 !border-emerald-500/40' : ''}`}
+              onClick={() => act(() => api.post(`/api/startups/${s.id}/interest`), s.interested ? null : 'Interest sent — the founder has been notified')}
+              title="A one-tap signal to the founder that you're interested">
+              {s.interested ? '✓ Interested' : '☆ Express Interest'}
+            </button>
+          )}
           {user.role === 'investor' && (
             <button className={`btn-ghost btn-sm ${s.upvoted ? '!text-gold-300 !border-gold-500/40' : ''}`}
               onClick={() => act(() => api.post(`/api/startups/${s.id}/upvote`))} title="One upvote per investor per startup">
               ▲ {s.upvoted ? 'Upvoted' : 'Upvote'} · {s.upvotes}
             </button>
           )}
+          {!is_owner && (
+            <button className={`btn-ghost btn-sm ${s.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
+              onClick={() => act(() => api.post(`/api/startups/${s.id}/follow`))}
+              title="Follow this company to get its updates and milestones">
+              {s.following ? '✓ Following' : '+ Follow'}{s.followers > 0 ? ` · ${s.followers}` : ''}
+            </button>
+          )}
           <button className={`btn-ghost btn-sm ${s.saved ? '!text-gold-300 !border-gold-500/40' : ''}`}
             onClick={() => act(() => api.post(`/api/startups/${s.id}/save`))}>
             {s.saved ? '✓ Saved' : 'Save'}
           </button>
+          {user.role === 'investor' && !is_owner && (
+            <button className="btn-ghost btn-sm" onClick={() => setShareOpen(true)} title="Share this deal with a connected co-investor">⇄ Share Deal</button>
+          )}
           {user.role === 'investor' && (
             <button className="btn-ghost btn-sm" onClick={() => { setNoteDoc(null); setNoteOpen(true); }}>+ Private Note</button>
           )}
@@ -155,6 +173,9 @@ export default function Startup() {
           </div>
         )}
       </CoverHero>
+
+      {/* ---- Funding Journey ---- */}
+      {d.journey && <FundingJourney journey={d.journey} isOwner={is_owner} startupId={s.id} name={s.name} onChange={load} />}
 
       {/* ---- Section 1: 12-Minute Pitch ---- */}
       <Section id="pitch" title="Section 1 — The 12-Minute Pitch">
@@ -313,6 +334,7 @@ export default function Startup() {
                     {u.growth != null && u.growth > 0 && <span className="chip-green">+{u.growth}% MoM</span>}
                   </div>
                 )}
+                <ReactionBar update={u} onReact={(updated) => setD(prev => ({ ...prev, updates: prev.updates.map(x => x.id === updated.id ? updated : x) }))} />
               </div>
             ))}
           </div>
@@ -378,6 +400,8 @@ export default function Startup() {
           </div>
         )}
       </Modal>
+
+      {shareOpen && <ShareDealModal startup={s} onClose={() => setShareOpen(false)} />}
 
       <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title={noteDoc ? `Private note — ${noteDoc.title}` : 'Add Private Note'}>
         <div className="space-y-3">
@@ -467,6 +491,108 @@ function UpdateComposer({ startupId, onPosted }) {
         </div>
       )}
     </div>
+  );
+}
+
+const REACTIONS = ['👏', '🔥', '🎉', '🚀'];
+
+function ReactionBar({ update, onReact }) {
+  const toast = useToast();
+  const react = async (emoji) => {
+    try { onReact(await api.post(`/api/startups/updates/${update.id}/react`, { emoji })); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  const counts = update.reactions || {};
+  return (
+    <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-ink-700/40">
+      {REACTIONS.map(e => {
+        const active = update.my_reaction === e;
+        return (
+          <button key={e} onClick={() => react(e)}
+            className={`text-sm rounded-full px-2.5 py-1 border transition-colors ${active ? 'bg-gold-500/15 border-gold-500/40 text-gold-200' : 'bg-ink-900 border-ink-700/50 text-mist-400 hover:border-ink-500'}`}>
+            <span>{e}</span>{counts[e] ? <span className="ml-1 tabular-nums text-[11px]">{counts[e]}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FundingJourney({ journey, isOwner, startupId, name, onChange }) {
+  const { ladder, current } = journey;
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const next = current >= 0 && current < ladder.length - 1 ? ladder[current + 1] : null;
+  const advance = async (stage) => {
+    setBusy(true);
+    try { await api.post(`/api/startups/${startupId}/advance-stage`, { stage }); toast(`🎉 ${name} reached ${stage}`, 'success'); onChange(); }
+    catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <motion.section className="card p-5 sm:p-6"
+      initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '-40px' }} transition={{ duration: 0.45 }}>
+      <h2 className="section-title mb-4">Funding Journey</h2>
+      <div className="flex items-center">
+        {ladder.map((stage, i) => {
+          const done = current >= 0 && i <= current;
+          const isCurrent = i === current;
+          return (
+            <div key={stage} className="flex items-center flex-1 last:flex-none">
+              <div className="flex flex-col items-center text-center">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold border-2 transition-colors
+                  ${isCurrent ? 'bg-gold-500 border-gold-400 text-ink-950' : done ? 'bg-gold-500/20 border-gold-500/50 text-gold-300' : 'bg-ink-850 border-ink-600/60 text-mist-500'}`}>
+                  {done ? '✓' : i + 1}
+                </div>
+                <span className={`mt-1.5 text-[10px] sm:text-[11px] font-medium whitespace-nowrap ${isCurrent ? 'text-gold-300' : done ? 'text-mist-300' : 'text-mist-500'}`}>{stage}</span>
+              </div>
+              {i < ladder.length - 1 && <div className={`h-0.5 flex-1 mx-1 mb-5 rounded ${i < current ? 'bg-gold-500/50' : 'bg-ink-700/60'}`} />}
+            </div>
+          );
+        })}
+      </div>
+      {isOwner && next && (
+        <div className="mt-5 pt-4 border-t border-ink-700/50 flex items-center gap-3 flex-wrap">
+          <span className="text-sm text-mist-400">Reached a new stage?</span>
+          <button className="btn-primary btn-sm" disabled={busy} onClick={() => advance(next)}>🎉 Advance to {next}</button>
+        </div>
+      )}
+    </motion.section>
+  );
+}
+
+function ShareDealModal({ startup, onClose }) {
+  const [conns, setConns] = useState(null);
+  const [to, setTo] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  useEffect(() => {
+    api.get('/api/users/connections')
+      .then(d => setConns(d.accepted.filter(c => c.role === 'investor')))
+      .catch(() => setConns([]));
+  }, []);
+  return (
+    <Modal open onClose={onClose} title={`Share ${startup.name} with a co-investor`}>
+      <div className="space-y-3">
+        <div className="text-xs text-mist-400">Only your connected investors appear here. They'll see this deal in their "Shared with me" inbox.</div>
+        {conns === null ? <Spinner /> : conns.length === 0 ? (
+          <Empty title="No connected investors yet" sub="Connect with other investors in Network to share deals with them." />
+        ) : (
+          <>
+            <select className="input" value={to} onChange={(e) => setTo(e.target.value)}>
+              <option value="">Choose a co-investor…</option>
+              {conns.map(c => <option key={c.user_id} value={c.user_id}>{c.name}</option>)}
+            </select>
+            <textarea className="input min-h-[80px]" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why this one? (optional)" />
+            <button className="btn-primary w-full" disabled={!to || busy} onClick={async () => {
+              setBusy(true);
+              try { await api.post(`/api/startups/${startup.id}/share-deal`, { to_id: Number(to), note }); toast('Deal shared', 'success'); onClose(); }
+              catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+            }}>Share Deal</button>
+          </>
+        )}
+      </div>
+    </Modal>
   );
 }
 

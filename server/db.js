@@ -271,7 +271,50 @@ for (const stmt of [
   "ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''",
   "ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0",
   "ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0",
+  "ALTER TABLE watchlist ADD COLUMN tags TEXT DEFAULT '[]'", // investor deal-flow tags
+  "ALTER TABLE startups ADD COLUMN stage_reached_at TEXT DEFAULT NULL", // last funding-journey advance
 ]) { try { db.exec(stmt); } catch { /* column exists */ } }
+
+// Engagement & deal-flow tables added after first release.
+db.exec(`
+-- Follow a company (distinct from following a person). Subscribes the follower to
+-- the startup's updates and milestone celebrations.
+CREATE TABLE IF NOT EXISTS startup_follows (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  startup_id INTEGER NOT NULL REFERENCES startups(id) ON DELETE CASCADE,
+  created_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, startup_id)
+);
+
+-- One-tap "Express Interest": a low-friction intent signal from an investor to a
+-- founder, separate from conviction upvotes. Powers the engagement loop.
+CREATE TABLE IF NOT EXISTS interests (
+  investor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  startup_id INTEGER NOT NULL REFERENCES startups(id) ON DELETE CASCADE,
+  created_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (investor_id, startup_id)
+);
+
+-- Quick reactions on founder updates (👏🔥🎉🚀). One reaction per user per update.
+CREATE TABLE IF NOT EXISTS update_reactions (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  update_id INTEGER NOT NULL REFERENCES founder_updates(id) ON DELETE CASCADE,
+  emoji TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, update_id)
+);
+
+-- Share a deal with a co-investor (must be a connected investor).
+CREATE TABLE IF NOT EXISTS deal_shares (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  to_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  startup_id INTEGER NOT NULL REFERENCES startups(id) ON DELETE CASCADE,
+  note TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE (from_id, to_id, startup_id)
+);
+`);
 
 // One-time codes for signup verification (email or SMS). Only the hash is stored.
 db.exec(`
@@ -309,6 +352,12 @@ CREATE INDEX IF NOT EXISTS idx_notes_inv_startup ON notes(investor_id, startup_i
 CREATE INDEX IF NOT EXISTS idx_conversations_a ON conversations(a_id);
 CREATE INDEX IF NOT EXISTS idx_conversations_b ON conversations(b_id);
 CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
+CREATE INDEX IF NOT EXISTS idx_startup_follows_startup ON startup_follows(startup_id);
+CREATE INDEX IF NOT EXISTS idx_startup_follows_user ON startup_follows(user_id);
+CREATE INDEX IF NOT EXISTS idx_interests_startup ON interests(startup_id);
+CREATE INDEX IF NOT EXISTS idx_interests_investor ON interests(investor_id);
+CREATE INDEX IF NOT EXISTS idx_update_reactions_update ON update_reactions(update_id);
+CREATE INDEX IF NOT EXISTS idx_deal_shares_to ON deal_shares(to_id);
 `);
 
 // ---- shared helpers ----
@@ -320,6 +369,21 @@ function notify(userId, type, text, link = '') {
 function addActivity(startupId, type, text) {
   db.prepare('INSERT INTO activities (startup_id, type, text) VALUES (?,?,?)')
     .run(startupId, type, text);
+}
+
+// The public funding journey. Stage advances are celebratory and broadcast to
+// everyone tracking or following the company.
+const FUNDING_LADDER = ['Idea', 'Pre-seed', 'Seed', 'Series A', 'Series B', 'Series C+'];
+
+// Everyone subscribed to a startup's progress: its watchlisters + its followers,
+// de-duplicated, excluding a given user (usually the founder).
+function startupSubscribers(startupId, excludeUserId = 0) {
+  const rows = db.prepare(`
+    SELECT user_id FROM watchlist WHERE startup_id=?
+    UNION
+    SELECT user_id FROM startup_follows WHERE startup_id=?
+  `).all(startupId, startupId);
+  return rows.map(r => r.user_id).filter(id => id !== excludeUserId);
 }
 
 function areConnected(u1, u2) {
@@ -401,4 +465,4 @@ function trustScore(u) {
   return { total: verification + profile + network + contribution, breakdown: { verification, profile, network, contribution } };
 }
 
-module.exports = { db, notify, addActivity, areConnected, publicUser, profileCompletion, fundamentalScore, thesisFit, trustScore };
+module.exports = { db, notify, addActivity, areConnected, publicUser, profileCompletion, fundamentalScore, thesisFit, trustScore, FUNDING_LADDER, startupSubscribers };

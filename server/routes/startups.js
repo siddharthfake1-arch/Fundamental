@@ -1,7 +1,19 @@
 const express = require('express');
-const { db, notify, addActivity, areConnected, publicUser, fundamentalScore, thesisFit } = require('../db');
+const { db, notify, addActivity, areConnected, publicUser, fundamentalScore, thesisFit, FUNDING_LADDER, startupSubscribers } = require('../db');
 const { auth, requireRole } = require('../authmw');
 const { validateUrlFields, validateNumericFields, clampStrings } = require('../security');
+
+const REACTION_EMOJI = ['👏', '🔥', '🎉', '🚀'];
+
+// Attach reaction counts (and the caller's own reaction) to a founder-update row.
+function withReactions(u, userId) {
+  const counts = {};
+  for (const r of db.prepare('SELECT emoji, COUNT(*) c FROM update_reactions WHERE update_id=? GROUP BY emoji').all(u.id)) {
+    counts[r.emoji] = r.c;
+  }
+  const mine = db.prepare('SELECT emoji FROM update_reactions WHERE update_id=? AND user_id=?').get(u.id, userId);
+  return { ...u, reactions: counts, my_reaction: mine ? mine.emoji : null };
+}
 
 const router = express.Router();
 router.use(auth);
@@ -33,6 +45,9 @@ function tile(s, userId, ip = null) {
     has_collateral: !!db.prepare('SELECT 1 FROM collateral WHERE startup_id=?').get(s.id),
     saved: !!db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(userId, s.id),
     upvoted: !!db.prepare('SELECT 1 FROM upvotes WHERE user_id=? AND startup_id=?').get(userId, s.id),
+    followers: db.prepare('SELECT COUNT(*) c FROM startup_follows WHERE startup_id=?').get(s.id).c,
+    following: !!db.prepare('SELECT 1 FROM startup_follows WHERE user_id=? AND startup_id=?').get(userId, s.id),
+    interested: !!db.prepare('SELECT 1 FROM interests WHERE investor_id=? AND startup_id=?').get(userId, s.id),
   };
 }
 
@@ -158,6 +173,16 @@ router.get('/mine', requireRole('founder'), (req, res) => {
   res.json({ startup: { ...s, revenue_series: J(s.revenue_series), video_chapters: J(s.video_chapters), use_of_funds: J(s.use_of_funds) } });
 });
 
+// Deals co-investors have shared with me. Declared before "/:id" so the literal
+// path is not swallowed by the dynamic route.
+router.get('/shared-with-me', requireRole('investor'), (req, res) => {
+  const rows = db.prepare(`SELECT ds.id, ds.note, ds.created_at, u.id from_id, u.name from_name, u.photo from_photo,
+      s.id startup_id, s.name, s.logo, s.sector, s.stage, s.one_liner, s.verified
+    FROM deal_shares ds JOIN users u ON u.id=ds.from_id JOIN startups s ON s.id=ds.startup_id
+    WHERE ds.to_id=? ORDER BY ds.id DESC`).all(req.user.id);
+  res.json({ shared: rows });
+});
+
 // ---- Full startup profile ----
 router.get('/:id', (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
@@ -190,16 +215,22 @@ router.get('/:id', (req, res) => {
     'SELECT * FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)'
   ).get(req.user.id, s.founder_id, s.founder_id, req.user.id);
   const score = fundamentalScore(s);
+  const stageIndex = FUNDING_LADDER.indexOf(s.stage);
   res.json({
     startup: {
       ...s, revenue_series: J(s.revenue_series), video_chapters: J(s.video_chapters), use_of_funds: J(s.use_of_funds),
       upvotes: db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c,
       upvoted: !!db.prepare('SELECT 1 FROM upvotes WHERE user_id=? AND startup_id=?').get(req.user.id, s.id),
       saved: !!db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(req.user.id, s.id),
+      followers: db.prepare('SELECT COUNT(*) c FROM startup_follows WHERE startup_id=?').get(s.id).c,
+      following: !!db.prepare('SELECT 1 FROM startup_follows WHERE user_id=? AND startup_id=?').get(req.user.id, s.id),
+      interest_count: db.prepare('SELECT COUNT(*) c FROM interests WHERE startup_id=?').get(s.id).c,
+      interested: !!db.prepare('SELECT 1 FROM interests WHERE investor_id=? AND startup_id=?').get(req.user.id, s.id),
     },
     score,
+    journey: { ladder: FUNDING_LADDER, current: stageIndex, stage: s.stage, reached_at: s.stage_reached_at },
     fit: thesisFit(s, investorProfileOf(req.user)),
-    updates: db.prepare('SELECT * FROM founder_updates WHERE startup_id=? ORDER BY id DESC LIMIT 12').all(s.id),
+    updates: db.prepare('SELECT * FROM founder_updates WHERE startup_id=? ORDER BY id DESC LIMIT 12').all(s.id).map(u => withReactions(u, req.user.id)),
     founder, connected, is_owner: isOwner,
     connection_status: conn ? conn.status : null,
     connection_direction: conn ? (conn.requester_id === req.user.id ? 'outgoing' : 'incoming') : null,
@@ -417,11 +448,107 @@ router.post('/:id/updates', requireRole('founder'), (req, res) => {
       .run(arr ?? null, mrr ?? null, growth ?? null, s.id);
   }
   addActivity(s.id, 'Milestone Achieved', `Investor update: ${headline.trim()}`);
-  const watchers = db.prepare('SELECT user_id FROM watchlist WHERE startup_id=?').all(s.id);
-  for (const w of watchers) {
-    notify(w.user_id, 'New Message', `${s.name} posted an investor update: "${headline.trim()}"`, `/startup/${s.id}`);
+  for (const uid of startupSubscribers(s.id, req.user.id)) {
+    notify(uid, 'New Message', `${s.name} posted an investor update: "${headline.trim()}"`, `/startup/${s.id}`);
   }
   res.json({ ok: true });
+});
+
+// React to a founder update (one quick reaction per user; tap again to remove,
+// tap a different emoji to switch).
+router.post('/updates/:uid/react', (req, res) => {
+  const u = db.prepare('SELECT fu.*, s.founder_id, s.name sname FROM founder_updates fu JOIN startups s ON s.id=fu.startup_id WHERE fu.id=?').get(req.params.uid);
+  if (!u) return res.status(404).json({ error: 'Update not found' });
+  const { emoji } = req.body;
+  if (!REACTION_EMOJI.includes(emoji)) return res.status(400).json({ error: 'Invalid reaction' });
+  const existing = db.prepare('SELECT emoji FROM update_reactions WHERE user_id=? AND update_id=?').get(req.user.id, u.id);
+  if (existing && existing.emoji === emoji) {
+    db.prepare('DELETE FROM update_reactions WHERE user_id=? AND update_id=?').run(req.user.id, u.id);
+  } else {
+    db.prepare(`INSERT INTO update_reactions (user_id, update_id, emoji) VALUES (?,?,?)
+      ON CONFLICT(user_id, update_id) DO UPDATE SET emoji=excluded.emoji`).run(req.user.id, u.id, emoji);
+    if (!existing && u.founder_id !== req.user.id) {
+      notify(u.founder_id, 'Upvote Received', `${req.user.name} reacted ${emoji} to your update on ${u.sname}`, `/startup/${u.startup_id}`);
+    }
+  }
+  res.json(withReactions(db.prepare('SELECT * FROM founder_updates WHERE id=?').get(u.id), req.user.id));
+});
+
+// ---- Follow a company (anyone). Subscribes to its updates & milestones. ----
+router.post('/:id/follow', (req, res) => {
+  const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  const exists = db.prepare('SELECT 1 FROM startup_follows WHERE user_id=? AND startup_id=?').get(req.user.id, s.id);
+  if (exists) {
+    db.prepare('DELETE FROM startup_follows WHERE user_id=? AND startup_id=?').run(req.user.id, s.id);
+  } else {
+    db.prepare('INSERT INTO startup_follows (user_id, startup_id) VALUES (?,?)').run(req.user.id, s.id);
+    if (s.founder_id !== req.user.id) notify(s.founder_id, 'Profile Viewed', `${req.user.name} started following ${s.name}`, `/startup/${s.id}`);
+  }
+  res.json({ following: !exists, followers: db.prepare('SELECT COUNT(*) c FROM startup_follows WHERE startup_id=?').get(s.id).c });
+});
+
+// ---- Express Interest (investor → founder, one tap). ----
+router.post('/:id/interest', requireRole('investor'), (req, res) => {
+  const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  const exists = db.prepare('SELECT 1 FROM interests WHERE investor_id=? AND startup_id=?').get(req.user.id, s.id);
+  if (exists) {
+    db.prepare('DELETE FROM interests WHERE investor_id=? AND startup_id=?').run(req.user.id, s.id);
+  } else {
+    db.prepare('INSERT INTO interests (investor_id, startup_id) VALUES (?,?)').run(req.user.id, s.id);
+    const fund = (db.prepare('SELECT fund_name FROM investor_profiles WHERE user_id=?').get(req.user.id) || {}).fund_name;
+    notify(s.founder_id, 'Connection Request', `${req.user.name}${fund ? ` (${fund})` : ''} expressed interest in ${s.name}`, `/startup/${s.id}`);
+    addActivity(s.id, 'Milestone Achieved', `An investor expressed interest`);
+  }
+  res.json({ interested: !exists, interest_count: db.prepare('SELECT COUNT(*) c FROM interests WHERE startup_id=?').get(s.id).c });
+});
+
+// ---- Funding journey: advance to the next public stage (celebratory). ----
+router.post('/:id/advance-stage', requireRole('founder'), (req, res) => {
+  const s = db.prepare('SELECT * FROM startups WHERE id=? AND founder_id=?').get(req.params.id, req.user.id);
+  if (!s) return res.status(403).json({ error: 'Not your startup' });
+  const { stage } = req.body;
+  const idx = FUNDING_LADDER.indexOf(stage);
+  if (idx < 0) return res.status(400).json({ error: 'Pick a valid funding stage' });
+  if (stage === s.stage) return res.status(400).json({ error: 'Already at this stage' });
+  db.prepare("UPDATE startups SET stage=?, stage_reached_at=datetime('now') WHERE id=?").run(stage, s.id);
+  const advancing = idx > FUNDING_LADDER.indexOf(s.stage);
+  addActivity(s.id, 'Milestone Achieved', advancing ? `🎉 ${s.name} reached ${stage}` : `${s.name} updated its stage to ${stage}`);
+  if (advancing) {
+    for (const uid of startupSubscribers(s.id, req.user.id)) {
+      notify(uid, 'Milestone Achieved', `🎉 ${s.name} just reached ${stage}`, `/startup/${s.id}`);
+    }
+  }
+  res.json({ ok: true, stage });
+});
+
+// ---- Share a deal with a connected co-investor. ----
+router.post('/:id/share-deal', requireRole('investor'), (req, res) => {
+  const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  const toId = Number(req.body.to_id);
+  if (!toId || toId === req.user.id) return res.status(400).json({ error: 'Pick a co-investor to share with' });
+  const target = db.prepare('SELECT id, name, role FROM users WHERE id=?').get(toId);
+  if (!target || target.role !== 'investor') return res.status(400).json({ error: 'You can only share deals with other investors' });
+  if (!areConnected(req.user.id, toId)) return res.status(403).json({ error: 'Connect with this investor before sharing deals' });
+  const note = String(req.body.note || '').slice(0, 500);
+  db.prepare(`INSERT INTO deal_shares (from_id, to_id, startup_id, note) VALUES (?,?,?,?)
+    ON CONFLICT(from_id, to_id, startup_id) DO UPDATE SET note=excluded.note, created_at=datetime('now')`)
+    .run(req.user.id, toId, s.id, note);
+  notify(toId, 'New Message', `${req.user.name} shared a deal with you: ${s.name}`, `/watchlist`);
+  res.json({ ok: true });
+});
+
+// Set deal-flow tags on a pipeline (watchlist) entry.
+router.post('/:id/watchlist-tags', requireRole('investor'), (req, res) => {
+  const tags = Array.isArray(req.body.tags) ? req.body.tags : null;
+  if (!tags) return res.status(400).json({ error: 'Tags must be a list' });
+  const clean = [...new Set(tags.map(t => String(t).trim().slice(0, 24)).filter(Boolean))].slice(0, 8);
+  const exists = db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(req.user.id, req.params.id);
+  if (!exists) return res.status(404).json({ error: 'Save this startup to your pipeline first' });
+  db.prepare('UPDATE watchlist SET tags=? WHERE user_id=? AND startup_id=?').run(JSON.stringify(clean), req.user.id, req.params.id);
+  res.json({ tags: clean });
 });
 
 // Founder posts a milestone / signal to their startup timeline

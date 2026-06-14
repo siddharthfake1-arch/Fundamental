@@ -43,6 +43,13 @@ router.get('/dashboard/founder', requireRole('founder'), (req, res) => {
       WHERE c2.startup_id=? AND ar.status='pending' ORDER BY ar.id DESC`).all(s.id);
     out.views_trend = db.prepare(`SELECT date(created_at) d, COUNT(*) c FROM startup_views WHERE startup_id=? GROUP BY d ORDER BY d DESC LIMIT 14`).all(s.id).reverse();
     out.raise = { status: s.raising_status, amount: s.raising_amount, use_of_funds: J(s.use_of_funds) };
+    out.followers = db.prepare('SELECT COUNT(*) c FROM startup_follows WHERE startup_id=?').get(s.id).c;
+    out.interest_count = db.prepare('SELECT COUNT(*) c FROM interests WHERE startup_id=?').get(s.id).c;
+    out.stage = s.stage;
+    // Investors who've expressed interest — the warmest inbound signal a founder gets.
+    out.interested_investors = db.prepare(`SELECT u.id, u.name, u.photo, u.headline, u.verified, i.created_at,
+        (SELECT fund_name FROM investor_profiles WHERE user_id=u.id) fund
+      FROM interests i JOIN users u ON u.id=i.investor_id WHERE i.startup_id=? ORDER BY i.created_at DESC LIMIT 10`).all(s.id);
   }
   out.connection_requests = db.prepare(`SELECT c.id, u.id user_id, u.name, u.role, u.photo, u.headline FROM connections c
     JOIN users u ON u.id=c.requester_id WHERE c.recipient_id=? AND c.status='pending'`).all(req.user.id);
@@ -126,17 +133,20 @@ router.get('/dashboard/investor', requireRole('investor'), (req, res) => {
   res.json({
     watchlist: watchlist.map(s => ({ id: s.id, name: s.name, logo: s.logo, sector: s.sector, stage: s.stage, status: s.w_status, raising_status: s.raising_status, saved_at: s.saved_at })),
     requested, active_conversations: convos, suggested,
+    shared_count: db.prepare('SELECT COUNT(*) c FROM deal_shares WHERE to_id=?').get(req.user.id).c,
+    interests_count: db.prepare('SELECT COUNT(*) c FROM interests WHERE investor_id=?').get(req.user.id).c,
   });
 });
 
 // ---- Watchlist page (investor) ----
 router.get('/watchlist', requireRole('investor'), (req, res) => {
-  const rows = db.prepare(`SELECT w.status w_status, w.created_at saved_at, s.* FROM watchlist w
+  const rows = db.prepare(`SELECT w.status w_status, w.created_at saved_at, w.tags w_tags, s.* FROM watchlist w
     JOIN startups s ON s.id=w.startup_id WHERE w.user_id=? ORDER BY w.created_at DESC`).all(req.user.id);
   res.json({
     watchlist: rows.map(s => ({
       id: s.id, name: s.name, logo: s.logo, sector: s.sector, stage: s.stage, city: s.city,
       raising_status: s.raising_status, one_liner: s.one_liner, status: s.w_status, saved_at: s.saved_at, verified: !!s.verified,
+      tags: J(s.w_tags),
       notes: db.prepare('SELECT * FROM notes WHERE investor_id=? AND startup_id=? ORDER BY id DESC').all(req.user.id, s.id),
       recent_activity: db.prepare('SELECT * FROM activities WHERE startup_id=? ORDER BY id DESC LIMIT 3').all(s.id),
     })),

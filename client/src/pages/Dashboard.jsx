@@ -53,13 +53,36 @@ function FounderDash() {
         <Empty title="No startup yet" sub="Complete onboarding to list your startup in the marketplace." />
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
             <Stat label="Startup Views" value={d.views.toLocaleString()} />
             <Stat label="Video Views" value={d.video_views.toLocaleString()} sub="12-min pitch plays" />
+            <Stat label="Followers" value={d.followers ?? 0} sub="Tracking your company" />
+            <Stat label="Interest" value={d.interest_count ?? 0} sub="Investors interested" />
             <Stat label="Collateral Requests" value={d.collateral_requests} />
             <Stat label="Upvotes" value={d.upvotes} sub="One per investor" />
             <Stat label="Connection Requests" value={d.connection_requests.length} />
           </div>
+
+          {d.interested_investors?.length > 0 && (
+            <div className="card p-5">
+              <span className="section-title">Investors Interested in You</span>
+              <div className="text-xs text-mist-500 mt-1">They tapped "Express Interest" — the warmest inbound signal. Reach out.</div>
+              <div className="grid sm:grid-cols-2 gap-3 mt-3">
+                {d.interested_investors.map(v => (
+                  <div key={v.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
+                    <Avatar src={v.photo} name={v.name} size={9} />
+                    <div className="flex-1 min-w-0">
+                      <Link to={`/profile/${v.id}`} className="flex items-center gap-1.5 text-sm font-semibold text-mist-100 hover:text-gold-300">
+                        {v.name}{!!v.verified && <VerifiedBadge small />}
+                      </Link>
+                      <div className="text-[11px] text-mist-500 truncate">{v.fund || v.headline} · {timeAgo(v.created_at)}</div>
+                    </div>
+                    <span className="chip-green">Interested</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {d.views_trend?.length > 1 && (
             <div className="card p-5">
@@ -187,12 +210,17 @@ function InvestorDash() {
         <p className="text-sm text-mist-400 mt-1">Your pipeline at a glance.</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Saved Startups" value={d.watchlist.length} sub="In your watchlist" />
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+        <Stat label="Saved Startups" value={d.watchlist.length} sub="In your pipeline" />
         <Stat label="Requested Access" value={d.requested.length} sub="Data room requests" />
         <Stat label="Approved" value={d.requested.filter(r => r.status === 'approved').length} sub="Documents unlocked" />
         <Stat label="Active Conversations" value={d.active_conversations} />
+        <Stat label="Interests Sent" value={d.interests_count ?? 0} sub="Founders notified" />
+        <Stat label="Shared With You" value={d.shared_count ?? 0} sub="By co-investors" />
       </div>
+      {d.shared_count > 0 && (
+        <div className="text-xs text-mist-400 -mt-2">Co-investors shared {d.shared_count} deal{d.shared_count !== 1 ? 's' : ''} with you — see them in your <Link to="/watchlist" className="text-gold-300 hover:text-gold-200">Pipeline →</Link></div>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="card p-5">

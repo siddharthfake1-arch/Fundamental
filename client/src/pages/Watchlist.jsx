@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, StickyNote } from 'lucide-react';
+import { ChevronLeft, ChevronRight, StickyNote, Tag } from 'lucide-react';
 import { api, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
@@ -16,12 +16,15 @@ const STAGE_TINT = {
 export default function Watchlist() {
   const { user } = useAuth();
   const [list, setList] = useState(null);
+  const [shared, setShared] = useState([]);
   const [notesFor, setNotesFor] = useState(null);
+  const [tagsFor, setTagsFor] = useState(null);
   const toast = useToast();
   const isInvestor = user.role === 'investor';
 
   const load = () => api.get('/api/watchlist').then(d => setList(d.watchlist)).catch(e => toast(e.message, 'error'));
-  useEffect(() => { if (isInvestor) load(); }, [isInvestor]);
+  const loadShared = () => api.get('/api/startups/shared-with-me').then(d => setShared(d.shared)).catch(() => {});
+  useEffect(() => { if (isInvestor) { load(); loadShared(); } }, [isInvestor]);
 
   if (!isInvestor) return <Navigate to="/dashboard" replace />;
   if (!list) return <Spinner />;
@@ -43,6 +46,29 @@ export default function Watchlist() {
         </div>
         <Link to="/discover" className="btn-ghost btn-sm">+ Source from Discover</Link>
       </div>
+
+      {shared.length > 0 && (
+        <div className="card p-4 mb-6">
+          <div className="section-title mb-3">Shared with you by co-investors</div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {shared.map(sd => (
+              <Link key={sd.id} to={`/startup/${sd.startup_id}`} className="bg-ink-850 border border-ink-700/50 rounded-xl p-3 hover:border-gold-500/40 transition-colors">
+                <div className="flex items-center gap-2.5">
+                  <Avatar src={sd.logo} name={sd.name} size={9} square />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1 text-sm font-semibold text-mist-100 truncate">{sd.name}{!!sd.verified && <VerifiedBadge small />}</div>
+                    <div className="text-[11px] text-mist-500 truncate">{sd.sector} · {sd.stage}</div>
+                  </div>
+                </div>
+                {sd.note && <p className="text-[12px] text-mist-300 mt-2 line-clamp-2">"{sd.note}"</p>}
+                <div className="flex items-center gap-2 mt-2 text-[11px] text-mist-500">
+                  <Avatar src={sd.from_photo} name={sd.from_name} size={5} /> {sd.from_name} · {timeAgo(sd.created_at)}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {list.length === 0 ? (
         <Empty title="Your pipeline is empty" sub="Save startups from Discover and manage them through Tracking → Diligence → Decision, with private notes at every step." />
@@ -74,11 +100,22 @@ export default function Watchlist() {
                           ⚡ {s.recent_activity[0].text}
                         </div>
                       )}
+                      {s.tags && s.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {s.tags.map(t => <span key={t} className="chip-gold !py-0 !px-2 !text-[10px]">{t}</span>)}
+                        </div>
+                      )}
                       <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-ink-700/40">
-                        <button onClick={() => setNotesFor(s)}
-                          className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors">
-                          <StickyNote className="w-3 h-3" /> {s.notes.length} note{s.notes.length !== 1 ? 's' : ''}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => setNotesFor(s)}
+                            className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors">
+                            <StickyNote className="w-3 h-3" /> {s.notes.length} note{s.notes.length !== 1 ? 's' : ''}
+                          </button>
+                          <button onClick={() => setTagsFor(s)}
+                            className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors">
+                            <Tag className="w-3 h-3" /> {s.tags?.length || 0}
+                          </button>
+                        </div>
                         <div className="flex gap-0.5">
                           <button onClick={() => move(s, -1)} disabled={STAGES.indexOf(s.status) === 0}
                             className="p-1 rounded text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Move back">
@@ -100,7 +137,44 @@ export default function Watchlist() {
       )}
 
       <NotesModal s={notesFor} onClose={() => setNotesFor(null)} onChange={load} />
+      <TagsModal s={tagsFor} onClose={() => setTagsFor(null)} onChange={load} />
     </div>
+  );
+}
+
+function TagsModal({ s, onClose, onChange }) {
+  const [tags, setTags] = useState([]);
+  const [input, setInput] = useState('');
+  const toast = useToast();
+  useEffect(() => { if (s) setTags(s.tags || []); }, [s]);
+  if (!s) return null;
+  const add = (t) => {
+    const v = t.trim().slice(0, 24);
+    if (v && !tags.includes(v) && tags.length < 8) setTags([...tags, v]);
+    setInput('');
+  };
+  const save = async () => {
+    try { await api.post(`/api/startups/${s.id}/watchlist-tags`, { tags }); onChange(); onClose(); toast('Tags saved', 'success'); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  return (
+    <Modal open={!!s} onClose={onClose} title={`Deal tags — ${s.name}`}>
+      <div className="space-y-3">
+        <div className="text-xs text-mist-500">Up to 8 tags to organise your deal flow — e.g. "hot", "follow-up", "needs intro". Only you see these.</div>
+        <div className="flex flex-wrap gap-1.5 min-h-[28px]">
+          {tags.map(t => (
+            <span key={t} className="chip-gold !py-1 !px-2.5 !text-xs">
+              {t}<button className="ml-1.5 text-gold-400 hover:text-red-400" onClick={() => setTags(tags.filter(x => x !== t))}>✕</button>
+            </span>
+          ))}
+          {tags.length === 0 && <span className="text-xs text-mist-500">No tags yet.</span>}
+        </div>
+        <input className="input !py-2" placeholder="Type a tag and press Enter" value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(input); } }} />
+        <button className="btn-primary w-full" onClick={save}>Save Tags</button>
+      </div>
+    </Modal>
   );
 }
 
