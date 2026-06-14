@@ -47,12 +47,12 @@ export default function Landing() {
             Stop pitching into the void. Start raising in it.
           </div>
           <h1 className="font-extralight text-[clamp(56px,9vw,113px)] leading-[0.85] tracking-[-0.04em]">
-            Every idea<br />becomes<br />a company.
+            Fundraising?<br /><span className="text-[#8052ff]">Fundamental.</span>
           </h1>
-          <p className="mt-[30px] text-[15px] leading-[1.5] tracking-[0.025em] text-[#bdbdbd] max-w-[42ch]">
-            Fundamental is the serious fundraising marketplace. A 12-minute video pitch,
-            structured metrics and a permissioned data room on every startup — for investors
-            who do real diligence, from first contact to term sheet.
+          <p className="mt-[30px] text-[15px] leading-[1.5] tracking-[0.025em] text-[#bdbdbd] max-w-[44ch]">
+            Fundamental is the serious fundraising platform and social network for startups
+            and investors. Discover opportunities, build meaningful relationships, and raise
+            capital with confidence.
           </p>
           <div className="mt-[36px] flex items-center gap-[15px] flex-wrap">
             <Link to="/login"
@@ -66,7 +66,7 @@ export default function Landing() {
           </div>
         </div>
 
-        <div className="order-1 lg:order-2 relative h-[46vh] lg:h-[78vh]">
+        <div className="order-1 lg:order-2 relative h-[46vh] lg:h-[78vh] lg:translate-x-10 lg:-translate-y-10">
           <Constellation onShape={setShape} />
           <div key={shape.label} className="absolute bottom-2 left-1/2 -translate-x-1/2 text-center fade-in">
             <div className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#8052ff]">{shape.kicker}</div>
@@ -107,7 +107,7 @@ export default function Landing() {
       {/* Final CTA */}
       <section className="max-w-[1200px] mx-auto px-6 py-[96px] text-center">
         <h2 className="font-extralight text-[clamp(42px,6vw,78px)] leading-[0.9] tracking-[-0.04em]">
-          Fundraising?<br />Fundamental.
+          Every idea<br />comes to life.
         </h2>
         <Link to="/login"
           className="inline-block mt-[36px] rounded-[24px] bg-[#8052ff] text-white text-[12px] font-semibold uppercase tracking-[0.05em] px-8 py-[14px] hover:bg-[#9066ff] transition-colors">
