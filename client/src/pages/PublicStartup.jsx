@@ -27,9 +27,8 @@ export default function PublicStartup() {
   const { startup: s, founder } = d;
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      <div className="orb animate-float w-[420px] h-[420px] -top-32 -left-24" style={{ background: 'radial-gradient(circle, rgb(var(--acc2-500)), transparent 65%)' }} />
-      <div className="orb animate-float-slow w-[360px] h-[360px] bottom-[-120px] right-[-80px]" style={{ background: 'radial-gradient(circle, rgb(var(--acc-500)), transparent 65%)' }} />
+    <div className="min-h-screen relative overflow-hidden bg-ink-950">
+      <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(55% 45% at 15% 0%, rgba(128,82,255,0.12), transparent 70%), radial-gradient(50% 40% at 90% 100%, rgba(128,82,255,0.10), transparent 70%)' }} />
 
       <header className="relative max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
         <Link to="/"><Logo /></Link>
@@ -38,7 +37,7 @@ export default function PublicStartup() {
         </Link>
       </header>
 
-      <motion.main initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}
+      <motion.main initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         className="relative max-w-3xl mx-auto px-4 pb-16 space-y-5">
         <div className="card ring-gradient p-6">
           <div className="flex flex-col sm:flex-row gap-5 items-start">

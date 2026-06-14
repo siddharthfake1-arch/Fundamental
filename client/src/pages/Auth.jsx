@@ -98,17 +98,20 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden">
-      {/* Floating gradient orbs for depth */}
-      <div className="orb animate-float w-[480px] h-[480px] -top-40 -left-32" style={{ background: 'radial-gradient(circle, rgb(var(--acc2-500)), transparent 65%)' }} />
-      <div className="orb animate-float-slow w-[420px] h-[420px] bottom-[-140px] left-[28%]" style={{ background: 'radial-gradient(circle, rgb(var(--acc-500)), transparent 65%)' }} />
-      <div className="orb animate-float w-[300px] h-[300px] top-[12%] right-[-90px]" style={{ background: 'radial-gradient(circle, rgb(var(--acc-400)), transparent 65%)', animationDelay: '-4s' }} />
+    <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden bg-ink-950">
+      {/* Edgeless ambient glow for depth — no hard-edged orbs */}
+      <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(60% 50% at 22% 8%, rgba(128,82,255,0.12), transparent 70%), radial-gradient(55% 45% at 88% 92%, rgba(128,82,255,0.10), transparent 70%)' }} />
 
       {/* Brand panel */}
       <div className="lg:w-[52%] relative flex flex-col justify-between p-8 lg:p-14 border-b lg:border-b-0 lg:border-r border-ink-700/50 overflow-hidden">
-        {/* The constellation lives behind the brand copy — same morphing field as the landing page */}
-        <div className="absolute inset-0 pointer-events-none opacity-45">
-          <Constellation count={900} cycleMs={5600} />
+        {/* The constellation lives behind the brand copy — masked to a soft nebula
+            so it reads as intentional depth, never scattered noise behind the text */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.3]"
+          style={{
+            WebkitMaskImage: 'radial-gradient(ellipse 68% 60% at 50% 36%, #000 28%, transparent 80%)',
+            maskImage: 'radial-gradient(ellipse 68% 60% at 50% 36%, #000 28%, transparent 80%)',
+          }}>
+          <Constellation count={820} cycleMs={6000} />
         </div>
         <motion.div className="relative" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <Logo className="h-9" />

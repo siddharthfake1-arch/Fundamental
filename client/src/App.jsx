@@ -53,9 +53,9 @@ export default function App() {
       {loc.pathname !== '/onboarding' && <Nav />}
       <motion.main
         key={loc.pathname}
-        initial={{ opacity: 0, y: 14 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
         className="max-w-7xl mx-auto px-4 py-6 pb-20">
         <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
