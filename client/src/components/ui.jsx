@@ -338,11 +338,12 @@ export const Logo = ({ className = 'h-9', variant = 'auto' }) => {
   return (
     <span className={`inline-flex items-center ${className}`}>
       {failed ? <LogoSvg /> : variant === 'dark' ? (
-        <img src="/logo-dark.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain" />
+        <img src="/logo-white.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain" />
       ) : (
         <>
-          <img src="/logo-light.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain block dark:hidden" />
-          <img src="/logo-dark.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain hidden dark:block" />
+          {/* light mode → dark wordmark; dark mode → white wordmark */}
+          <img src="/logo-dark.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain block dark:hidden" />
+          <img src="/logo-white.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain hidden dark:block" />
         </>
       )}
     </span>
