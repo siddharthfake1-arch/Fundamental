@@ -115,7 +115,7 @@ export default function Auth() {
           <Constellation count={820} cycleMs={6000} />
         </div>
         <motion.div className="relative" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <Logo className="h-9" />
+          <Logo className="h-12" />
         </motion.div>
 
         <div className="relative py-12 lg:py-0">

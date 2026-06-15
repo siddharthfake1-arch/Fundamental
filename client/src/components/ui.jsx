@@ -295,11 +295,12 @@ export const Stat = ({ label, value, sub }) => (
   </div>
 );
 
-// Brand mark: a faceted violet-glass emblem (downward prism of stacked bars) +
-// the wordmark. The mark reads on any background; the wordmark uses currentColor
-// so it stays legible in both light and dark mode wherever the Logo is placed.
-export const Logo = ({ className = 'h-7' }) => (
-  <span className={`inline-flex items-center gap-2.5 ${className}`}>
+// Brand mark. Uses the supplied raster lockup from /public when present
+// (theme-aware: dark wordmark on light backgrounds, white wordmark on dark),
+// and falls back to a scalable inline SVG if the images aren't available.
+// `variant="dark"` forces the white-wordmark lockup for always-dark surfaces.
+const LogoSvg = () => (
+  <span className="inline-flex items-center gap-2.5 h-full">
     <svg viewBox="0 0 100 100" className="h-full w-auto" aria-hidden="true">
       <defs>
         <linearGradient id="fnd-fill" x1="0" y1="0" x2="0.3" y2="1">
@@ -315,16 +316,13 @@ export const Logo = ({ className = 'h-7' }) => (
       </defs>
       <g clipPath="url(#fnd-tri)">
         <path d="M10 14 H90 L50 88 Z" fill="url(#fnd-fill)" />
-        {/* left spine + stacked glass bars */}
         <rect x="6" y="14" width="17" height="74" fill="url(#fnd-band)" opacity="0.9" />
         <rect x="0" y="15" width="100" height="14" fill="url(#fnd-band)" />
         <rect x="0" y="35" width="100" height="12" fill="url(#fnd-band)" opacity="0.82" />
         <rect x="0" y="53" width="100" height="10" fill="url(#fnd-band)" opacity="0.64" />
-        {/* facet gaps */}
         <rect x="0" y="29" width="100" height="2.4" fill="#2a155e" opacity="0.5" />
         <rect x="0" y="47" width="100" height="2.4" fill="#2a155e" opacity="0.5" />
         <rect x="0" y="63" width="100" height="2.4" fill="#2a155e" opacity="0.5" />
-        {/* gloss highlights */}
         <rect x="0" y="15" width="100" height="2" fill="#ffffff" opacity="0.5" />
         <rect x="0" y="35" width="100" height="1.6" fill="#ffffff" opacity="0.32" />
       </g>
@@ -333,3 +331,20 @@ export const Logo = ({ className = 'h-7' }) => (
     <span className="font-display font-bold tracking-tight text-lg">Fundamental</span>
   </span>
 );
+
+export const Logo = ({ className = 'h-9', variant = 'auto' }) => {
+  const [failed, setFailed] = useState(false);
+  const onErr = () => setFailed(true);
+  return (
+    <span className={`inline-flex items-center ${className}`}>
+      {failed ? <LogoSvg /> : variant === 'dark' ? (
+        <img src="/logo-dark.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain" />
+      ) : (
+        <>
+          <img src="/logo-light.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain block dark:hidden" />
+          <img src="/logo-dark.png" alt="Fundamental" onError={onErr} className="h-full w-auto object-contain hidden dark:block" />
+        </>
+      )}
+    </span>
+  );
+};

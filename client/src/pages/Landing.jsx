@@ -25,7 +25,7 @@ export default function Landing() {
       {/* Nav */}
       <header className="fixed top-0 inset-x-0 z-50 bg-black/85">
         <div className="max-w-[1200px] mx-auto px-6 h-[72px] flex items-center justify-between">
-          <Logo />
+          <Logo className="h-11" variant="dark" />
           <nav className="hidden md:flex items-center gap-9">
             {NAV_LINKS.map(([l, to]) => (
               to.startsWith('#')
@@ -117,7 +117,7 @@ export default function Landing() {
 
       <footer className="border-t border-white/10">
         <div className="max-w-[1200px] mx-auto px-6 py-[30px] flex items-center justify-between flex-wrap gap-[12px]">
-          <Logo />
+          <Logo className="h-9" variant="dark" />
           <div className="text-[12px] tracking-[0.05em] text-[#9a9a9a]">The private-market network for founders and investors.</div>
         </div>
       </footer>
