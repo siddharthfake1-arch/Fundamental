@@ -14,8 +14,8 @@ React app on one port. Fresh databases seed themselves with demo data on first b
 2. Click **New → Web Service** and select the `Fundamental` repository
    (branch: `claude/gracious-goodall-pmgads`, or `main` after merging).
 3. Fill in:
-   - **Runtime:** Node
-   - **Build Command:** `npm install`
+   - **Runtime:** Node 20
+   - **Build Command:** `npm install && npm run build`
    - **Start Command:** `npm start`
 4. Under **Environment Variables**, add:
    - `NODE_ENV` = `production`

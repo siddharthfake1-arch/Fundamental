@@ -1,19 +1,22 @@
 const express = require('express');
 const { db, publicUser, profileCompletion, notify, audit } = require('../db');
 const { auth, requireRole } = require('../authmw');
+const { J, qstr, qint } = require('../util');
 
 const router = express.Router();
 router.use(auth);
-const J = (s, d = []) => { try { return JSON.parse(s) ?? d; } catch { return d; } };
 
 // ---- Notifications ----
 router.get('/notifications', (req, res) => {
-  const { type } = req.query;
-  let rows = db.prepare('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100').all(req.user.id);
-  if (type) rows = rows.filter(n => n.type === type);
+  const type = qstr(req.query.type);
+  const limit = qint(req.query.limit, 50, 100), offset = qint(req.query.offset, 0);
+  const rows = type
+    ? db.prepare('SELECT * FROM notifications WHERE user_id=? AND type=? ORDER BY id DESC LIMIT ? OFFSET ?').all(req.user.id, type, limit, offset)
+    : db.prepare('SELECT * FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT ? OFFSET ?').all(req.user.id, limit, offset);
   res.json({
     notifications: rows,
     unread: db.prepare('SELECT COUNT(*) c FROM notifications WHERE user_id=? AND read=0').get(req.user.id).c,
+    limit, offset,
   });
 });
 router.post('/notifications/read', (req, res) => {
@@ -201,8 +204,10 @@ router.post('/admin/suspend-user/:id', (req, res) => {
   const u = db.prepare("SELECT id, status FROM users WHERE id=? AND role!='admin'").get(req.params.id);
   if (!u) return res.status(404).json({ error: 'User not found.' });
   const suspend = u.status !== 'suspended';
-  db.prepare("UPDATE users SET status=?, suspended_at=?, suspended_reason=? WHERE id=?")
-    .run(suspend ? 'suspended' : 'active', suspend ? new Date().toISOString() : null, suspend ? String(req.body?.reason || '').slice(0, 500) : '', u.id);
+  // Use datetime('now') so timestamps are stored in the same UTC format as every
+  // other table (consistent parsing across the codebase).
+  db.prepare(`UPDATE users SET status=?, suspended_at=${suspend ? "datetime('now')" : 'NULL'}, suspended_reason=? WHERE id=?`)
+    .run(suspend ? 'suspended' : 'active', suspend ? String(req.body?.reason || '').slice(0, 500) : '', u.id);
   audit(req.user.id, suspend ? 'suspend-user' : 'reinstate-user', { targetType: 'user', targetId: u.id, detail: String(req.body?.reason || ''), ip: req.ip });
   res.json({ ok: true, status: suspend ? 'suspended' : 'active' });
 });

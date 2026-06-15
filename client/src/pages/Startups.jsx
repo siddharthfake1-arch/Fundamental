@@ -27,7 +27,7 @@ export default function Startups() {
           <h1 className="h-display text-2xl">Startups</h1>
           <p className="text-sm text-mist-400 mt-1">Every listed company, ranked by investor conviction.</p>
         </div>
-        <input className="input !w-64" placeholder="Search by name, sector, or city" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input !w-64" aria-label="Search" placeholder="Search by name, sector, or city" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       {user.role === 'founder' && (

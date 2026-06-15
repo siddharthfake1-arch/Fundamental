@@ -23,10 +23,18 @@ function normalizePhone(v) {
   return /^\+?[0-9]{7,15}$/.test(cleaned) ? cleaned : null;
 }
 
+// Bound outbound provider calls so a hung email/SMS API can't hang the request.
+async function fetchWithTimeout(url, opts, ms = 8000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  finally { clearTimeout(t); }
+}
+
 async function deliver(channel, identifier, code) {
   try {
     if (channel === 'email' && process.env.RESEND_API_KEY) {
-      const r = await fetch('https://api.resend.com/emails', {
+      const r = await fetchWithTimeout('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -40,7 +48,7 @@ async function deliver(channel, identifier, code) {
     }
     if (channel === 'phone' && process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM) {
       const sid = process.env.TWILIO_ACCOUNT_SID;
-      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      const r = await fetchWithTimeout(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
         method: 'POST',
         headers: {
           Authorization: 'Basic ' + Buffer.from(`${sid}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64'),
@@ -98,6 +106,12 @@ function verifyOtp(rawIdentifier, code) {
   if (!row) return { error: 'We have not sent a code to this address. Request a new one.' };
   if (new Date(row.expires_at + 'Z') < new Date()) return { error: 'This code has expired. Request a new one.' };
   if (row.attempts >= MAX_ATTEMPTS) return { error: 'Too many incorrect attempts. Request a new code.' };
+  // Bound guesses ACROSS re-requested codes for the same identifier, not just the
+  // latest row — otherwise re-requesting a code resets the per-row attempt budget.
+  const recentAttempts = db.prepare(
+    "SELECT COALESCE(SUM(attempts),0) n FROM otp_codes WHERE identifier=? AND created_at > datetime('now','-10 minutes')"
+  ).get(identifier).n;
+  if (recentAttempts >= 10) return { error: 'Too many attempts. Please wait a few minutes and request a new code.' };
   if (hashCode(String(code || '').trim()) !== row.code_hash) {
     db.prepare('UPDATE otp_codes SET attempts = attempts + 1 WHERE id=?').run(row.id);
     return { error: 'That code is incorrect. Check it and try again.' };

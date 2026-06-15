@@ -28,7 +28,7 @@ export default function Notifications() {
           <p className="text-sm text-mist-400 mt-1">{data.unread} unread</p>
         </div>
         <div className="flex gap-2">
-          <input className="input !w-40 !py-2 !text-xs" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input !w-40 !py-2 !text-xs" aria-label="Search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="input !w-auto !py-2 !text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All types</option>
             {TYPES.map(t => <option key={t}>{t}</option>)}

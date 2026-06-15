@@ -31,7 +31,9 @@ export default function Admin() {
 
 function Analytics() {
   const [d, setD] = useState(null);
-  useEffect(() => { api.get('/api/admin/overview').then(setD).catch(() => {}); }, []);
+  const [err, setErr] = useState(null);
+  useEffect(() => { api.get('/api/admin/overview').then(setD).catch((e) => setErr(e.message)); }, []);
+  if (err) return <Empty title="Couldn't load analytics" sub={err} />;
   if (!d) return <Spinner />;
   return (
     <div className="space-y-5">
@@ -64,7 +66,7 @@ function Users() {
   const shown = users.filter(u => (u.name + ' ' + u.email + ' ' + u.role + ' ' + (u.city || '')).toLowerCase().includes(q.toLowerCase()));
   return (
     <div>
-      <input className="input !w-72 mb-4" placeholder="Search users by name, email, role…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="input !w-72 mb-4" aria-label="Search" placeholder="Search users by name, email, role…" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="card overflow-x-auto">
       <table className="w-full text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-mist-500 border-b border-ink-700/60">
@@ -124,7 +126,7 @@ function StartupsAdmin() {
   const shown = list.filter(s => (s.name + ' ' + s.sector + ' ' + s.stage).toLowerCase().includes(q.toLowerCase()));
   return (
     <div>
-      <input className="input !w-72 mb-4" placeholder="Search startups by name, sector, stage…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="input !w-72 mb-4" aria-label="Search" placeholder="Search startups by name, sector, stage…" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="card overflow-x-auto">
       <table className="w-full text-sm">
         <thead><tr className="text-left text-[11px] uppercase tracking-wider text-mist-500 border-b border-ink-700/60">

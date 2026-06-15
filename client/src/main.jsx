@@ -1,22 +1,31 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { MotionConfig } from 'motion/react';
 import App from './App';
 import { AuthProvider } from './AuthContext';
 import { ThemeProvider } from './ThemeContext';
 import { ToastProvider } from './components/ui';
+import ErrorBoundary from './components/ErrorBoundary';
+import CookieConsent from './components/CookieConsent';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <ThemeProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </ToastProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      {/* reducedMotion="user" honors prefers-reduced-motion for all animations */}
+      <MotionConfig reducedMotion="user">
+        <BrowserRouter>
+          <ThemeProvider>
+            <ToastProvider>
+              <AuthProvider>
+                <App />
+                <CookieConsent />
+              </AuthProvider>
+            </ToastProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </MotionConfig>
+    </ErrorBoundary>
   </React.StrictMode>
 );

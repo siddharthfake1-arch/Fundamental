@@ -93,10 +93,30 @@ export const Empty = ({ icon = '◇', title, sub }) => (
 );
 
 export function Modal({ open, onClose, title, children, wide }) {
+  const panelRef = useRef(null);
   useEffect(() => {
-    const fn = (e) => e.key === 'Escape' && onClose();
-    if (open) { document.addEventListener('keydown', fn); document.body.style.overflow = 'hidden'; }
-    return () => { document.removeEventListener('keydown', fn); document.body.style.overflow = ''; };
+    if (!open) return;
+    const prevFocus = document.activeElement;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'Tab' && panelRef.current) {
+        // Focus trap: keep Tab within the dialog.
+        const els = panelRef.current.querySelectorAll('a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])');
+        if (!els.length) return;
+        const first = els[0], last = els[els.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    // Move focus into the dialog.
+    setTimeout(() => panelRef.current?.querySelector('button,a,input,textarea,select')?.focus(), 0);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+      if (prevFocus && prevFocus.focus) prevFocus.focus(); // return focus to trigger
+    };
   }, [open, onClose]);
   return (
     <AnimatePresence>
@@ -106,6 +126,7 @@ export function Modal({ open, onClose, title, children, wide }) {
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6 bg-black/70 backdrop-blur-sm"
           onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
           <motion.div
+            ref={panelRef} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : 'Dialog'}
             initial={{ opacity: 0, scale: 0.94, y: 24 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 16 }}
@@ -113,7 +134,7 @@ export function Modal({ open, onClose, title, children, wide }) {
             className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto p-6 rounded-b-none sm:rounded-2xl`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="h-display text-lg">{title}</h3>
-              <button onClick={onClose} className="text-mist-400 hover:text-mist-100 text-xl leading-none px-1">×</button>
+              <button onClick={onClose} aria-label="Close dialog" className="text-mist-400 hover:text-mist-100 text-xl leading-none px-1">×</button>
             </div>
             {children}
           </motion.div>

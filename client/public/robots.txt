@@ -1,0 +1,20 @@
+# Fundamental — allow public surfaces, keep the authenticated app out of indexes.
+User-agent: *
+Allow: /$
+Allow: /s/
+Allow: /legal/
+Disallow: /discover
+Disallow: /dashboard
+Disallow: /messages
+Disallow: /network
+Disallow: /social
+Disallow: /communities
+Disallow: /settings
+Disallow: /admin
+Disallow: /watchlist
+Disallow: /notifications
+Disallow: /profile
+Disallow: /startup/
+Disallow: /api/
+
+Sitemap: /sitemap.xml

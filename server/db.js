@@ -1,7 +1,9 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const db = new Database(path.join(__dirname, 'fundamental.db'));
+// DB_PATH lets tests (and alternate deployments) use a separate database file.
+const DB_FILE = process.env.DB_PATH || path.join(__dirname, 'fundamental.db');
+const db = new Database(DB_FILE);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
@@ -405,6 +407,16 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, targ
 CREATE INDEX IF NOT EXISTS idx_collateral_access_logs ON collateral_access_logs(collateral_id, created_at);
 `);
 
+// ---- Data retention sweep (runs once at boot) ----
+// Bounds unbounded behavioural/security tables and clears expired one-time codes.
+// Document these windows in your privacy policy.
+try {
+  db.exec("DELETE FROM startup_views WHERE created_at < datetime('now','-180 days')");
+  db.exec("DELETE FROM otp_codes WHERE created_at < datetime('now','-1 day')");
+  db.exec("DELETE FROM collateral_access_logs WHERE created_at < datetime('now','-365 days')");
+  db.exec("DELETE FROM notifications WHERE read=1 AND created_at < datetime('now','-180 days')");
+} catch { /* tables may not exist on a brand-new DB yet */ }
+
 // ---- shared helpers ----
 // Respects the recipient's in-app notification preference (P1-11). Email delivery
 // is handled separately by the mailer when email_alerts is on.
@@ -427,16 +439,9 @@ function logCollateralAccess(collateralId, startupId, userId, action, ip = '') {
     .run(collateralId, startupId ?? null, userId, action, ip);
 }
 
-// A startup is "listed" (publicly discoverable) once it has a pitch video and is
-// not hidden by an admin. Non-owners/non-admins must not see unlisted startups (P0-4).
-function isListed(startup) {
-  return !!(startup && startup.video_url && !startup.hidden);
-}
-function canViewStartup(startup, user) {
-  if (!startup) return false;
-  if (isListed(startup)) return true;
-  return user && (user.role === 'admin' || startup.founder_id === user.id);
-}
+// Startup visibility rules live in a pure module so they're unit-testable without
+// the native sqlite binding (P0-4 enforcement).
+const { isListed, canViewStartup } = require('./visibility');
 
 function addActivity(startupId, type, text) {
   db.prepare('INSERT INTO activities (startup_id, type, text) VALUES (?,?,?)')

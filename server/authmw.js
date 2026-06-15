@@ -24,7 +24,9 @@ function auth(req, res, next) {
     const user = db.prepare('SELECT * FROM users WHERE id=?').get(payload.id);
     if (!user) return res.status(401).json({ error: 'Not authenticated' });
     // Tokens issued before the last password change are dead — evicts stolen sessions.
-    if (user.pwd_changed_at && payload.iat * 1000 < new Date(user.pwd_changed_at + 'Z').getTime()) {
+    // A 2s grace avoids a same-second race evicting the freshly-issued token (iat is
+    // second-resolution while pwd_changed_at can land in the same second).
+    if (user.pwd_changed_at && payload.iat * 1000 < new Date(user.pwd_changed_at + 'Z').getTime() - 2000) {
       return res.status(401).json({ error: 'Session expired — please sign in again' });
     }
     // Suspended or flagged accounts are locked out immediately — every request

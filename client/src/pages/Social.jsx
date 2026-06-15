@@ -40,7 +40,7 @@ export default function Social() {
           <p className="text-sm text-mist-400 mt-1">Professional updates from the network, capped at 400 characters.</p>
         </div>
         <div className="flex gap-2">
-          <input className="input !w-44 !py-2 !text-xs" placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input !w-44 !py-2 !text-xs" aria-label="Search" placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />
           <select className="input !w-auto !py-2 !text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All categories</option>
             {types.types.map(t => <option key={t}>{t}</option>)}

@@ -2,6 +2,7 @@ const express = require('express');
 const { db } = require('../db');
 const { auth } = require('../authmw');
 const { validateUrlFields } = require('../security');
+const { qstr, qint } = require('../util');
 
 const router = express.Router();
 router.use(auth);
@@ -31,8 +32,9 @@ router.get('/types', (req, res) => {
 
 // Signal-ranked feed: relevance + author credibility + signal type — not likes.
 router.get('/', (req, res) => {
-  const { type } = req.query;
-  let rows = db.prepare('SELECT * FROM posts WHERE removed=0 ORDER BY id DESC LIMIT 100').all();
+  const type = qstr(req.query.type);
+  const limit = qint(req.query.limit, 30, 50), offset = qint(req.query.offset, 0);
+  let rows = db.prepare('SELECT * FROM posts WHERE removed=0 ORDER BY id DESC LIMIT 150').all();
   if (type) rows = rows.filter(p => p.type === type);
   const ip = req.user.role === 'investor'
     ? db.prepare('SELECT sector_focus FROM investor_profiles WHERE user_id=?').get(req.user.id) : null;
@@ -52,7 +54,8 @@ router.get('/', (req, res) => {
       - Math.min(8, ageHours / 24);                            // recency decay
     return { p, rank };
   }).sort((a, b) => b.rank - a.rank);
-  res.json({ posts: ranked.map(({ p }) => shapePost(p, req.user.id)) });
+  const page = ranked.slice(offset, offset + limit);
+  res.json({ posts: page.map(({ p }) => shapePost(p, req.user.id)), total: ranked.length, limit, offset });
 });
 
 router.post('/', (req, res) => {

@@ -134,7 +134,10 @@ function StartupSettings() {
         <h2 className="section-title">12-minute pitch video (required)</h2>
         {s.video_url && <video src={s.video_url} controls className="w-full rounded-xl aspect-video bg-black border border-ink-600/60" />}
         <FileUpload label="Replace pitch video" accept="video/*" currentUrl={s.video_url} hint="12 minutes maximum"
-          onUploaded={(d) => setS(x => ({ ...x, video_url: d.url }))} />
+          onUploaded={(d) => {
+            if (d.duration && d.duration > 12 * 60) { toast(`That video is ${Math.round(d.duration / 60)} minutes. The pitch must be 12 minutes or less.`, 'error'); return; }
+            setS(x => ({ ...x, video_url: d.url, video_duration: d.duration || x.video_duration || 0 }));
+          }} />
         {!s.video_url && <div className="text-xs text-red-300">Without a pitch video, your startup stays hidden from Discover.</div>}
       </div>
 
@@ -288,6 +291,42 @@ function Security({ user }) {
         catch (e) { toast(e.message, 'error'); }
       }}>Update password</button>
       <div className="text-xs text-mist-500 pt-2">Signed in as {user.email}</div>
+      <PrivacyControls user={user} />
+    </div>
+  );
+}
+
+function PrivacyControls({ user }) {
+  const toast = useToast();
+  const exportData = async () => {
+    try {
+      const res = await fetch('/api/users/me/export', { credentials: 'include' });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'fundamental-data-export.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  const deleteAccount = async () => {
+    const sure = window.prompt('This permanently deletes your account and all associated data. Type DELETE to confirm.');
+    if (sure !== 'DELETE') return;
+    try {
+      await api.del('/api/users/me');
+      toast('Your account has been deleted.', 'success');
+      window.location.href = '/';
+    } catch (e) { toast(e.message, 'error'); }
+  };
+  return (
+    <div className="border-t border-ink-700/60 pt-4 mt-2 space-y-3">
+      <h2 className="section-title">Your data</h2>
+      <p className="text-xs text-mist-500">Download a copy of your data, or permanently delete your account.</p>
+      <div className="flex gap-2">
+        <button className="btn-ghost btn-sm flex-1" onClick={exportData}>Export my data</button>
+        {user.role !== 'admin' && <button className="btn-danger btn-sm flex-1" onClick={deleteAccount}>Delete account</button>}
+      </div>
     </div>
   );
 }

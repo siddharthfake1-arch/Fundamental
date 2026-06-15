@@ -23,7 +23,9 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 validateProductionConfig();
 
 const app = express();
-app.set('trust proxy', 1); // correct protocol/IP behind Render/Railway/nginx proxies
+// Trusted proxy hop count — set TRUST_PROXY_HOPS to match your deployment topology
+// so req.ip (used for rate-limit keys) cannot be spoofed via X-Forwarded-For.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 app.disable('x-powered-by');
 app.use(securityHeaders);
 app.use(express.json({ limit: '2mb' }));
@@ -31,14 +33,18 @@ app.use(cookieParser());
 app.use('/api', csrfOriginCheck); // reject state-changing requests from foreign origins
 app.use('/api', rateLimit({ name: 'api', windowMs: 5 * 60_000, max: 1500 })); // generous global ceiling
 
-// Health check for hosting platforms
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'fundamental' }));
+// Health check for hosting platforms — verifies DB connectivity, not just liveness.
+app.get('/api/health', (req, res) => {
+  try { require('./db').db.prepare('SELECT 1 AS ok').get(); res.json({ ok: true, service: 'fundamental' }); }
+  catch { res.status(503).json({ ok: false, service: 'fundamental' }); }
+});
 
 // Public client config — lets the UI hide demo hints / unconfigured sign-in
-// methods without leaking server internals.
+// methods without leaking server internals. Google Sign-In is not yet implemented,
+// so it is never advertised (avoids a dead-end button).
 app.get('/api/config', (req, res) => res.json({
   demo: !IS_PROD,
-  google_enabled: !!process.env.GOOGLE_CLIENT_ID,
+  google_enabled: false,
 }));
 
 // ---- Database bootstrap & production safety (P0-1) ----
@@ -110,7 +116,13 @@ app.post('/api/upload', auth, uploadLimiter, (req, res) => {
       try { fs.unlinkSync(p); } catch { /* ignore */ }
       return res.status(400).json({ error: 'Unsupported or oversized file. Allowed here: images and video.' });
     }
-    res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname, size: req.file.size });
+    const out = { url: `/uploads/${req.file.filename}`, name: req.file.originalname, size: req.file.size };
+    if (kind === 'video') {
+      // Server-verified duration for the 12-minute pitch cap (null if unverifiable).
+      const dur = require('./videometa').probeVideoDuration(p);
+      if (dur != null) out.duration = Math.round(dur);
+    }
+    res.json(out);
   });
 });
 
@@ -175,7 +187,10 @@ app.use('/api', require('./routes/misc'));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use((err, req, res, next) => {
-  console.error(err);
+  // In production, log only a concise line (no full stack/object that may contain
+  // user data); wire a structured logger / error tracker (e.g. Sentry) here.
+  if (IS_PROD) console.error(`[error] ${req.method} ${req.path}: ${err && err.message}`);
+  else console.error(err);
   res.status(500).json({ error: 'Something went wrong on our side' });
 });
 
@@ -200,7 +215,9 @@ if (fs.existsSync(DIST)) {
     <meta property="og:type" content="website" />
     <meta property="og:url" content="${esc(base)}/s/${s.id}" />
     <meta name="twitter:card" content="summary" />`;
+      const desc = `${esc(s.one_liner)} Watch the 12-minute pitch on Fundamental.`;
       html = html
+        .replace(/<meta name="description"[^>]*>/, `<meta name="description" content="${desc}" />`)
         .replace(/<title>[^<]*<\/title>/, `<title>${esc(s.name)} — ${esc(s.sector)} | Fundamental</title>${og}`);
     }
     res.send(html);

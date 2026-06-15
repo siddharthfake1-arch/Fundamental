@@ -63,7 +63,7 @@ export default function Messages() {
         {/* Left panel */}
         <div className={`border-r border-ink-700/60 flex flex-col ${active ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b border-ink-700/60">
-            <input className="input !py-2" placeholder="Search conversations…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input className="input !py-2" aria-label="Search" placeholder="Search conversations…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (

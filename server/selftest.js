@@ -3,7 +3,9 @@
 // platform; extend with HTTP-level route tests as the test suite grows.
 const assert = require('assert');
 const { safeUrl, sniffFileType, validateNumericFields } = require('./security');
-const { canViewStartup, isListed } = require('./db');
+// Pure module (no native sqlite dependency) so unit tests run even where the
+// better-sqlite3 binding can't build.
+const { canViewStartup, isListed } = require('./visibility');
 
 let passed = 0;
 const ok = (name, fn) => { fn(); passed++; console.log(`  ✓ ${name}`); };

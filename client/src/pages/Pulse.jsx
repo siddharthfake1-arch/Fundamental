@@ -33,7 +33,7 @@ export default function Pulse() {
           <h1 className="h-display text-2xl flex items-center gap-2"><Activity className="w-6 h-6 text-gold-400" /> Market Pulse</h1>
           <p className="text-sm text-mist-400 mt-1">Live signals from across Fundamental — aggregate trends only, never individual startup data.</p>
         </div>
-        <input className="input !w-56" placeholder="Search sectors…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input !w-56" aria-label="Search" placeholder="Search sectors…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">

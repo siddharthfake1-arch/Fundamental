@@ -1,19 +1,21 @@
 const express = require('express');
-const { db, notify, areConnected, publicUser, trustScore } = require('../db');
+const { db, notify, audit, areConnected, publicUser, trustScore } = require('../db');
 const { auth, requireRole } = require('../authmw');
 const { validateUrlFields, clampStrings } = require('../security');
+const { J, qstr } = require('../util');
 
 const router = express.Router();
 router.use(auth);
-const J = (s, d = []) => { try { return JSON.parse(s) ?? d; } catch { return d; } };
 
 // ---- Network directory ----
 router.get('/network', (req, res) => {
-  const { role, sector, stage, geography, active, q } = req.query;
+  // All query params coerced to strings so array/object inputs cannot 500 the route.
+  const role = qstr(req.query.role), sector = qstr(req.query.sector), stage = qstr(req.query.stage);
+  const geography = qstr(req.query.geography).toLowerCase(), active = qstr(req.query.active), q = qstr(req.query.q).toLowerCase();
   let users = db.prepare("SELECT * FROM users WHERE id != ? AND role != 'admin' AND onboarded=1").all(req.user.id);
-  if (q) users = users.filter(u => (u.name + ' ' + u.headline).toLowerCase().includes(q.toLowerCase()));
+  if (q) users = users.filter(u => (u.name + ' ' + u.headline).toLowerCase().includes(q));
   if (role) users = users.filter(u => u.role === role);
-  if (geography) users = users.filter(u => u.city.toLowerCase().includes(geography.toLowerCase()));
+  if (geography) users = users.filter(u => (u.city || '').toLowerCase().includes(geography));
   if (active === 'true') {
     users = users.filter(u => new Date(u.last_active + 'Z') > new Date(Date.now() - 7 * 864e5));
   }
@@ -160,6 +162,40 @@ router.get('/profile/:id', (req, res) => {
     if (!dup) notify(u.id, 'Profile Viewed', txt, `/profile/${req.user.id}`);
   }
   res.json(out);
+});
+
+// ---- Data export (GDPR/CCPA/DPDP portability) ----
+// Returns the user's own data as JSON. Excludes other users' private content.
+router.get('/me/export', (req, res) => {
+  const uid = req.user.id;
+  const data = {
+    exported_at: new Date().toISOString(),
+    account: publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(uid)),
+    email: req.user.email,
+    phone: req.user.phone,
+    investor_profile: db.prepare('SELECT * FROM investor_profiles WHERE user_id=?').get(uid) || null,
+    startups: db.prepare('SELECT * FROM startups WHERE founder_id=?').all(uid),
+    posts: db.prepare('SELECT * FROM posts WHERE user_id=?').all(uid),
+    comments: db.prepare('SELECT * FROM post_comments WHERE user_id=?').all(uid),
+    messages_sent: db.prepare('SELECT id, conversation_id, text, created_at FROM messages WHERE sender_id=?').all(uid),
+    connections: db.prepare('SELECT * FROM connections WHERE requester_id=? OR recipient_id=?').all(uid, uid),
+    watchlist: db.prepare('SELECT * FROM watchlist WHERE user_id=?').all(uid),
+    notes: db.prepare('SELECT * FROM notes WHERE investor_id=?').all(uid),
+    notifications: db.prepare('SELECT * FROM notifications WHERE user_id=?').all(uid),
+  };
+  res.setHeader('Content-Disposition', 'attachment; filename="fundamental-data-export.json"');
+  res.json(data);
+});
+
+// ---- Account deletion (right to erasure) ----
+// Cascades through every table via ON DELETE CASCADE foreign keys; also clears the
+// session cookie. Admins cannot self-delete (avoids locking out the platform).
+router.delete('/me', (req, res) => {
+  if (req.user.role === 'admin') return res.status(400).json({ error: 'Admin accounts cannot be self-deleted. Use another admin or the server.' });
+  audit(req.user.id, 'delete-account', { targetType: 'user', targetId: req.user.id, ip: req.ip });
+  db.prepare('DELETE FROM users WHERE id=?').run(req.user.id);
+  res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+  res.json({ ok: true });
 });
 
 // ---- Edit own profile / investor profile ----

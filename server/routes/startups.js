@@ -3,6 +3,7 @@ const { db, notify, audit, logCollateralAccess, canViewStartup, isListed, addAct
 const { auth, requireRole, requireApprovedInvestor } = require('../authmw');
 const { validateUrlFields, validateNumericFields, clampStrings } = require('../security');
 const { streamPrivate, deletePrivate, privateExists } = require('../storage');
+const { J, qstr, qint } = require('../util');
 
 const WATCHLIST_STATUSES = ['Tracking', 'Intro Call Done', 'Due Diligence', 'Term Sheet', 'Passed'];
 
@@ -20,8 +21,6 @@ function withReactions(u, userId) {
 
 const router = express.Router();
 router.use(auth);
-
-const J = (s, d = []) => { try { return JSON.parse(s) ?? d; } catch { return d; } };
 
 function investorProfileOf(user) {
   return user.role === 'investor'
@@ -63,31 +62,39 @@ function dealFlowGate(req, res, next) {
 }
 
 // ---- Discover (marketplace). Mandatory video: unlisted until pitch uploaded. ----
+// Filters run in SQL (parameterized), results are paginated, and all query params
+// are coerced to strings so hostile array/object inputs cannot crash the route.
 router.get('/', dealFlowGate, (req, res) => {
-  const { sector, subsector, stage, revenue, geography, raising, verified, sort, q } = req.query;
-  let rows = db.prepare("SELECT * FROM startups WHERE video_url != '' AND hidden = 0").all();
-  if (q) rows = rows.filter(s => (s.name + ' ' + s.one_liner + ' ' + s.sector).toLowerCase().includes(q.toLowerCase()));
-  if (sector) rows = rows.filter(s => s.sector === sector);
-  if (subsector) rows = rows.filter(s => s.subsector === subsector);
-  if (stage) rows = rows.filter(s => s.stage === stage);
-  if (geography) rows = rows.filter(s => s.city.toLowerCase().includes(geography.toLowerCase()));
-  if (raising) rows = rows.filter(s => s.raising_status === raising);
-  if (verified === 'true') rows = rows.filter(s => s.verified);
+  const sector = qstr(req.query.sector), subsector = qstr(req.query.subsector), stage = qstr(req.query.stage);
+  const revenue = qstr(req.query.revenue), geography = qstr(req.query.geography), raising = qstr(req.query.raising);
+  const verified = qstr(req.query.verified), sort = qstr(req.query.sort), q = qstr(req.query.q).trim();
+  const limit = qint(req.query.limit, 30, 60), offset = qint(req.query.offset, 0);
+
+  const where = ["video_url != ''", 'hidden = 0'];
+  const params = [];
+  if (q) { where.push('(LOWER(name) LIKE ? OR LOWER(one_liner) LIKE ? OR LOWER(sector) LIKE ?)'); const t = `%${q.toLowerCase()}%`; params.push(t, t, t); }
+  if (sector) { where.push('sector = ?'); params.push(sector); }
+  if (subsector) { where.push('subsector = ?'); params.push(subsector); }
+  if (stage) { where.push('stage = ?'); params.push(stage); }
+  if (geography) { where.push('LOWER(city) LIKE ?'); params.push(`%${geography.toLowerCase()}%`); }
+  if (raising) { where.push('raising_status = ?'); params.push(raising); }
+  if (verified === 'true') where.push('verified > 0');
   if (revenue) {
-    const bands = { '0-100k': [0, 1e5], '100k-1m': [1e5, 1e6], '1m-10m': [1e6, 1e7], '10m+': [1e7, Infinity] };
-    const [lo, hi] = bands[revenue] || [0, Infinity];
-    rows = rows.filter(s => { const r = s.arr || s.mrr * 12; return r >= lo && r < hi; });
+    const bands = { '0-100k': [0, 1e5], '100k-1m': [1e5, 1e6], '1m-10m': [1e6, 1e7], '10m+': [1e7, 1e15] };
+    const [lo, hi] = bands[revenue] || [0, 1e15];
+    where.push('(CASE WHEN arr > 0 THEN arr ELSE mrr * 12 END) >= ? AND (CASE WHEN arr > 0 THEN arr ELSE mrr * 12 END) < ?');
+    params.push(lo, hi);
   }
+  const rows = db.prepare(`SELECT * FROM startups WHERE ${where.join(' AND ')}`).all(...params);
   const ip = investorProfileOf(req.user);
   let tiles = rows.map(s => tile(s, req.user.id, ip));
   if (sort === 'upvoted') tiles.sort((a, b) => b.upvotes - a.upvotes);
-  else if (sort === 'viewed') {
-    const v = Object.fromEntries(rows.map(s => [s.id, s.views]));
-    tiles.sort((a, b) => v[b.id] - v[a.id]);
-  } else if (sort === 'score') tiles.sort((a, b) => b.score - a.score);
+  else if (sort === 'viewed') tiles.sort((a, b) => b.views - a.views);
+  else if (sort === 'score') tiles.sort((a, b) => b.score - a.score);
   else if (sort === 'fit') tiles.sort((a, b) => (b.fit || 0) - (a.fit || 0));
   else tiles.sort((a, b) => b.id - a.id); // recent
-  res.json({ startups: tiles, total: tiles.length });
+  const total = tiles.length;
+  res.json({ startups: tiles.slice(offset, offset + limit), total, limit, offset });
 });
 
 router.get('/facets', (req, res) => {
@@ -151,11 +158,13 @@ router.post('/mine', requireRole('founder'), (req, res) => {
   if (urlErr) return res.status(400).json({ error: urlErr });
   const numErr = validateNumericFields(b, ['arr', 'mrr', 'growth', 'gross_margin', 'burn', 'runway', 'cac', 'ltv', 'founded_year', 'video_duration']);
   if (numErr) return res.status(400).json({ error: numErr });
-  // Pitch-video policy enforced server-side: publishing requires a duration within
-  // the 12-minute limit (the client measures and submits it). Without ffmpeg we
-  // cannot probe external URLs, so a non-empty video requires a valid duration.
-  const settingVideo = b.video_url !== undefined && b.video_url !== '';
-  if (settingVideo) {
+  // Pitch-video policy, enforced server-side. Uploaded videos carry a server-VERIFIED
+  // duration (probed from the file); external URLs report a client value. We only
+  // require/validate the duration when the video is actually being set or changed,
+  // so editing other fields on an existing listing never trips it.
+  const existingVideo = existing ? existing.video_url : '';
+  const changingVideo = b.video_url !== undefined && b.video_url !== '' && b.video_url !== existingVideo;
+  if (changingVideo) {
     const dur = Number(b.video_duration);
     if (!Number.isFinite(dur) || dur <= 0) {
       return res.status(400).json({ error: 'Upload a pitch video so we can verify its length before publishing.' });

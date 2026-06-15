@@ -39,14 +39,12 @@ function sessionPayload(user) {
   return me;
 }
 
-// ---- Signup verification (OTP via email or phone) ----
+// ---- Signup verification (OTP via email) ----
+// Neutral response: we do not reveal whether an email is already registered here
+// (no enumeration oracle). A duplicate is only reported at the final signup step,
+// which the attacker can only reach by controlling — and verifying — that mailbox.
 router.post('/send-otp', otpLimiter, async (req, res) => {
   const { channel, identifier } = req.body;
-  // For signup we can tell the user early that the email is taken
-  if (channel === 'email' && typeof identifier === 'string' &&
-      db.prepare('SELECT 1 FROM users WHERE email=?').get(identifier.toLowerCase())) {
-    return res.status(409).json({ error: 'An account already uses this email address. Sign in instead.' });
-  }
   const out = await sendOtp(channel, identifier);
   if (out.error) return res.status(400).json({ error: out.error });
   res.json({ ok: true, demo: !!out.demo_code, demo_code: out.demo_code });
@@ -61,7 +59,7 @@ router.post('/verify-otp', otpLimiter, (req, res) => {
   res.json({ ok: true, otp_token });
 });
 
-router.post('/signup', authLimiter, (req, res) => {
+router.post('/signup', authLimiter, async (req, res) => {
   const { role, name, email, password, city, phone, otp_token, accept_terms } = req.body;
   if (!['founder', 'investor'].includes(role)) return res.status(400).json({ error: 'Select your role: founder or investor.' });
   if (!name || !String(name).trim() || String(name).length > 120) return res.status(400).json({ error: 'Enter your full name (up to 120 characters).' });
@@ -81,7 +79,7 @@ router.post('/signup', authLimiter, (req, res) => {
   if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase())) {
     return res.status(409).json({ error: 'An account already uses this email address.' });
   }
-  const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
+  const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
   const info = db.prepare("INSERT INTO users (role, name, email, password_hash, city, phone, email_verified, phone_verified, accepted_terms_at) VALUES (?,?,?,?,?,?,1,0,datetime('now'))")
     .run(role, String(name).trim(), email.toLowerCase(), hash, String(city || '').slice(0, 120), phone ? normalizePhone(phone) || '' : '');
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid);
@@ -89,11 +87,14 @@ router.post('/signup', authLimiter, (req, res) => {
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
 });
 
-router.post('/login', authLimiter, (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE email=?').get(String(email || '').toLowerCase());
-  if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash)) {
-    return res.status(401).json({ error: 'That email or password is incorrect.' });
+  // Async bcrypt so a slow hash doesn't block the event loop under concurrent logins.
+  const ok = user && await bcrypt.compare(String(password || ''), user.password_hash);
+  if (!ok) return res.status(401).json({ error: 'That email or password is incorrect.' });
+  if (user.status === 'suspended' || user.flagged) {
+    return res.status(403).json({ error: 'Your account has been suspended. Contact support@fundamental.app if you believe this is a mistake.' });
   }
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
 });
@@ -115,16 +116,17 @@ router.get('/me', auth, (req, res) => {
   res.json({ user: sessionPayload(req.user) });
 });
 
-router.post('/change-password', auth, authLimiter, (req, res) => {
+router.post('/change-password', auth, authLimiter, async (req, res) => {
   const { current, next } = req.body;
-  if (!bcrypt.compareSync(String(current || ''), req.user.password_hash)) {
+  if (!await bcrypt.compare(String(current || ''), req.user.password_hash)) {
     return res.status(400).json({ error: 'Your current password is incorrect.' });
   }
   if (typeof next !== 'string' || next.length < 8 || next.length > 200) return res.status(400).json({ error: 'Choose a new password of at least 8 characters.' });
   // pwd_changed_at invalidates every token issued before this moment (kills stolen
-  // sessions); we then issue a fresh cookie so the current device stays signed in.
-  db.prepare("UPDATE users SET password_hash=?, pwd_changed_at=datetime('now') WHERE id=?")
-    .run(bcrypt.hashSync(next, BCRYPT_ROUNDS), req.user.id);
+  // sessions). We set it first, then sign a fresh token so the current device stays
+  // signed in — authmw uses a small grace window to avoid a same-second eviction race.
+  const hash = await bcrypt.hash(next, BCRYPT_ROUNDS);
+  db.prepare("UPDATE users SET password_hash=?, pwd_changed_at=datetime('now') WHERE id=?").run(hash, req.user.id);
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
   res.cookie('token', sign(user), COOKIE).json({ ok: true });
 });

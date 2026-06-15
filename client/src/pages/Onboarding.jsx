@@ -306,7 +306,8 @@ function VideoStep({ s, setS, toast }) {
       <FileUpload label="Pitch Video (max 12 minutes — mandatory)" accept="video/*" currentUrl={s.video_url}
         hint="MP4 / WebM / MOV, up to 600MB"
         onUploaded={async (d, file) => {
-          const dur = await videoDuration(file);
+          // Prefer the server-verified duration; fall back to client measurement.
+          const dur = d.duration || await videoDuration(file);
           if (dur && dur > 12 * 60) {
             toast(`That video is ${Math.round(dur / 60)} minutes. The pitch must be 12 minutes or less — tighten it and re-upload.`, 'error');
             return;

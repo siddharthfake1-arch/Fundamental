@@ -302,5 +302,12 @@ notif.run(founderIds[0], 'Connection Request', 'Nisha Kapoor wants to connect', 
 notif.run(investorIds[0], 'Access Approved', 'Access approved for "Information Memorandum" (PayLane)', `/startup/${startupIds[0]}`);
 notif.run(investorIds[4], 'New Message', 'New activity on PayLane’s round', `/startup/${startupIds[0]}`);
 
+// Demo accounts are pre-approved, consented, and email-verified so the seeded
+// experience works on a fresh database (real signups remain gated).
+try {
+  db.exec("UPDATE users SET investor_approved=1 WHERE role='investor'");
+  db.exec("UPDATE users SET email_verified=1, accepted_terms_at=datetime('now') WHERE accepted_terms_at IS NULL");
+} catch { /* hardening columns may not exist on very old schemas */ }
+
 console.log('Seeded Fundamental demo data.');
 console.log('Logins (password: demo1234): founder1@demo.app … founder8@demo.app | investor1@demo.app … investor5@demo.app | admin@fundamental.app');
