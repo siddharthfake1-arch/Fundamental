@@ -295,13 +295,41 @@ export const Stat = ({ label, value, sub }) => (
   </div>
 );
 
+// Brand mark: a faceted violet-glass emblem (downward prism of stacked bars) +
+// the wordmark. The mark reads on any background; the wordmark uses currentColor
+// so it stays legible in both light and dark mode wherever the Logo is placed.
 export const Logo = ({ className = 'h-7' }) => (
-  <span className={`inline-flex items-center gap-2 ${className}`}>
-    <svg viewBox="0 0 64 64" className="h-full w-auto">
-      <defs><linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#6a3fe0" /><stop offset="100%" stopColor="#9b6bff" /></linearGradient></defs>
-      <rect width="64" height="64" rx="16" fill="url(#logo-g)" />
-      <path d="M20 50V14h26v7H28.5v8.5H43v7H28.5V50H20z" fill="#fff" />
+  <span className={`inline-flex items-center gap-2.5 ${className}`}>
+    <svg viewBox="0 0 100 100" className="h-full w-auto" aria-hidden="true">
+      <defs>
+        <linearGradient id="fnd-fill" x1="0" y1="0" x2="0.3" y2="1">
+          <stop offset="0%" stopColor="#a786ff" />
+          <stop offset="55%" stopColor="#7a4ef0" />
+          <stop offset="100%" stopColor="#4f29bd" />
+        </linearGradient>
+        <linearGradient id="fnd-band" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#dccaff" />
+          <stop offset="100%" stopColor="#8a5cff" />
+        </linearGradient>
+        <clipPath id="fnd-tri"><path d="M10 14 H90 L50 88 Z" /></clipPath>
+      </defs>
+      <g clipPath="url(#fnd-tri)">
+        <path d="M10 14 H90 L50 88 Z" fill="url(#fnd-fill)" />
+        {/* left spine + stacked glass bars */}
+        <rect x="6" y="14" width="17" height="74" fill="url(#fnd-band)" opacity="0.9" />
+        <rect x="0" y="15" width="100" height="14" fill="url(#fnd-band)" />
+        <rect x="0" y="35" width="100" height="12" fill="url(#fnd-band)" opacity="0.82" />
+        <rect x="0" y="53" width="100" height="10" fill="url(#fnd-band)" opacity="0.64" />
+        {/* facet gaps */}
+        <rect x="0" y="29" width="100" height="2.4" fill="#2a155e" opacity="0.5" />
+        <rect x="0" y="47" width="100" height="2.4" fill="#2a155e" opacity="0.5" />
+        <rect x="0" y="63" width="100" height="2.4" fill="#2a155e" opacity="0.5" />
+        {/* gloss highlights */}
+        <rect x="0" y="15" width="100" height="2" fill="#ffffff" opacity="0.5" />
+        <rect x="0" y="35" width="100" height="1.6" fill="#ffffff" opacity="0.32" />
+      </g>
+      <path d="M10 14 H90 L50 88 Z" fill="none" stroke="#c9b6ff" strokeWidth="1.6" opacity="0.4" />
     </svg>
-    <span className="font-display font-bold text-mist-100 tracking-tight text-lg">Fundamental</span>
+    <span className="font-display font-bold tracking-tight text-lg">Fundamental</span>
   </span>
 );
