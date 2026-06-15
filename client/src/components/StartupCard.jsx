@@ -80,7 +80,7 @@ export default function StartupCard({ s }) {
           {s.raising_status === 'Actively Raising' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Actively raising" />}
         </div>
         <button onClick={user.role === 'investor' ? toggleUpvote : (e) => e.preventDefault()}
-          title={user.role === 'investor' ? 'One upvote per investor' : 'Investors can upvote'}
+          title={user.role === 'investor' ? 'One upvote per investor' : 'Only investors can upvote'}
           className={`relative flex items-center gap-1 text-sm rounded-lg px-2 py-1 transition-colors shrink-0
             ${upvoted ? 'text-gold-300 bg-gold-500/10' : 'text-mist-400'} ${user.role === 'investor' ? 'hover:bg-ink-700' : 'cursor-default'}`}>
           {burst > 0 && <span key={burst} className="upvote-burst absolute inset-0 rounded-lg border-2 border-gold-400" />}

@@ -16,8 +16,8 @@ export function Avatar({ src, name, size = 10, square = false }) {
 
 const TIERS = {
   1: { bg: 'bg-accent-500', label: 'Verified' },
-  2: { bg: 'bg-gold-500', label: 'Enhanced Verified — identity and metrics reviewed' },
-  3: { bg: 'bg-violet-500', label: 'Institution Verified — vetted at the institutional level' },
+  2: { bg: 'bg-gold-500', label: 'Enhanced — identity and metrics reviewed' },
+  3: { bg: 'bg-violet-500', label: 'Institutional — vetted to institutional standard' },
 };
 export const VerifiedBadge = ({ small, tier = 1 }) => {
   const t = TIERS[Math.min(3, Math.max(1, Number(tier) || 1))];

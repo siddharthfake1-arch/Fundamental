@@ -31,7 +31,7 @@ export default function Pulse() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="h-display text-2xl flex items-center gap-2"><Activity className="w-6 h-6 text-gold-400" /> Market Pulse</h1>
-          <p className="text-sm text-mist-400 mt-1">Live intelligence from the Fundamental ecosystem — aggregate signals only, never individual startup data.</p>
+          <p className="text-sm text-mist-400 mt-1">Live signals from across Fundamental — aggregate trends only, never individual startup data.</p>
         </div>
         <input className="input !w-56" placeholder="Search sectors…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
@@ -51,7 +51,7 @@ export default function Pulse() {
             <Flame className="w-4 h-4 text-orange-400" />
             <span className="section-title !text-orange-400">Sector Heat</span>
           </div>
-          <p className="text-xs text-mist-500 mb-4">Composite of investor conviction, pipeline adds, views and open rounds.</p>
+          <p className="text-xs text-mist-500 mb-4">A composite of investor conviction, pipeline adds, views, and open rounds.</p>
           <div className="space-y-3.5">
             {d.sectors.filter(s => match(s.sector)).map((s, i) => (
               <div key={s.sector} className="flex items-center gap-3">
@@ -72,7 +72,7 @@ export default function Pulse() {
             <TrendingUp className="w-4 h-4 text-emerald-400" />
             <span className="section-title !text-emerald-400">Emerging Themes</span>
           </div>
-          <p className="text-xs text-mist-500 mb-4">Categories with the fastest-growing companies right now.</p>
+          <p className="text-xs text-mist-500 mb-4">Sectors with the fastest-growing startups right now.</p>
           <div className="space-y-3">
             {d.emerging.filter(s => match(s.sector)).map(s => (
               <div key={s.sector} className="flex items-center justify-between bg-ink-850 border border-ink-700/50 rounded-xl px-4 py-3">
@@ -88,7 +88,7 @@ export default function Pulse() {
         {/* Investor interest */}
         <div className="card p-5">
           <span className="section-title">Investor Interest · 30d</span>
-          <p className="text-xs text-mist-500 mt-1 mb-4">Conviction votes + pipeline adds by sector.</p>
+          <p className="text-xs text-mist-500 mt-1 mb-4">Conviction votes and pipeline adds by sector.</p>
           <div className="space-y-3">
             {[...d.sectors].filter(s => match(s.sector)).sort((a, b) => (b.pipeline_adds_30d + b.upvotes_30d) - (a.pipeline_adds_30d + a.upvotes_30d)).slice(0, 6).map(s => (
               <div key={s.sector} className="flex items-center gap-3">
@@ -103,7 +103,7 @@ export default function Pulse() {
         {/* Stage composition */}
         <div className="card p-5">
           <span className="section-title">Stage Composition</span>
-          <p className="text-xs text-mist-500 mt-1 mb-4">Where the ecosystem sits in its lifecycle.</p>
+          <p className="text-xs text-mist-500 mt-1 mb-4">Where the ecosystem sits across the funding lifecycle.</p>
           <div className="space-y-3">
             {d.stages.map(s => (
               <div key={s.stage} className="flex items-center gap-3">
@@ -121,7 +121,7 @@ export default function Pulse() {
             <Building2 className="w-4 h-4 text-gold-400" />
             <span className="section-title">Geography</span>
           </div>
-          <p className="text-xs text-mist-500 mt-1 mb-4">Where listed startups are building.</p>
+          <p className="text-xs text-mist-500 mt-1 mb-4">Where listed startups are based.</p>
           <div className="space-y-3">
             {d.cities.map(c => (
               <div key={c.city} className="flex items-center gap-3">

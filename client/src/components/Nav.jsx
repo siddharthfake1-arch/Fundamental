@@ -87,12 +87,12 @@ export default function Nav() {
                   <button className="w-full text-left nav-link block" onClick={() => { setMenuOpen(false); nav(`/profile/${user.id}`); }}>View profile</button>
                 )}
                 <button className="w-full text-left nav-link block" onClick={() => { setMenuOpen(false); nav('/settings'); }}>Settings</button>
-                <button className="w-full text-left nav-link block text-red-300 hover:text-red-200" onClick={async () => { await logout(); nav('/'); }}>Log out</button>
+                <button className="w-full text-left nav-link block text-red-300 hover:text-red-200" onClick={async () => { await logout(); nav('/'); }}>Sign out</button>
               </div>
             )}
           </div>
 
-          <button className="lg:hidden nav-link !px-2.5" onClick={() => setMobileOpen(o => !o)} aria-label="Menu">
+          <button className="lg:hidden nav-link !px-2.5" onClick={() => setMobileOpen(o => !o)} aria-label="Toggle menu">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" d={mobileOpen ? 'M6 18L18 6M6 6l12 12' : 'M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5'} /></svg>
           </button>
         </div>

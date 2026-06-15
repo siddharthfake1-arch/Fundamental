@@ -66,7 +66,7 @@ function FounderDash() {
           {d.interested_investors?.length > 0 && (
             <div className="card p-5">
               <span className="section-title">Investors interested in you</span>
-              <div className="text-xs text-mist-500 mt-1">These investors expressed interest. Reach out while it's warm.</div>
+              <div className="text-xs text-mist-500 mt-1">These investors signaled interest — reach out while it's fresh.</div>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
                 {d.interested_investors.map(v => (
                   <div key={v.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
@@ -111,7 +111,7 @@ function FounderDash() {
                   );
                 })}
               </div>
-              <div className="text-xs text-mist-400 mt-4">Update your raising status in <Link to="/settings?tab=startup" className="text-gold-300">Startup settings</Link>.</div>
+              <div className="text-xs text-mist-400 mt-4">Update your raise status in <Link to="/settings?tab=startup" className="text-gold-300">Startup settings</Link>.</div>
             </div>
 
             {/* Pending access requests */}
@@ -157,7 +157,7 @@ function FounderDash() {
               </div>
               <div className="card p-5">
                 <span className="section-title">Data room engagement</span>
-                <div className="text-xs text-mist-500 mt-1">Which documents investors open.</div>
+                <div className="text-xs text-mist-500 mt-1">Which documents investors are opening.</div>
                 {an.docs.length === 0 ? <div className="text-sm text-mist-500 mt-3">No documents yet.</div> : (
                   <div className="space-y-2 mt-3">
                     {an.docs.map(doc => (
@@ -213,20 +213,20 @@ function InvestorDash() {
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         <Stat label="Saved startups" value={d.watchlist.length} sub="In your pipeline" />
         <Stat label="Requested access" value={d.requested.length} sub="Data room requests" />
-        <Stat label="Approved" value={d.requested.filter(r => r.status === 'approved').length} sub="Documents unlocked" />
+        <Stat label="Approved" value={d.requested.filter(r => r.status === 'approved').length} sub="Data rooms unlocked" />
         <Stat label="Active conversations" value={d.active_conversations} />
         <Stat label="Interests sent" value={d.interests_count ?? 0} sub="Founders notified" />
         <Stat label="Shared with you" value={d.shared_count ?? 0} sub="By co-investors" />
       </div>
       {d.shared_count > 0 && (
-        <div className="text-xs text-mist-400 -mt-2">Co-investors shared {d.shared_count} deal{d.shared_count !== 1 ? 's' : ''} with you — find them in your <Link to="/watchlist" className="text-gold-300 hover:text-gold-200">Pipeline →</Link></div>
+        <div className="text-xs text-mist-400 -mt-2">Co-investors shared {d.shared_count} deal{d.shared_count !== 1 ? 's' : ''} with you — find {d.shared_count !== 1 ? 'them' : 'it'} in your <Link to="/watchlist" className="text-gold-300 hover:text-gold-200">Pipeline →</Link></div>
       )}
 
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="card p-5">
           <div className="flex items-center justify-between">
             <span className="section-title">Watchlist</span>
-            <Link to="/watchlist" className="text-xs text-gold-300 hover:text-gold-200">Open watchlist →</Link>
+            <Link to="/watchlist" className="text-xs text-gold-300 hover:text-gold-200">Open pipeline →</Link>
           </div>
           {d.watchlist.length === 0 ? <div className="text-sm text-mist-500 mt-3">Save startups from Discover to track them here.</div> : (
             <div className="space-y-2 mt-3">
@@ -266,7 +266,7 @@ function InvestorDash() {
       <div className="card p-5">
         <span className="section-title">Suggested startups</span>
         <div className="text-xs text-mist-500 mt-1">Matched to your sector and stage focus.</div>
-        {d.suggested.length === 0 ? <div className="text-sm text-mist-500 mt-3">Nothing new to suggest right now.</div> : (
+        {d.suggested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No new suggestions right now.</div> : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
             {d.suggested.map(s => (
               <Link key={s.id} to={`/startup/${s.id}`} className="bg-ink-850 border border-ink-700/60 rounded-xl p-4 hover:border-gold-500/40 transition-colors">

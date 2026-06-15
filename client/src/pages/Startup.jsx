@@ -175,17 +175,17 @@ export default function Startup() {
       </CoverHero>
 
       {/* ---- Section 1: 12-Minute Pitch ---- */}
-      <Section id="pitch" title="Section 1 — The 12-Minute Pitch">
+      <Section id="pitch" title="Section 1 — The 12-minute pitch">
         {s.video_url ? (
           <VideoPlayer src={s.video_url} chapters={s.video_chapters} views={s.video_views}
             onFirstPlay={() => api.post(`/api/startups/${s.id}/video-view`).catch(() => {})} />
         ) : (
-          <Empty title="Pitch not uploaded yet" sub="This startup hasn't published its 12-minute pitch." />
+          <Empty title="Pitch not published yet" sub="This startup hasn't published its 12-minute pitch." />
         )}
       </Section>
 
       {/* ---- Section 2: Executive Summary ---- */}
-      <Section id="summary" title="Section 2 — Executive Summary">
+      <Section id="summary" title="Section 2 — Executive summary">
         {summary.length === 0 ? <div className="text-sm text-mist-500">Not provided yet.</div> : (
           <div className="space-y-5">
             {summary.map(([k, v]) => (
@@ -199,7 +199,7 @@ export default function Startup() {
       </Section>
 
       {/* ---- Section 3: Metrics Dashboard ---- */}
-      <Section id="metrics" title="Section 3 — Metrics Dashboard">
+      <Section id="metrics" title="Section 3 — Metrics dashboard">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {metrics.map(([k, v]) => (
             <div key={k} className="bg-ink-850 border border-ink-700/60 rounded-xl p-3.5">
@@ -208,12 +208,12 @@ export default function Startup() {
             </div>
           ))}
         </div>
-        <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Revenue Trend</div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Revenue trend</div>
         <LineChart data={s.revenue_series} xKey="month" yKey="revenue" format={fmtMoney} />
       </Section>
 
       {/* ---- Section 4: Collateral / Data Room ---- */}
-      <Section id="collateral" title="Section 4 — Collateral · Structured Data Room">
+      <Section id="collateral" title="Section 4 — Collateral · the data room">
         {collateral.length === 0 ? <div className="text-sm text-mist-500">No documents in the data room yet.</div> : (
           <div className="space-y-2.5">
             {collateral.map(c => (
@@ -227,14 +227,14 @@ export default function Startup() {
                 {c.can_view ? (
                   <button className="btn-ghost btn-sm" onClick={async () => {
                     await api.post(`/api/startups/collateral/${c.id}/download`).catch(() => {});
-                    c.file_url ? window.open(c.file_url, '_blank') : toast('Document file not attached yet', 'info');
+                    c.file_url ? window.open(c.file_url, '_blank') : toast('No file attached to this document yet', 'info');
                   }}>View</button>
                 ) : user.role === 'investor' ? (
                   c.my_request === 'pending'
                     ? <span className="chip">Requested</span>
                     : c.my_request === 'rejected'
                       ? <span className="chip-red">Declined</span>
-                      : <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/startups/collateral/${c.id}/request`), 'Access requested — the founder has been notified')}>Request Access</button>
+                      : <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/startups/collateral/${c.id}/request`), 'Access requested — the founder has been notified')}>Request access</button>
                 ) : <span className="chip">Restricted</span>}
                 {user.role === 'investor' && (
                   <button className="text-xs text-mist-500 hover:text-gold-300" title="Add private note on this document"
@@ -247,7 +247,7 @@ export default function Startup() {
         {is_owner && <AccessManager startupId={s.id} onChange={load} />}
         {user.role === 'investor' && notes.length > 0 && (
           <div className="mt-6">
-            <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Your Private Notes <span className="normal-case font-normal">(visible only to you)</span></div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Your private notes <span className="normal-case font-normal">(visible only to you)</span></div>
             <div className="space-y-2">
               {notes.map(n => (
                 <div key={n.id} className="bg-gold-500/5 border border-gold-500/20 rounded-xl px-4 py-3 flex gap-3">
@@ -278,10 +278,10 @@ export default function Startup() {
             {founder.bio && <p className="text-sm text-mist-300 leading-relaxed mt-2.5">{founder.bio}</p>}
             <div className="grid sm:grid-cols-2 gap-3 mt-4">
               {founder.education && <div><div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">Education</div><div className="text-sm text-mist-300 mt-0.5">{founder.education}</div></div>}
-              {founder.experience && <div><div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">Previous Experience</div><div className="text-sm text-mist-300 mt-0.5">{founder.experience}</div></div>}
+              {founder.experience && <div><div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">Previous experience</div><div className="text-sm text-mist-300 mt-0.5">{founder.experience}</div></div>}
             </div>
             <div className="flex gap-2 mt-4 flex-wrap">
-              <Link to={`/profile/${founder.id}`} className="btn-ghost btn-sm">View Founder Profile</Link>
+              <Link to={`/profile/${founder.id}`} className="btn-ghost btn-sm">View founder profile</Link>
               {founder.linkedin && <a href={founder.linkedin} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">LinkedIn ↗</a>}
             </div>
           </div>
@@ -289,7 +289,7 @@ export default function Startup() {
       </Section>
 
       {/* ---- Section 6: Activity & Signals ---- */}
-      <Section id="activity" title="Section 6 — Activity & Signals">
+      <Section id="activity" title="Section 6 — Activity & signals">
         {activity.length === 0 ? <div className="text-sm text-mist-500">No signals yet.</div> : (
           <ol className="relative border-l border-ink-600/70 ml-2 space-y-5">
             {activity.map(a => (
@@ -304,7 +304,7 @@ export default function Startup() {
         )}
         {d.upvote_trend.length > 1 && (
           <div className="mt-6">
-            <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Upvote Trend</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Upvote trend</div>
             <LineChart data={d.upvote_trend} xKey="d" yKey="c" height={100} format={(v) => v + ' ▲'} />
           </div>
         )}
@@ -312,9 +312,9 @@ export default function Startup() {
       </Section>
 
       {/* ---- Founder Updates (investor updates feed) ---- */}
-      <Section id="updates" title="Founder Updates">
+      <Section id="updates" title="Founder updates">
         {d.updates.length === 0 ? (
-          <div className="text-sm text-mist-500">No investor updates yet.{is_owner && ' Post your first one below — startups that update monthly get materially more investor attention.'}</div>
+          <div className="text-sm text-mist-500">No investor updates yet.{is_owner && ' Post your first below — founders who update monthly hold investor attention.'}</div>
         ) : (
           <div className="space-y-4">
             {d.updates.map(u => (
@@ -340,23 +340,23 @@ export default function Startup() {
       </Section>
 
       {/* ---- Section 7: Use of Funds ---- */}
-      <Section id="funds" title="Section 7 — Use of Funds">
+      <Section id="funds" title="Section 7 — Use of funds">
         {(!s.use_of_funds || s.use_of_funds.length === 0) && !s.deployment_timeline ? (
           <div className="text-sm text-mist-500">Not provided yet.</div>
         ) : (
           <div className="space-y-6">
             {s.use_of_funds?.length > 0 && (
               <div>
-                <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-3">Capital Allocation</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-3">Capital allocation</div>
                 <BarBreakdown items={s.use_of_funds} />
               </div>
             )}
             {s.deployment_timeline && s.deployment_timeline !== '—' && (
-              <div><div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-1">Deployment Timeline</div>
+              <div><div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-1">Deployment timeline</div>
                 <p className="text-sm text-mist-200 leading-relaxed">{s.deployment_timeline}</p></div>
             )}
             {s.strategic_objectives && (
-              <div><div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-1">Strategic Objectives</div>
+              <div><div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-1">Strategic objectives</div>
                 <p className="text-sm text-mist-200 leading-relaxed">{s.strategic_objectives}</p></div>
             )}
           </div>
@@ -400,16 +400,16 @@ export default function Startup() {
 
       {shareOpen && <ShareDealModal startup={s} onClose={() => setShareOpen(false)} />}
 
-      <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title={noteDoc ? `Private note — ${noteDoc.title}` : 'Add Private Note'}>
+      <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title={noteDoc ? `Private note — ${noteDoc.title}` : 'Add private note'}>
         <div className="space-y-3">
           <div className="text-xs text-mist-400">Visible only to you. Founders never see private notes.</div>
-          <textarea className="input min-h-[110px]" autoFocus value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Diligence thoughts, follow-ups, reference checks…" />
+          <textarea className="input min-h-[110px]" autoFocus value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Diligence thoughts, follow-ups, reference checks" />
           <button className="btn-primary w-full" disabled={!noteText.trim()} onClick={async () => {
             try {
               await api.post(`/api/startups/${s.id}/notes`, { text: noteText, collateral_id: noteDoc?.id });
               setNoteOpen(false); setNoteText(''); toast('Note saved', 'success'); load();
             } catch (e) { toast(e.message, 'error'); }
-          }}>Save Note</button>
+          }}>Save note</button>
         </div>
       </Modal>
     </div>
@@ -428,7 +428,7 @@ function AccessManager({ startupId, onChange }) {
   };
   return (
     <div className="mt-6">
-      <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Access Requests (Founder Controls)</div>
+      <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Access requests (founder controls)</div>
       <div className="space-y-2">
         {reqs.map(r => (
           <div key={r.id} className="flex items-center gap-3 flex-wrap bg-ink-850 border border-ink-700/60 rounded-xl px-4 py-2.5">
@@ -459,12 +459,12 @@ function UpdateComposer({ startupId, onPosted }) {
   const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
   return (
     <div className="mt-5">
-      {!open ? <button className="btn-primary btn-sm" onClick={() => setOpen(true)}>+ Post Investor Update</button> : (
+      {!open ? <button className="btn-primary btn-sm" onClick={() => setOpen(true)}>+ Post investor update</button> : (
         <div className="card p-4 space-y-3">
           <input className="input" maxLength={120} placeholder="Headline — e.g. October: crossed ₹2Cr MRR" value={f.headline} onChange={set('headline')} />
           <div>
             <textarea className="input min-h-[90px]" maxLength={400} value={f.body} onChange={set('body')}
-              placeholder="What happened, what's next, where you need help. Max 400 characters — investors read every word of short updates." />
+              placeholder="What happened, what's next, and where you need help. 400 characters — keep it tight." />
             <div className={`text-right text-[11px] mt-1 tabular-nums ${f.body.length > 360 ? 'text-amber-400' : 'text-mist-500'}`}>{f.body.length}/400</div>
           </div>
           <div className="grid grid-cols-3 gap-3">
@@ -480,9 +480,9 @@ function UpdateComposer({ startupId, onPosted }) {
                   arr: f.arr ? Number(f.arr) : null, mrr: f.mrr ? Number(f.mrr) : null, growth: f.growth ? Number(f.growth) : null,
                 });
                 setOpen(false); setF({ headline: '', body: '', arr: '', mrr: '', growth: '' });
-                onPosted(); toast('Update published — everyone tracking you was notified', 'success');
+                onPosted(); toast('Update published — your followers have been notified', 'success');
               } catch (e) { toast(e.message, 'error'); }
-            }}>Publish Update</button>
+            }}>Publish update</button>
             <button className="btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
           </div>
         </div>
@@ -535,7 +535,7 @@ function ShareDealModal({ startup, onClose }) {
         ) : (
           <>
             <select className="input" value={to} onChange={(e) => setTo(e.target.value)}>
-              <option value="">Choose a co-investor…</option>
+              <option value="">Choose a co-investor</option>
               {conns.map(c => <option key={c.user_id} value={c.user_id}>{c.name}</option>)}
             </select>
             <textarea className="input min-h-[80px]" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Why this one? (optional)" />
@@ -543,7 +543,7 @@ function ShareDealModal({ startup, onClose }) {
               setBusy(true);
               try { await api.post(`/api/startups/${startup.id}/share-deal`, { to_id: Number(to), note }); toast('Deal shared', 'success'); onClose(); }
               catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
-            }}>Share Deal</button>
+            }}>Share deal</button>
           </>
         )}
       </div>
@@ -558,7 +558,7 @@ function PostSignal({ startupId, onPosted }) {
   const toast = useToast();
   return (
     <div className="mt-5">
-      {!open ? <button className="btn-ghost btn-sm" onClick={() => setOpen(true)}>+ Post a Signal</button> : (
+      {!open ? <button className="btn-ghost btn-sm" onClick={() => setOpen(true)}>+ Post a signal</button> : (
         <div className="card p-4 space-y-3">
           <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
             {['Round Opened', 'Round Closed', 'Milestone Achieved', 'Hiring Announcement'].map(t => <option key={t}>{t}</option>)}

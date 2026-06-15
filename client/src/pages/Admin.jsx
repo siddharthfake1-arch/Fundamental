@@ -9,11 +9,11 @@ export default function Admin() {
   const [tab, setTab] = useState('analytics');
   if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
-  const tabs = [['analytics', 'Platform Analytics'], ['users', 'Verify Users'], ['startups', 'Verify Startups'], ['content', 'Moderate Content'], ['reports', 'Reports']];
+  const tabs = [['analytics', 'Platform analytics'], ['users', 'Verify users'], ['startups', 'Verify startups'], ['content', 'Moderate content'], ['reports', 'Reports']];
   return (
     <div className="fade-in">
-      <h1 className="h-display text-2xl mb-1">Admin Panel</h1>
-      <p className="text-sm text-mist-400 mb-5">Verification, moderation and platform health.</p>
+      <h1 className="h-display text-2xl mb-1">Admin</h1>
+      <p className="text-sm text-mist-400 mb-5">Verification, moderation, and platform health.</p>
       <div className="flex gap-1 mb-6 overflow-x-auto rounded-xl bg-ink-850 border border-ink-600/60 p-1 w-fit max-w-full">
         {tabs.map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)}
@@ -36,13 +36,13 @@ function Analytics() {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Total Users" value={d.users} sub={`${d.founders} founders · ${d.investors} investors`} />
-        <Stat label="Startups Listed" value={d.startups} />
-        <Stat label="Connections Made" value={d.connections} />
-        <Stat label="Open Reports" value={d.open_reports} />
+        <Stat label="Total users" value={d.users} sub={`${d.founders} founders · ${d.investors} investors`} />
+        <Stat label="Startups listed" value={d.startups} />
+        <Stat label="Connections made" value={d.connections} />
+        <Stat label="Open reports" value={d.open_reports} />
         <Stat label="Posts" value={d.posts} />
-        <Stat label="Messages Sent" value={d.messages} />
-        <Stat label="Total Upvotes" value={d.upvotes} />
+        <Stat label="Messages sent" value={d.messages} />
+        <Stat label="Total upvotes" value={d.upvotes} />
       </div>
       {d.signups_trend?.length > 1 && (
         <div className="card p-5">
@@ -91,7 +91,7 @@ function Users() {
                     Tier ↻
                   </button>
                   <button className="btn-danger btn-sm" onClick={async () => { await api.post(`/api/admin/flag-user/${u.id}`); load(); }}>
-                    {u.flagged ? 'Unflag' : 'Flag Fraud'}
+                    {u.flagged ? 'Unflag' : 'Flag for fraud'}
                   </button>
                 </div>
               </td>
@@ -155,7 +155,7 @@ function Content() {
   const load = () => api.get('/api/admin/posts').then(d => setPosts(d.posts)).catch(() => {});
   useEffect(load, []);
   if (!posts) return <Spinner />;
-  return posts.length === 0 ? <Empty title="No content" /> : (
+  return posts.length === 0 ? <Empty title="No content to review" /> : (
     <div className="space-y-3 max-w-3xl">
       {posts.map(p => (
         <div key={p.id} className={`card p-4 flex gap-4 items-start ${p.removed ? 'opacity-50' : ''}`}>
@@ -184,7 +184,7 @@ function Reports() {
   const load = () => api.get('/api/admin/reports').then(d => setReports(d.reports)).catch(() => {});
   useEffect(load, []);
   if (!reports) return <Spinner />;
-  return reports.length === 0 ? <Empty title="No reports" sub="User reports of fraudulent or inappropriate activity land here." /> : (
+  return reports.length === 0 ? <Empty title="No reports" sub="User reports of fraudulent or inappropriate activity appear here." /> : (
     <div className="space-y-3 max-w-3xl">
       {reports.map(r => (
         <div key={r.id} className="card p-4 flex gap-4 items-start">
