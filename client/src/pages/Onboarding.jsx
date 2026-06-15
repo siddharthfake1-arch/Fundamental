@@ -30,7 +30,7 @@ function Shell({ step, total, title, sub, children, completion }) {
         <Logo />
         {completion != null && (
           <div className="text-right">
-            <div className="text-[11px] text-mist-400 uppercase tracking-wider font-semibold">Profile Completion</div>
+            <div className="text-[11px] text-mist-400 uppercase tracking-wider font-semibold">Profile completion</div>
             <div className="flex items-center gap-2 mt-1">
               <div className="w-28 h-1.5 bg-ink-700 rounded-full overflow-hidden"><div className="h-full bg-gold-400 transition-all" style={{ width: completion + '%' }} /></div>
               <span className="text-xs font-bold text-gold-300 tabular-nums">{completion}%</span>
@@ -65,19 +65,19 @@ function AboutYouStep({ me, setMe }) {
   return (
     <div className="space-y-4">
       <div className="grid sm:grid-cols-2 gap-4">
-        <FileUpload label="Profile Photo" accept="image/*" currentUrl={me.photo} hint="Shown across the platform"
+        <FileUpload label="Profile photo" accept="image/*" currentUrl={me.photo} hint="Shown across Fundamental"
           onUploaded={(d) => setMe(x => ({ ...x, photo: d.url }))} />
-        <FileUpload label="Cover Image" accept="image/*" currentUrl={me.cover} hint="Banner on your profile page"
+        <FileUpload label="Cover image" accept="image/*" currentUrl={me.cover} hint="Banner on your profile"
           onUploaded={(d) => setMe(x => ({ ...x, cover: d.url }))} />
       </div>
-      <Field label="Headline"><input className="input" value={me.headline} onChange={set('headline')} placeholder="e.g. Co-founder & CEO, PayLane" /></Field>
-      <Field label="Bio"><textarea className="input min-h-[100px]" value={me.bio} onChange={set('bio')} placeholder="Your story in a few sentences — investors and founders read this on your profile." /></Field>
+      <Field label="Headline"><input className="input" value={me.headline} onChange={set('headline')} placeholder="e.g. Co-founder and CEO, PayLane" /></Field>
+      <Field label="Bio"><textarea className="input min-h-[100px]" value={me.bio} onChange={set('bio')} placeholder="A few sentences on who you are. Investors and founders read this on your profile." /></Field>
       <div className="grid sm:grid-cols-2 gap-4">
         <Field label="City"><input className="input" value={me.city} onChange={set('city')} placeholder="e.g. Riyadh, Bengaluru, London…" /></Field>
         <Field label="LinkedIn URL"><input className="input" value={me.linkedin} onChange={set('linkedin')} placeholder="https://linkedin.com/in/you" /></Field>
       </div>
       <Field label="Education"><input className="input" value={me.education} onChange={set('education')} placeholder="e.g. B.Tech CS, IIT Bombay" /></Field>
-      <Field label="Experience"><input className="input" value={me.experience} onChange={set('experience')} placeholder="e.g. ex-Product at Stripe; 2x founder" /></Field>
+      <Field label="Experience"><input className="input" value={me.experience} onChange={set('experience')} placeholder="e.g. ex-Product at Stripe; two-time founder" /></Field>
     </div>
   );
 }
@@ -150,15 +150,15 @@ function FounderFlow({ user, refresh }) {
       if (s.name) await api.post('/api/startups/mine', startupPayload());
       localStorage.setItem(draftKey, JSON.stringify({ step, docs }));
       if (!silent) toast(s.name
-        ? 'Progress saved — you can sign out and continue any time. We\'ll bring you right back here.'
-        : 'Profile details saved. Add your startup name to save the startup draft too.', 'success');
+        ? 'Progress saved. Sign out any time — you\'ll pick up where you left off.'
+        : 'Profile saved. Add a startup name to save your startup draft too.', 'success');
     } catch (e) { if (!silent) toast(e.message, 'error'); }
   };
 
   const finish = async () => {
-    if (!s.name.trim()) return toast('Your startup needs a name.', 'error');
-    if (!s.one_liner.trim()) return toast('The one-line description is required — it\'s how investors find you.', 'error');
-    if (!s.video_url) return toast('The 12-minute pitch video is mandatory — your startup will not be listed without it.', 'error');
+    if (!s.name.trim()) return toast('Add a startup name to continue.', 'error');
+    if (!s.one_liner.trim()) return toast('Add a one-line description — it\'s how investors find you.', 'error');
+    if (!s.video_url) return toast('The 12-minute pitch is required. Your startup won\'t be listed without it.', 'error');
     setBusy(true);
     try {
       await api.put('/api/users/me', normalizeMe(me));
@@ -167,7 +167,7 @@ function FounderFlow({ user, refresh }) {
       await api.put('/api/users/me', { onboarded: 1 });
       localStorage.removeItem(draftKey);
       await refresh();
-      toast('Welcome to Fundamental — your startup is live.', 'success');
+      toast('Welcome to Fundamental. Your startup is live.', 'success');
       nav('/dashboard');
     } catch (e) {
       toast(e.message, 'error');
@@ -179,17 +179,17 @@ function FounderFlow({ user, refresh }) {
 
   const steps = [
     {
-      title: 'About you', sub: 'All optional — this is your personal profile, shown alongside your startup. You can edit everything later in Settings.',
+      title: 'About you', sub: 'All optional. This is your personal profile, shown alongside your startup. You can edit it later in Settings.',
       valid: true,
       body: <AboutYouStep me={me} setMe={setMe} />,
     },
     {
-      title: 'Startup basics', sub: 'This becomes your public profile in the Discover marketplace. Only the name and one-line description are required.',
+      title: 'Startup basics', sub: 'This becomes your public profile in Discover. Only the name and one-line description are required.',
       valid: !!s.name.trim(),
       body: (
         <div className="space-y-4">
-          <Field label="Startup Name"><input className="input" value={s.name} onChange={set('name')} placeholder="e.g. PayLane" /></Field>
-          <Field label="One-line Description" hint="required"><input className="input" maxLength={140} value={s.one_liner} onChange={set('one_liner')} placeholder="What you do, in one sharp sentence" /></Field>
+          <Field label="Startup name"><input className="input" value={s.name} onChange={set('name')} placeholder="e.g. PayLane" /></Field>
+          <Field label="One-line description" hint="required"><input className="input" maxLength={140} value={s.one_liner} onChange={set('one_liner')} placeholder="What you do, in one sentence" /></Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label={<>Sector<Optional /></>}>
               <select className="input" value={s.sector} onChange={set('sector')}><option value="">Select…</option>{SECTORS.map(x => <option key={x}>{x}</option>)}</select>
@@ -200,49 +200,49 @@ function FounderFlow({ user, refresh }) {
             <Field label={<>Stage<Optional /></>}>
               <select className="input" value={s.stage} onChange={set('stage')}><option value="">Select…</option>{STAGES.map(x => <option key={x}>{x}</option>)}</select>
             </Field>
-            <Field label={<>Founded Year<Optional /></>}><input type="number" className="input" value={s.founded_year} onChange={set('founded_year')} placeholder={String(new Date().getFullYear())} /></Field>
+            <Field label={<>Founded year<Optional /></>}><input type="number" className="input" value={s.founded_year} onChange={set('founded_year')} placeholder={String(new Date().getFullYear())} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label={<>City<Optional /></>}><input className="input" value={s.city} onChange={set('city')} placeholder="e.g. Bengaluru, Riyadh, London…" /></Field>
-            <Field label={<>Raising Amount<Optional /></>}><input className="input" value={s.raising_amount} onChange={set('raising_amount')} placeholder="e.g. $3M" /></Field>
+            <Field label={<>Raising amount<Optional /></>}><input className="input" value={s.raising_amount} onChange={set('raising_amount')} placeholder="e.g. $3M" /></Field>
           </div>
-          <Field label="Raising Status">
+          <Field label="Raising status">
             <select className="input" value={s.raising_status} onChange={set('raising_status')}>
               {['Actively Raising', 'Round Closing', 'Not Raising'].map(x => <option key={x}>{x}</option>)}
             </select>
           </Field>
           <div className="grid sm:grid-cols-2 gap-4">
-            <FileUpload label="Logo (optional)" accept="image/*" currentUrl={s.logo} hint="PNG, JPG or SVG"
+            <FileUpload label="Logo (optional)" accept="image/*" currentUrl={s.logo} hint="PNG, JPG, or SVG"
               onUploaded={(d) => setS(x => ({ ...x, logo: d.url }))} />
-            <FileUpload label="Cover Image (optional)" accept="image/*" currentUrl={s.cover} hint="Banner on your startup page"
+            <FileUpload label="Cover image (optional)" accept="image/*" currentUrl={s.cover} hint="Banner on your startup page"
               onUploaded={(d) => setS(x => ({ ...x, cover: d.url }))} />
           </div>
         </div>
       ),
     },
     {
-      title: 'Your story', sub: 'All optional — these power your startup page sections and the AI investment memo investors generate.',
+      title: 'Your story', sub: 'All optional. These fill out your startup page and the AI memo investors generate.',
       valid: true,
       body: (
         <div className="space-y-4">
-          <Field label={<>The Problem<Optional /></>}><textarea className="input min-h-[80px]" value={s.problem} onChange={set('problem')} placeholder="What's broken, and for whom?" /></Field>
-          <Field label={<>Your Solution<Optional /></>}><textarea className="input min-h-[80px]" value={s.solution} onChange={set('solution')} placeholder="How you fix it." /></Field>
-          <Field label={<>Business Model<Optional /></>}><textarea className="input min-h-[64px]" value={s.business_model} onChange={set('business_model')} placeholder="How you make money." /></Field>
-          <Field label={<>Market Size<Optional /></>}><textarea className="input min-h-[64px]" value={s.market_size} onChange={set('market_size')} placeholder="TAM/SAM and why now." /></Field>
-          <Field label={<>Competitive Advantage<Optional /></>}><textarea className="input min-h-[64px]" value={s.competitive_advantage} onChange={set('competitive_advantage')} placeholder="Your moat." /></Field>
+          <Field label={<>The problem<Optional /></>}><textarea className="input min-h-[80px]" value={s.problem} onChange={set('problem')} placeholder="What's broken, and for whom?" /></Field>
+          <Field label={<>Your solution<Optional /></>}><textarea className="input min-h-[80px]" value={s.solution} onChange={set('solution')} placeholder="How you fix it." /></Field>
+          <Field label={<>Business model<Optional /></>}><textarea className="input min-h-[64px]" value={s.business_model} onChange={set('business_model')} placeholder="How you make money." /></Field>
+          <Field label={<>Market size<Optional /></>}><textarea className="input min-h-[64px]" value={s.market_size} onChange={set('market_size')} placeholder="TAM and SAM, and why now." /></Field>
+          <Field label={<>Competitive advantage<Optional /></>}><textarea className="input min-h-[64px]" value={s.competitive_advantage} onChange={set('competitive_advantage')} placeholder="Your moat." /></Field>
         </div>
       ),
     },
     {
-      title: 'Metrics', sub: 'All optional — leave blank if pre-revenue. Real numbers raise your Fundamental Score and investor trust.',
+      title: 'Metrics', sub: 'All optional. Leave blank if pre-revenue. Real numbers raise your Fundamental Score and investor confidence.',
       valid: true,
       body: (
         <div className="grid grid-cols-2 gap-4">
           <Field label="ARR (USD)"><input type="number" className="input" value={s.arr} onChange={set('arr')} placeholder="0" /></Field>
           <Field label="MRR (USD)"><input type="number" className="input" value={s.mrr} onChange={set('mrr')} placeholder="0" /></Field>
           <Field label="Growth % (MoM)"><input type="number" className="input" value={s.growth} onChange={set('growth')} placeholder="0" /></Field>
-          <Field label="Gross Margin %"><input type="number" className="input" value={s.gross_margin} onChange={set('gross_margin')} placeholder="0" /></Field>
-          <Field label="Monthly Burn (USD)"><input type="number" className="input" value={s.burn} onChange={set('burn')} placeholder="0" /></Field>
+          <Field label="Gross margin %"><input type="number" className="input" value={s.gross_margin} onChange={set('gross_margin')} placeholder="0" /></Field>
+          <Field label="Monthly burn (USD)"><input type="number" className="input" value={s.burn} onChange={set('burn')} placeholder="0" /></Field>
           <Field label="Runway (months)"><input type="number" className="input" value={s.runway} onChange={set('runway')} placeholder="0" /></Field>
           <Field label="CAC (USD)"><input type="number" className="input" value={s.cac} onChange={set('cac')} placeholder="0" /></Field>
           <Field label="LTV (USD)"><input type="number" className="input" value={s.ltv} onChange={set('ltv')} placeholder="0" /></Field>
@@ -250,30 +250,30 @@ function FounderFlow({ user, refresh }) {
       ),
     },
     {
-      title: 'The round', sub: 'All optional — context investors see in the "Use of Funds" and round sections.',
+      title: 'The round', sub: 'All optional. Context investors see in the use of funds and round sections.',
       valid: true,
       body: (
         <div className="space-y-4">
-          <Field label={<>Round Details<Optional /></>}><textarea className="input min-h-[80px]" value={s.round_details} onChange={set('round_details')} placeholder="e.g. Raising $3M seed at $15M cap; $1.2M committed." /></Field>
-          <Field label={<>Deployment Timeline<Optional /></>}><input className="input" value={s.deployment_timeline} onChange={set('deployment_timeline')} placeholder="e.g. 18 months to Series A metrics" /></Field>
-          <Field label={<>Strategic Objectives<Optional /></>}><textarea className="input min-h-[64px]" value={s.strategic_objectives} onChange={set('strategic_objectives')} placeholder="What this round unlocks." /></Field>
+          <Field label={<>Round details<Optional /></>}><textarea className="input min-h-[80px]" value={s.round_details} onChange={set('round_details')} placeholder="e.g. Raising $3M seed at $15M cap; $1.2M committed." /></Field>
+          <Field label={<>Deployment timeline<Optional /></>}><input className="input" value={s.deployment_timeline} onChange={set('deployment_timeline')} placeholder="e.g. 18 months to Series A metrics" /></Field>
+          <Field label={<>Strategic objectives<Optional /></>}><textarea className="input min-h-[64px]" value={s.strategic_objectives} onChange={set('strategic_objectives')} placeholder="What this round unlocks." /></Field>
         </div>
       ),
     },
     {
-      title: 'Upload your 12-minute pitch', sub: 'Mandatory. Every startup on Fundamental opens with a video pitch — it is the first thing investors see.',
+      title: 'Upload your 12-minute pitch', sub: 'Required. Every startup on Fundamental opens with a video pitch — the first thing investors see.',
       valid: true,
       body: (
         <div className="space-y-4">
           <div className="card p-4 border-gold-500/30 bg-gold-500/5 text-sm text-mist-300 leading-relaxed">
-            <span className="font-semibold text-gold-300">The 12-minute format:</span> introduction & team → problem → solution → product demo → market & business model → traction → the round. Maximum length 12 minutes; your startup is not listed in Discover without it.
+            <span className="font-semibold text-gold-300">The 12-minute format:</span> introduction and team → problem → solution → product demo → market and business model → traction → the round. Twelve minutes maximum. Your startup is not listed in Discover without it.
           </div>
           <VideoStep s={s} setS={setS} toast={toast} />
         </div>
       ),
     },
     {
-      title: 'Initial collateral', sub: 'Optional now — add your deck, financial model or data room documents. You control access per document.',
+      title: 'Initial collateral', sub: 'Optional for now. Add your deck, financial model, or data room documents. You control access per document.',
       valid: true,
       body: <CollateralStep docs={docs} setDocs={setDocs} />,
     },
@@ -288,12 +288,12 @@ function FounderFlow({ user, refresh }) {
         {step > 0 && <button className="btn-ghost" onClick={() => setStep(step - 1)}>Back</button>}
         {step < steps.length - 1
           ? <button className="btn-primary flex-1" disabled={!cur.valid} onClick={() => { setStep(step + 1); saveDraft(true); }}>Continue</button>
-          : <button className="btn-primary flex-1" disabled={busy} onClick={finish}>{busy ? 'Launching…' : 'Launch My Startup'}</button>}
+          : <button className="btn-primary flex-1" disabled={busy} onClick={finish}>{busy ? 'Launching…' : 'Launch my startup'}</button>}
       </div>
       <button className="btn-ghost w-full mt-3 !text-mist-400" onClick={() => saveDraft()}>
-        Save progress & finish later
+        Save and finish later
       </button>
-      <p className="text-[11px] text-mist-500 text-center mt-2">Everything except the one-line description and the pitch video is optional — you can fill in the rest any time from Settings.</p>
+      <p className="text-[11px] text-mist-500 text-center mt-2">Only the one-line description and the pitch video are required. You can add the rest any time from Settings.</p>
     </Shell>
   );
 }

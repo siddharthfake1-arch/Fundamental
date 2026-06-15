@@ -20,7 +20,7 @@ function rateLimit({ windowMs, max, name }) {
     b.count++;
     if (b.count > max) {
       res.setHeader('Retry-After', Math.ceil((b.reset - now) / 1000));
-      return res.status(429).json({ error: 'Too many requests — please slow down and try again shortly.' });
+      return res.status(429).json({ error: 'Too many requests. Wait a moment, then try again.' });
     }
     next();
   };
@@ -49,7 +49,7 @@ function validateUrlFields(body, fields) {
   for (const f of fields) {
     if (body[f] === undefined) continue;
     const clean = safeUrl(body[f]);
-    if (clean === null) return `"${f}" must be a valid http(s) link or an uploaded file`;
+    if (clean === null) return `Enter a valid http or https link for "${f}", or upload a file.`;
     body[f] = clean;
   }
   return null;
@@ -61,7 +61,7 @@ function validateNumericFields(body, fields) {
     if (body[f] === undefined) continue;
     if (body[f] === null || body[f] === '') { body[f] = undefined; continue; }
     const n = Number(body[f]);
-    if (!Number.isFinite(n)) return `"${f}" must be a number`;
+    if (!Number.isFinite(n)) return `Enter a number for "${f}".`;
     body[f] = n;
   }
   return null;
@@ -84,7 +84,7 @@ function csrfOriginCheck(req, res, next) {
   try {
     if (new URL(origin).host === req.headers.host) return next();
   } catch { /* malformed origin */ }
-  return res.status(403).json({ error: 'Cross-origin request rejected' });
+  return res.status(403).json({ error: 'This request was blocked for security reasons. Refresh the page and try again.' });
 }
 
 // ---- Security headers ----

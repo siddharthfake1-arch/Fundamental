@@ -57,7 +57,7 @@ export default function Messages() {
   return (
     <div className="fade-in">
       <h1 className="h-display text-2xl mb-1">Messages</h1>
-      <p className="text-sm text-mist-400 mb-5">Professional correspondence only. Conversations open after a connection is accepted.</p>
+      <p className="text-sm text-mist-400 mb-5">Conversations open once a connection is accepted.</p>
 
       <div className="card overflow-hidden grid md:grid-cols-[320px_1fr]" style={{ height: 'calc(100vh - 220px)', minHeight: 420 }}>
         {/* Left panel */}
@@ -67,7 +67,7 @@ export default function Messages() {
           </div>
           <div className="flex-1 overflow-y-auto">
             {filtered.length === 0 ? (
-              <div className="p-6 text-center text-sm text-mist-500">No conversations yet.<br />Connect with someone in the <Link to="/network" className="text-gold-300">Network</Link> to start.</div>
+              <div className="p-6 text-center text-sm text-mist-500">No conversations yet.<br />Connect with someone in the <Link to="/network" className="text-gold-300">Network</Link> to start one.</div>
             ) : filtered.map(c => (
               <button key={c.id} onClick={() => setParams({ c: c.id })}
                 className={`w-full flex items-center gap-3 px-4 py-3.5 text-left border-b border-ink-700/40 transition-colors ${String(c.id) === active ? 'bg-ink-800' : 'hover:bg-ink-850'}`}>
@@ -95,7 +95,7 @@ export default function Messages() {
               <div className="m-auto text-center p-8">
                 <div className="text-3xl text-mist-600 mb-3">✉</div>
                 <div className="h-display">Select a conversation</div>
-                <div className="text-sm text-mist-400 mt-1">Deal talk lives here — mark stages as you progress.</div>
+                <div className="text-sm text-mist-400 mt-1">Track each deal by stage as it progresses.</div>
               </div>
             )
           ) : (
@@ -139,7 +139,7 @@ export default function Messages() {
               </div>
 
               <div className="border-t border-ink-700/60 p-3">
-                {attach && <div className="text-xs text-emerald-300 mb-2">📎 File attached — will send with your message <button className="text-mist-500 ml-1" onClick={() => setAttach('')}>✕</button></div>}
+                {attach && <div className="text-xs text-emerald-300 mb-2">📎 File attached — sends with your message <button className="text-mist-500 ml-1" onClick={() => setAttach('')}>✕</button></div>}
                 <div className="flex gap-2 items-end">
                   <label className="btn-ghost btn-sm !px-2.5 cursor-pointer" title="Attach file">
                     <input type="file" className="hidden" onChange={async (e) => {

@@ -91,7 +91,7 @@ router.get('/saved-searches', (req, res) => {
 });
 router.post('/saved-searches', (req, res) => {
   const { name, params } = req.body;
-  if (!name) return res.status(400).json({ error: 'Name your search' });
+  if (!name) return res.status(400).json({ error: 'Give your saved search a name.' });
   db.prepare('INSERT INTO saved_searches (user_id, name, params) VALUES (?,?,?)')
     .run(req.user.id, name, JSON.stringify(params || {}));
   res.json({ ok: true });
@@ -121,7 +121,7 @@ function fireDealAlerts(s) {
       const rev = s.arr || (s.mrr || 0) * 12;
       if (!(rev >= lo && rev < hi)) continue;
     }
-    notify(row.user_id, 'Deal Alert', `New match for "${row.name}": ${s.name} (${s.sector} · ${s.stage}) just listed`, `/startup/${s.id}`);
+    notify(row.user_id, 'Deal Alert', `New match for your saved search "${row.name}": ${s.name} (${s.sector} · ${s.stage}) just listed.`, `/startup/${s.id}`);
   }
 }
 
@@ -157,7 +157,7 @@ router.post('/mine', requireRole('founder'), (req, res) => {
     }
     return res.json({ id: existing.id });
   }
-  if (!data.name) return res.status(400).json({ error: 'Startup name is required' });
+  if (!data.name) return res.status(400).json({ error: 'Enter your startup name to continue.' });
   const cols = Object.keys(data);
   const info = db.prepare(`INSERT INTO startups (founder_id, ${cols.join(',')}) VALUES (?, ${cols.map(() => '?').join(',')})`)
     .run(req.user.id, ...cols.map(k => data[k]));
@@ -186,14 +186,14 @@ router.get('/shared-with-me', requireRole('investor'), (req, res) => {
 // ---- Full startup profile ----
 router.get('/:id', (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  if (!s) return res.status(404).json({ error: 'We could not find this startup.' });
   const isOwner = s.founder_id === req.user.id;
   if (!isOwner) {
     db.prepare('UPDATE startups SET views = views + 1 WHERE id=?').run(s.id);
     db.prepare('INSERT INTO startup_views (user_id, startup_id) VALUES (?,?)').run(req.user.id, s.id);
     if (req.user.role === 'investor') {
       // De-duplicate: at most one view notification per viewer per day
-      const txt = `${req.user.name} viewed your startup profile`;
+      const txt = `${req.user.name} viewed your startup profile.`;
       const dup = db.prepare("SELECT 1 FROM notifications WHERE user_id=? AND type='Profile Viewed' AND text=? AND created_at > datetime('now','-1 day')").get(s.founder_id, txt);
       if (!dup) notify(s.founder_id, 'Profile Viewed', txt, `/startup/${s.id}`);
     }
@@ -252,13 +252,13 @@ router.post('/:id/video-view', (req, res) => {
 // One upvote per investor per startup.
 router.post('/:id/upvote', requireRole('investor'), (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  if (!s) return res.status(404).json({ error: 'We could not find this startup.' });
   const existing = db.prepare('SELECT 1 FROM upvotes WHERE user_id=? AND startup_id=?').get(req.user.id, s.id);
   if (existing) {
     db.prepare('DELETE FROM upvotes WHERE user_id=? AND startup_id=?').run(req.user.id, s.id);
   } else {
     db.prepare('INSERT INTO upvotes (user_id, startup_id) VALUES (?,?)').run(req.user.id, s.id);
-    notify(s.founder_id, 'Upvote Received', `${req.user.name} upvoted ${s.name}`, `/startup/${s.id}`);
+    notify(s.founder_id, 'Upvote Received', `${req.user.name} upvoted ${s.name}.`, `/startup/${s.id}`);
   }
   res.json({ upvoted: !existing, upvotes: db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c });
 });
@@ -279,7 +279,7 @@ router.post('/:id/watchlist-status', requireRole('investor'), (req, res) => {
 // Private notes — visible only to the creating investor.
 router.post('/:id/notes', requireRole('investor'), (req, res) => {
   const { text, collateral_id } = req.body;
-  if (!text || !text.trim()) return res.status(400).json({ error: 'Note text required' });
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Write a note before saving.' });
   db.prepare('INSERT INTO notes (investor_id, startup_id, collateral_id, text) VALUES (?,?,?,?)')
     .run(req.user.id, req.params.id, collateral_id || null, text.trim());
   res.json({ notes: db.prepare('SELECT * FROM notes WHERE investor_id=? AND startup_id=? ORDER BY id DESC').all(req.user.id, req.params.id) });
@@ -292,7 +292,7 @@ router.delete('/notes/:noteId', requireRole('investor'), (req, res) => {
 // ---- AI Investment Memo (structured-data synthesis engine) ----
 router.get('/:id/memo', requireRole('investor', 'admin'), (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  if (!s) return res.status(404).json({ error: 'We could not find this startup.' });
   const score = fundamentalScore(s);
   const fit = thesisFit(s, investorProfileOf(req.user));
   const founder = db.prepare('SELECT name, headline, education, experience, verified FROM users WHERE id=?').get(s.founder_id);
@@ -355,12 +355,12 @@ router.get('/:id/memo', requireRole('investor', 'admin'), (req, res) => {
 // ---- Collateral (structured data room) ----
 router.post('/:id/collateral', requireRole('founder'), (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=? AND founder_id=?').get(req.params.id, req.user.id);
-  if (!s) return res.status(403).json({ error: 'Not your startup' });
+  if (!s) return res.status(403).json({ error: 'You can only manage your own startup.' });
   const { title, type, access_level, file_url } = req.body;
   const TYPES = ['Deck', 'IM', 'Financial Model', 'Industry Overview', 'Product Demo', 'Cap Table'];
   const LEVELS = ['Public', 'Request Access', 'Connected Only'];
-  if (!title || !TYPES.includes(type)) return res.status(400).json({ error: 'Title and a valid document type are required' });
-  if (access_level && !LEVELS.includes(access_level)) return res.status(400).json({ error: 'Invalid access level' });
+  if (!title || !TYPES.includes(type)) return res.status(400).json({ error: 'Add a title and choose a valid document type.' });
+  if (access_level && !LEVELS.includes(access_level)) return res.status(400).json({ error: 'Choose a valid access level.' });
   const urlErr = validateUrlFields(req.body, ['file_url']);
   if (urlErr) return res.status(400).json({ error: urlErr });
   db.prepare('INSERT INTO collateral (startup_id, title, type, access_level, file_url) VALUES (?,?,?,?,?)')
@@ -370,10 +370,10 @@ router.post('/:id/collateral', requireRole('founder'), (req, res) => {
 });
 router.put('/collateral/:cid', requireRole('founder'), (req, res) => {
   const c = db.prepare('SELECT c.*, s.founder_id FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
-  if (!c || c.founder_id !== req.user.id) return res.status(403).json({ error: 'Not your document' });
+  if (!c || c.founder_id !== req.user.id) return res.status(403).json({ error: 'You can only manage documents in your own data room.' });
   const { title, access_level } = req.body;
   if (access_level && !['Public', 'Request Access', 'Connected Only'].includes(access_level)) {
-    return res.status(400).json({ error: 'Invalid access level' });
+    return res.status(400).json({ error: 'Choose a valid access level.' });
   }
   db.prepare('UPDATE collateral SET title=COALESCE(?,title), access_level=COALESCE(?,access_level) WHERE id=?')
     .run(title ? String(title).slice(0, 200) : null, access_level || null, c.id);
@@ -381,35 +381,35 @@ router.put('/collateral/:cid', requireRole('founder'), (req, res) => {
 });
 router.delete('/collateral/:cid', requireRole('founder'), (req, res) => {
   const c = db.prepare('SELECT c.*, s.founder_id FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
-  if (!c || c.founder_id !== req.user.id) return res.status(403).json({ error: 'Not your document' });
+  if (!c || c.founder_id !== req.user.id) return res.status(403).json({ error: 'You can only manage documents in your own data room.' });
   db.prepare('DELETE FROM collateral WHERE id=?').run(c.id);
   res.json({ ok: true });
 });
 
 router.post('/collateral/:cid/request', requireRole('investor'), (req, res) => {
   const c = db.prepare('SELECT c.*, s.founder_id, s.name sname FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
-  if (!c) return res.status(404).json({ error: 'Document not found' });
+  if (!c) return res.status(404).json({ error: 'We could not find this document.' });
   db.prepare(`INSERT INTO access_requests (collateral_id, investor_id) VALUES (?,?)
     ON CONFLICT(collateral_id, investor_id) DO UPDATE SET status='pending', created_at=datetime('now')`).run(c.id, req.user.id);
-  notify(c.founder_id, 'Collateral Request', `${req.user.name} requested access to "${c.title}" (${c.sname})`, `/dashboard`);
+  notify(c.founder_id, 'Collateral Request', `${req.user.name} requested access to "${c.title}" in your ${c.sname} data room.`, `/dashboard`);
   res.json({ ok: true, status: 'pending' });
 });
 
 router.post('/access-requests/:rid/:action', requireRole('founder'), (req, res) => {
   const r = db.prepare(`SELECT ar.*, c.title, c.startup_id, s.founder_id, s.name sname FROM access_requests ar
     JOIN collateral c ON c.id=ar.collateral_id JOIN startups s ON s.id=c.startup_id WHERE ar.id=?`).get(req.params.rid);
-  if (!r || r.founder_id !== req.user.id) return res.status(403).json({ error: 'Not your request to manage' });
+  if (!r || r.founder_id !== req.user.id) return res.status(403).json({ error: 'You can only manage access requests for your own data room.' });
   const map = { approve: 'approved', reject: 'rejected', revoke: 'revoked' };
   const status = map[req.params.action];
-  if (!status) return res.status(400).json({ error: 'Invalid action' });
+  if (!status) return res.status(400).json({ error: 'Choose a valid action.' });
   db.prepare('UPDATE access_requests SET status=? WHERE id=?').run(status, r.id);
-  if (status === 'approved') notify(r.investor_id, 'Access Approved', `Access approved for "${r.title}" (${r.sname})`, `/startup/${r.startup_id}`);
+  if (status === 'approved') notify(r.investor_id, 'Access Approved', `Your access to "${r.title}" in the ${r.sname} data room was approved.`, `/startup/${r.startup_id}`);
   res.json({ ok: true });
 });
 
 router.get('/:id/access-requests', requireRole('founder'), (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=? AND founder_id=?').get(req.params.id, req.user.id);
-  if (!s) return res.status(403).json({ error: 'Not your startup' });
+  if (!s) return res.status(403).json({ error: 'You can only manage your own startup.' });
   const rows = db.prepare(`SELECT ar.*, c.title, c.type, u.name investor_name, u.id investor_id FROM access_requests ar
     JOIN collateral c ON c.id=ar.collateral_id JOIN users u ON u.id=ar.investor_id
     WHERE c.startup_id=? ORDER BY ar.id DESC`).all(s.id);
@@ -420,12 +420,12 @@ router.post('/collateral/:cid/download', (req, res) => {
   // Verify the caller is actually allowed to see this document before counting —
   // mirrors the can_view rules used when listing the data room.
   const c = db.prepare('SELECT c.*, s.founder_id FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
-  if (!c) return res.status(404).json({ error: 'Document not found' });
+  if (!c) return res.status(404).json({ error: 'We could not find this document.' });
   const isOwner = c.founder_id === req.user.id;
   const approved = db.prepare("SELECT 1 FROM access_requests WHERE collateral_id=? AND investor_id=? AND status='approved'").get(c.id, req.user.id);
   const can = isOwner || c.access_level === 'Public' ||
     (c.access_level === 'Connected Only' && areConnected(req.user.id, c.founder_id)) || !!approved;
-  if (!can) return res.status(403).json({ error: 'You do not have access to this document' });
+  if (!can) return res.status(403).json({ error: 'You do not have access to this document yet. Request access from the founder.' });
   db.prepare('UPDATE collateral SET downloads = downloads + 1 WHERE id=?').run(c.id);
   res.json({ ok: true });
 });
@@ -433,13 +433,13 @@ router.post('/collateral/:cid/download', (req, res) => {
 // Founder Updates — structured investor updates that keep watchers coming back.
 router.post('/:id/updates', requireRole('founder'), (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=? AND founder_id=?').get(req.params.id, req.user.id);
-  if (!s) return res.status(403).json({ error: 'Not your startup' });
+  if (!s) return res.status(403).json({ error: 'You can only post updates for your own startup.' });
   const numErr = validateNumericFields(req.body, ['arr', 'mrr', 'growth']);
   if (numErr) return res.status(400).json({ error: numErr });
   const { headline, body, arr, mrr, growth } = req.body;
-  if (!headline || !headline.trim()) return res.status(400).json({ error: 'Headline is required' });
-  if (!body || !body.trim()) return res.status(400).json({ error: 'Update body is required' });
-  if (body.trim().length > 400) return res.status(400).json({ error: 'Updates are capped at 400 characters — keep it sharp.' });
+  if (!headline || !headline.trim()) return res.status(400).json({ error: 'Add a headline for your update.' });
+  if (!body || !body.trim()) return res.status(400).json({ error: 'Write the body of your update.' });
+  if (body.trim().length > 400) return res.status(400).json({ error: 'Updates are limited to 400 characters. Keep it concise.' });
   db.prepare('INSERT INTO founder_updates (startup_id, headline, body, arr, mrr, growth) VALUES (?,?,?,?,?,?)')
     .run(s.id, headline.trim().slice(0, 120), body.trim(), arr ?? null, mrr ?? null, growth ?? null);
   // Refresh headline metrics on the startup when provided
@@ -449,7 +449,7 @@ router.post('/:id/updates', requireRole('founder'), (req, res) => {
   }
   addActivity(s.id, 'Milestone Achieved', `Investor update: ${headline.trim()}`);
   for (const uid of startupSubscribers(s.id, req.user.id)) {
-    notify(uid, 'New Message', `${s.name} posted an investor update: "${headline.trim()}"`, `/startup/${s.id}`);
+    notify(uid, 'New Message', `${s.name} posted an investor update: "${headline.trim()}".`, `/startup/${s.id}`);
   }
   res.json({ ok: true });
 });
@@ -458,9 +458,9 @@ router.post('/:id/updates', requireRole('founder'), (req, res) => {
 // tap a different emoji to switch).
 router.post('/updates/:uid/react', (req, res) => {
   const u = db.prepare('SELECT fu.*, s.founder_id, s.name sname FROM founder_updates fu JOIN startups s ON s.id=fu.startup_id WHERE fu.id=?').get(req.params.uid);
-  if (!u) return res.status(404).json({ error: 'Update not found' });
+  if (!u) return res.status(404).json({ error: 'We could not find this update.' });
   const { emoji } = req.body;
-  if (!REACTION_EMOJI.includes(emoji)) return res.status(400).json({ error: 'Invalid reaction' });
+  if (!REACTION_EMOJI.includes(emoji)) return res.status(400).json({ error: 'Choose a valid reaction.' });
   const existing = db.prepare('SELECT emoji FROM update_reactions WHERE user_id=? AND update_id=?').get(req.user.id, u.id);
   if (existing && existing.emoji === emoji) {
     db.prepare('DELETE FROM update_reactions WHERE user_id=? AND update_id=?').run(req.user.id, u.id);
@@ -468,7 +468,7 @@ router.post('/updates/:uid/react', (req, res) => {
     db.prepare(`INSERT INTO update_reactions (user_id, update_id, emoji) VALUES (?,?,?)
       ON CONFLICT(user_id, update_id) DO UPDATE SET emoji=excluded.emoji`).run(req.user.id, u.id, emoji);
     if (!existing && u.founder_id !== req.user.id) {
-      notify(u.founder_id, 'Upvote Received', `${req.user.name} reacted ${emoji} to your update on ${u.sname}`, `/startup/${u.startup_id}`);
+      notify(u.founder_id, 'Upvote Received', `${req.user.name} reacted ${emoji} to your ${u.sname} update.`, `/startup/${u.startup_id}`);
     }
   }
   res.json(withReactions(db.prepare('SELECT * FROM founder_updates WHERE id=?').get(u.id), req.user.id));

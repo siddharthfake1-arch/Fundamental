@@ -40,10 +40,10 @@ function RotatingTitle() {
 }
 
 const FEATURES = [
-  { icon: PlayCircle, t: '12-min pitch', s: 'Mandatory video on every startup' },
-  { icon: FolderLock, t: 'Data rooms', s: 'Permissioned diligence collateral' },
-  { icon: ShieldCheck, t: 'Verified', s: 'Founders, funds & real metrics' },
-  { icon: Globe2, t: 'Global', s: 'Bengaluru to the Bay Area' },
+  { icon: PlayCircle, t: '12-min pitch', s: 'A video pitch on every startup' },
+  { icon: FolderLock, t: 'Data rooms', s: 'Permissioned diligence materials' },
+  { icon: ShieldCheck, t: 'Verified', s: 'Real founders, funds, and metrics' },
+  { icon: Globe2, t: 'Global', s: 'From Bengaluru to the Bay Area' },
 ];
 
 export default function Auth() {
@@ -61,6 +61,7 @@ export default function Auth() {
 
   const sendCode = async () => {
     if (!otpIdentifier) return toast(otp.channel === 'email' ? 'Enter your email first' : 'Enter your phone number first', 'error');
+
     setOtp(o => ({ ...o, sending: true }));
     try {
       const d = await api.post('/api/auth/send-otp', { channel: otp.channel, identifier: otpIdentifier });
@@ -121,7 +122,7 @@ export default function Auth() {
           <motion.span
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1 }}
             className="chip-gold !text-xs !px-3 !py-1.5 mb-6 inline-flex">
-            <TrendingUp className="w-3.5 h-3.5" /> The serious fundraising marketplace
+            <TrendingUp className="w-3.5 h-3.5" /> The serious fundraising platform
           </motion.span>
 
           <RotatingTitle />
@@ -130,7 +131,7 @@ export default function Auth() {
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.25 }}
             className="mt-6 text-mist-300 max-w-lg leading-relaxed text-[15px]">
             Where founders raise and investors do real diligence. Every startup opens with a
-            <span className="text-gold-300 font-semibold"> 12-minute video pitch</span>, structured metrics and a
+            <span className="text-gold-300 font-semibold"> 12-minute video pitch</span>, structured metrics, and a
             permissioned data room — from Bengaluru and Mumbai to London and San Francisco.
           </motion.p>
 
@@ -156,7 +157,7 @@ export default function Auth() {
           </motion.div>
         </div>
 
-        <div className="relative text-xs text-mist-500 hidden lg:block">A professional network for founders and investors. No noise. No casual posting.</div>
+        <div className="relative text-xs text-mist-500 hidden lg:block">The private-market network for founders and investors.</div>
       </div>
 
       {/* Form panel */}
@@ -168,7 +169,7 @@ export default function Auth() {
             {['login', 'signup'].map(m => (
               <button key={m} onClick={() => setMode(m)}
                 className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${mode === m ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>
-                {m === 'login' ? 'Sign In' : 'Create Account'}
+                {m === 'login' ? 'Sign in' : 'Create account'}
               </button>
             ))}
           </div>
@@ -189,7 +190,7 @@ export default function Auth() {
               </div>
             )}
             {mode === 'signup' && (
-              <div><span className="label">Full Name</span><input className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
+              <div><span className="label">Full name</span><input className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
             )}
             <div><span className="label">Email</span><input type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
             <div><span className="label">Password</span><input type="password" className="input" value={form.password} onChange={set('password')} placeholder={mode === 'signup' ? 'Minimum 8 characters' : '••••••••'} required /></div>
@@ -199,7 +200,7 @@ export default function Auth() {
             {mode === 'signup' && (
               <div className="card p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-mist-100">Verify it's you</span>
+                  <span className="text-sm font-semibold text-mist-100">Verify your identity</span>
                   <div className="flex rounded-lg bg-ink-850 border border-ink-600/60 p-0.5">
                     {[['email', 'Email'], ['phone', 'Phone']].map(([v, l]) => (
                       <button type="button" key={v}
@@ -216,18 +217,18 @@ export default function Auth() {
                     onChange={(e) => setOtp(o => ({ ...o, code: e.target.value.replace(/\D/g, '') }))}
                     placeholder="6-digit code" disabled={!otp.sent} />
                   <button type="button" className="btn-ghost whitespace-nowrap" onClick={sendCode} disabled={otp.sending}>
-                    {otp.sending ? 'Sending…' : otp.sent ? 'Resend Code' : 'Send Code'}
+                    {otp.sending ? 'Sending…' : otp.sent ? 'Resend code' : 'Send code'}
                   </button>
                 </div>
                 {otp.demo_code && (
                   <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">
-                    Demo mode (no email/SMS provider configured): your code is <code className="font-bold">{otp.demo_code}</code>
+                    Demo mode (no email or SMS provider configured) — your code is <code className="font-bold">{otp.demo_code}</code>
                   </div>
                 )}
               </div>
             )}
             <button disabled={busy} className="btn-primary w-full !py-3 group">
-              {busy ? 'Please wait…' : mode === 'login' ? 'Sign In' : `Create ${role === 'founder' ? 'Founder' : 'Investor'} Account`}
+              {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : `Create ${role === 'founder' ? 'founder' : 'investor'} account`}
               <MoveRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
           </form>

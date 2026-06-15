@@ -33,12 +33,12 @@ function CommunityIndex() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="h-display text-2xl">Communities</h1>
-          <p className="text-sm text-mist-400 mt-1">Knowledge sharing among founders, investors and operators. Substance over networking spam.</p>
+          <p className="text-sm text-mist-400 mt-1">Where founders, investors, and operators share what they know.</p>
         </div>
         <input className="input !w-64" placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="mb-7" />
-      {kinds.length === 0 && <Empty title="No communities match your search" />}
+      {kinds.length === 0 && <Empty title="No communities match your search" sub="Try a different term." />}
       {kinds.map(kind => (
         <div key={kind} className="mb-8">
           <div className="section-title mb-3">{KIND_LABEL[kind]}</div>
@@ -84,7 +84,7 @@ function CommunityDetail({ slug }) {
   return (
     <div className="max-w-3xl mx-auto fade-in">
       <button onClick={() => nav('/communities')} className="flex items-center gap-1.5 text-sm text-mist-400 hover:text-mist-100 mb-4">
-        <ArrowLeft className="w-4 h-4" /> All communities
+        <ArrowLeft className="w-4 h-4" /> Back to communities
       </button>
       <div className="card p-6 mb-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -101,7 +101,7 @@ function CommunityDetail({ slug }) {
           </div>
           <button className={c.joined ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'}
             onClick={async () => { await api.post(`/api/communities/${slug}/join`); load(); }}>
-            {c.joined ? 'Leave' : 'Join Community'}
+            {c.joined ? 'Leave' : 'Join community'}
           </button>
         </div>
       </div>
@@ -110,11 +110,11 @@ function CommunityDetail({ slug }) {
         <div className="card p-4 mb-5">
           {!composer ? (
             <button className="w-full text-left text-sm text-mist-500 bg-ink-850 border border-ink-600/50 rounded-xl px-4 py-3 hover:border-ink-500 transition-colors"
-              onClick={() => setComposer(true)}>Start a discussion, share a resource, or host an AMA…</button>
+              onClick={() => setComposer(true)}>Start a discussion, share a resource, or ask a question…</button>
           ) : (
             <div className="space-y-3">
               <input className="input" maxLength={140} placeholder="Title — be specific" value={f.title} onChange={(e) => setF(x => ({ ...x, title: e.target.value }))} />
-              <textarea className="input min-h-[110px]" maxLength={2000} placeholder="Substance earns attention here: share data, lessons, questions with context." value={f.body} onChange={(e) => setF(x => ({ ...x, body: e.target.value }))} />
+              <textarea className="input min-h-[110px]" maxLength={2000} placeholder="Add context — data, lessons learned, or a question worth answering." value={f.body} onChange={(e) => setF(x => ({ ...x, body: e.target.value }))} />
               <div className="flex justify-end gap-2">
                 <button className="btn-ghost btn-sm" onClick={() => setComposer(false)}>Cancel</button>
                 <button className="btn-primary btn-sm" disabled={!f.title.trim() || !f.body.trim()} onClick={async () => {
@@ -122,7 +122,7 @@ function CommunityDetail({ slug }) {
                     await api.post(`/api/communities/${slug}/posts`, f);
                     setF({ title: '', body: '' }); setComposer(false); load(); toast('Discussion posted', 'success');
                   } catch (e) { toast(e.message, 'error'); }
-                }}>Post Discussion</button>
+                }}>Post discussion</button>
               </div>
             </div>
           )}
@@ -178,7 +178,7 @@ function Thread({ p }) {
               </div>
             </div>
           ))}
-          <input className="input !py-2" placeholder="Add a substantive reply… (Enter to post)" value={reply}
+          <input className="input !py-2" placeholder="Write a reply — press Enter to post" value={reply}
             onChange={(e) => setReply(e.target.value)}
             onKeyDown={async (e) => {
               if (e.key === 'Enter' && reply.trim()) {

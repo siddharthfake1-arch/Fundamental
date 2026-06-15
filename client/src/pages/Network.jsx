@@ -35,10 +35,10 @@ export default function Network() {
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="h-display text-2xl">Network</h1>
-          <p className="text-sm text-mist-400 mt-1">Founders, investors, angels and operators. Messaging unlocks once a connection is accepted.</p>
+          <p className="text-sm text-mist-400 mt-1">Founders, investors, angels, and operators. Messaging opens once a connection is accepted.</p>
         </div>
         <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1">
-          {[['directory', 'Directory'], ['requests', `Requests${conns?.pending.length ? ` (${conns.pending.length})` : ''}`], ['connections', 'My Connections']].map(([t, l]) => (
+          {[['directory', 'Directory'], ['requests', `Requests${conns?.pending.length ? ` (${conns.pending.length})` : ''}`], ['connections', 'Connections']].map(([t, l]) => (
             <button key={t} onClick={() => setParams({ tab: t })}
               className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
           ))}
@@ -53,9 +53,9 @@ export default function Network() {
               <select className="input" value={filters.role} onChange={set('role')}>
                 <option value="">All</option><option value="founder">Founder</option><option value="investor">Investor</option>
               </select></div>
-            <div><span className="label">Sector Focus</span>
+            <div><span className="label">Sector focus</span>
               <select className="input" value={filters.sector} onChange={set('sector')}><option value="">All</option>{SECTORS.map(s => <option key={s}>{s}</option>)}</select></div>
-            <div><span className="label">Stage Focus</span>
+            <div><span className="label">Stage focus</span>
               <select className="input" value={filters.stage} onChange={set('stage')}><option value="">All</option>{STAGES.map(s => <option key={s}>{s}</option>)}</select></div>
             <div><span className="label">Geography</span><input className="input" value={filters.geography} onChange={set('geography')} placeholder="City" /></div>
             <label className="flex items-center gap-2 cursor-pointer pb-2.5">
@@ -64,7 +64,7 @@ export default function Network() {
             </label>
           </div>
 
-          {!users ? <Spinner /> : users.length === 0 ? <Empty title="No one matches these filters" /> : (
+          {!users ? <Spinner /> : users.length === 0 ? <Empty title="No one matches these filters" sub="Adjust your filters to widen the search." /> : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {users.map((u, i) => (
                 <motion.div key={u.id} className="card card-hover p-5"
@@ -87,7 +87,7 @@ export default function Network() {
                           <button className="btn-danger btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${u.connection_id}/reject`))}>Reject</button>
                         </>
                       ) : u.connection === 'pending' ? <span className="chip flex-1 justify-center !py-1.5">Pending</span>
-                        : u.connection === 'rejected' ? <button className="btn-ghost btn-sm flex-1" onClick={() => act(() => api.post(`/api/users/connect/${u.id}`), 'Request sent')}>Connect Again</button>
+                        : u.connection === 'rejected' ? <button className="btn-ghost btn-sm flex-1" onClick={() => act(() => api.post(`/api/users/connect/${u.id}`), 'Connection request sent')}>Connect again</button>
                           : <button className="btn-primary btn-sm flex-1" onClick={() => act(() => api.post(`/api/users/connect/${u.id}`), 'Connection request sent')}>Connect</button>}
                     <button className={`btn-ghost btn-sm ${u.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
                       onClick={() => act(() => api.post(`/api/users/follow/${u.id}`))}>{u.following ? '✓' : 'Follow'}</button>
@@ -100,7 +100,7 @@ export default function Network() {
       )}
 
       {tab === 'requests' && (!conns ? <Spinner /> : conns.pending.length === 0 ? (
-        <Empty title="No pending requests" sub="When someone asks to connect, you'll see it here. Accepting unlocks messaging both ways." />
+        <Empty title="No pending requests" sub="Connection requests appear here. Accepting opens messaging both ways." />
       ) : (
         <div className="max-w-2xl space-y-3">
           {conns.pending.map(p => (
@@ -110,7 +110,7 @@ export default function Network() {
                 <Link to={`/profile/${p.user_id}`} className="flex items-center gap-1.5 font-semibold text-mist-100 hover:text-gold-300">{p.name}{!!p.verified && <VerifiedBadge small />}</Link>
                 <div className="text-xs text-mist-400 capitalize">{p.role}{p.headline && ` — ${p.headline}`}</div>
               </div>
-              <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${p.id}/accept`), 'Connected — messaging unlocked')}>Accept</button>
+              <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${p.id}/accept`), 'Connected — messaging is now open')}>Accept</button>
               <button className="btn-danger btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${p.id}/reject`))}>Reject</button>
             </div>
           ))}
@@ -118,7 +118,7 @@ export default function Network() {
       ))}
 
       {tab === 'connections' && (!conns ? <Spinner /> : conns.accepted.length === 0 ? (
-        <Empty title="No connections yet" sub="Head to the directory and start building your serious network." />
+        <Empty title="No connections yet" sub="Browse the directory and start building your network." />
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {conns.accepted.map(p => (

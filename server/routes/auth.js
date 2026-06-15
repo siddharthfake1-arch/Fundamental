@@ -45,7 +45,7 @@ router.post('/send-otp', otpLimiter, async (req, res) => {
   // For signup we can tell the user early that the email is taken
   if (channel === 'email' && typeof identifier === 'string' &&
       db.prepare('SELECT 1 FROM users WHERE email=?').get(identifier.toLowerCase())) {
-    return res.status(409).json({ error: 'An account with this email already exists — sign in instead' });
+    return res.status(409).json({ error: 'An account already uses this email address. Sign in instead.' });
   }
   const out = await sendOtp(channel, identifier);
   if (out.error) return res.status(400).json({ error: out.error });
@@ -63,10 +63,10 @@ router.post('/verify-otp', otpLimiter, (req, res) => {
 
 router.post('/signup', authLimiter, (req, res) => {
   const { role, name, email, password, city, phone, otp_token } = req.body;
-  if (!['founder', 'investor'].includes(role)) return res.status(400).json({ error: 'Select a role: Founder or Investor' });
-  if (!name || !String(name).trim() || String(name).length > 120) return res.status(400).json({ error: 'Full name is required' });
-  if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'A valid email is required' });
-  if (typeof password !== 'string' || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!['founder', 'investor'].includes(role)) return res.status(400).json({ error: 'Select your role: founder or investor.' });
+  if (!name || !String(name).trim() || String(name).length > 120) return res.status(400).json({ error: 'Enter your full name (up to 120 characters).' });
+  if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+  if (typeof password !== 'string' || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'Use a password of at least 8 characters.' });
 
   // OTP proof must match the email or the phone on this signup
   let verifiedChannel = null;
@@ -76,10 +76,10 @@ router.post('/signup', authLimiter, (req, res) => {
     if (p.ch === 'email' && p.otp === email.toLowerCase()) verifiedChannel = 'email';
     else if (p.ch === 'phone' && normPhone && p.otp === normPhone) verifiedChannel = 'phone';
   } catch { /* missing/expired/invalid token */ }
-  if (!verifiedChannel) return res.status(400).json({ error: 'Please verify your email or phone with the code we sent before creating the account' });
+  if (!verifiedChannel) return res.status(400).json({ error: 'Verify your email or phone with the code we sent before creating your account.' });
 
   if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase())) {
-    return res.status(409).json({ error: 'An account with this email already exists' });
+    return res.status(409).json({ error: 'An account already uses this email address.' });
   }
   const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
   const info = db.prepare('INSERT INTO users (role, name, email, password_hash, city, phone, email_verified, phone_verified) VALUES (?,?,?,?,?,?,?,?)')
@@ -94,7 +94,7 @@ router.post('/login', authLimiter, (req, res) => {
   const { email, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE email=?').get(String(email || '').toLowerCase());
   if (!user || !bcrypt.compareSync(String(password || ''), user.password_hash)) {
-    return res.status(401).json({ error: 'Invalid email or password' });
+    return res.status(401).json({ error: 'That email or password is incorrect.' });
   }
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
 });
@@ -104,7 +104,7 @@ router.post('/google', (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID) {
     return res.status(501).json({ error: 'Google Sign-In is not configured on this deployment. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable it.' });
   }
-  res.status(501).json({ error: 'Google Sign-In handshake not completed' });
+  res.status(501).json({ error: 'Google Sign-In could not be completed. Try again or use your email and password.' });
 });
 
 router.post('/logout', (req, res) => {
@@ -119,9 +119,9 @@ router.get('/me', auth, (req, res) => {
 router.post('/change-password', auth, authLimiter, (req, res) => {
   const { current, next } = req.body;
   if (!bcrypt.compareSync(String(current || ''), req.user.password_hash)) {
-    return res.status(400).json({ error: 'Current password is incorrect' });
+    return res.status(400).json({ error: 'Your current password is incorrect.' });
   }
-  if (typeof next !== 'string' || next.length < 8 || next.length > 200) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  if (typeof next !== 'string' || next.length < 8 || next.length > 200) return res.status(400).json({ error: 'Choose a new password of at least 8 characters.' });
   // pwd_changed_at invalidates every token issued before this moment (kills stolen
   // sessions); we then issue a fresh cookie so the current device stays signed in.
   db.prepare("UPDATE users SET password_hash=?, pwd_changed_at=datetime('now') WHERE id=?")

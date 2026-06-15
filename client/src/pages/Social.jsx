@@ -37,7 +37,7 @@ export default function Social() {
       <div className="flex items-end justify-between flex-wrap gap-3 mb-5">
         <div>
           <h1 className="h-display text-2xl">Social</h1>
-          <p className="text-sm text-mist-400 mt-1">A controlled professional feed. 400 characters max — every word earns its place.</p>
+          <p className="text-sm text-mist-400 mt-1">Professional updates from the network, capped at 400 characters.</p>
         </div>
         <div className="flex gap-2">
           <input className="input !w-44 !py-2 !text-xs" placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -60,7 +60,7 @@ export default function Social() {
           {!composer ? (
             <button className="w-full text-left text-sm text-mist-500 bg-ink-850 border border-ink-600/60 rounded-xl px-4 py-3 hover:border-ink-500 transition-colors"
               onClick={() => setComposer(true)}>
-              Share a {user.role === 'founder' ? 'fundraising update, milestone or launch' : 'investment or insight'}…
+              Share {user.role === 'founder' ? 'a fundraising update, milestone, or launch' : 'an investment or insight'}…
             </button>
           ) : (
             <Composer allowed={types.allowed_for_me} onDone={() => { setComposer(false); load(); }} onCancel={() => setComposer(false)} />
@@ -68,7 +68,7 @@ export default function Social() {
         </div>
       )}
 
-      {!posts ? <Spinner /> : visible.length === 0 ? <Empty title="No posts here yet" sub="Professional updates from the network appear here." /> : (
+      {!posts ? <Spinner /> : visible.length === 0 ? <Empty title="No posts yet" sub="Updates from the network appear here." /> : (
         <div className="space-y-4">
           {visible.map(p => <Post key={p.id} p={p} onChange={load} />)}
         </div>
@@ -95,7 +95,7 @@ function Composer({ allowed, onDone, onCancel }) {
   return (
     <div className="space-y-3">
       <div>
-        <span className="label">Post type (required)</span>
+        <span className="label">Post type — required</span>
         <div className="flex flex-wrap gap-2">
           {allowed.map(t => (
             <button key={t} onClick={() => setType(t)}
@@ -105,20 +105,20 @@ function Composer({ allowed, onDone, onCancel }) {
       </div>
       <div>
         <textarea className="input min-h-[110px]" maxLength={400} value={text} onChange={(e) => setText(e.target.value)}
-          placeholder="Write a substantive professional update. Specifics — numbers, names, dates — earn attention here." />
+          placeholder="Share a clear, specific update — numbers, names, and dates carry the most weight." />
         <div className={`text-right text-[11px] mt-1 tabular-nums ${text.length > 360 ? 'text-amber-400' : 'text-mist-500'}`}>{text.length}/400</div>
       </div>
       <div className="grid sm:grid-cols-3 gap-3 items-end">
         <div>
-          <span className="label">Tag Startup (optional)</span>
+          <span className="label">Tag a startup — optional</span>
           <select className="input" value={startupId} onChange={(e) => setStartupId(e.target.value)}>
             <option value="">None</option>
             {startups.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
-        <FileUpload label="Add Image" accept="image/*" currentUrl={/\.(png|jpe?g|gif|svg|webp)/i.test(media) ? media : ''}
+        <FileUpload label="Add image" accept="image/*" currentUrl={/\.(png|jpe?g|gif|svg|webp)/i.test(media) ? media : ''}
           onUploaded={(d) => setMedia(d.url)} />
-        <FileUpload label="Add Video" accept="video/*" currentUrl={/\.(mp4|webm|mov)/i.test(media) ? media : ''}
+        <FileUpload label="Add video" accept="video/*" currentUrl={/\.(mp4|webm|mov)/i.test(media) ? media : ''}
           onUploaded={(d) => setMedia(d.url)} />
       </div>
       {media && (
@@ -133,7 +133,7 @@ function Composer({ allowed, onDone, onCancel }) {
           setBusy(true);
           try { await api.post('/api/social', { type, text, startup_id: startupId || null, media }); onDone(); toast('Posted', 'success'); }
           catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
-        }}>Publish</button>
+        }}>Publish post</button>
       </div>
     </div>
   );
@@ -203,7 +203,7 @@ function Post({ p, onChange }) {
             </div>
           ))}
           <div className="flex gap-2">
-            <input className="input !py-2" placeholder="Add a professional comment…" value={comment}
+            <input className="input !py-2" placeholder="Add a comment…" value={comment}
               onChange={(e) => setComment(e.target.value)}
               onKeyDown={async (e) => {
                 if (e.key === 'Enter' && comment.trim()) {
