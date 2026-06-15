@@ -62,29 +62,28 @@ router.post('/verify-otp', otpLimiter, (req, res) => {
 });
 
 router.post('/signup', authLimiter, (req, res) => {
-  const { role, name, email, password, city, phone, otp_token } = req.body;
+  const { role, name, email, password, city, phone, otp_token, accept_terms } = req.body;
   if (!['founder', 'investor'].includes(role)) return res.status(400).json({ error: 'Select your role: founder or investor.' });
   if (!name || !String(name).trim() || String(name).length > 120) return res.status(400).json({ error: 'Enter your full name (up to 120 characters).' });
   if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (typeof password !== 'string' || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'Use a password of at least 8 characters.' });
+  if (!accept_terms) return res.status(400).json({ error: 'Please accept the Terms of Service and Privacy Policy to continue.' }); // P0-10
 
-  // OTP proof must match the email or the phone on this signup
-  let verifiedChannel = null;
+  // The account email is the login credential, so it MUST be the verified channel —
+  // a phone OTP cannot be used to claim an arbitrary, unverified email (P0-2).
+  let emailVerified = false;
   try {
     const p = jwt.verify(otp_token || '', JWT_SECRET);
-    const normPhone = phone ? normalizePhone(phone) : null;
-    if (p.ch === 'email' && p.otp === email.toLowerCase()) verifiedChannel = 'email';
-    else if (p.ch === 'phone' && normPhone && p.otp === normPhone) verifiedChannel = 'phone';
+    if (p.ch === 'email' && p.otp === email.toLowerCase()) emailVerified = true;
   } catch { /* missing/expired/invalid token */ }
-  if (!verifiedChannel) return res.status(400).json({ error: 'Verify your email or phone with the code we sent before creating your account.' });
+  if (!emailVerified) return res.status(400).json({ error: 'Verify your email address with the code we sent before creating your account.' });
 
   if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email.toLowerCase())) {
     return res.status(409).json({ error: 'An account already uses this email address.' });
   }
   const hash = bcrypt.hashSync(password, BCRYPT_ROUNDS);
-  const info = db.prepare('INSERT INTO users (role, name, email, password_hash, city, phone, email_verified, phone_verified) VALUES (?,?,?,?,?,?,?,?)')
-    .run(role, String(name).trim(), email.toLowerCase(), hash, String(city || '').slice(0, 120),
-      phone ? normalizePhone(phone) || '' : '', verifiedChannel === 'email' ? 1 : 0, verifiedChannel === 'phone' ? 1 : 0);
+  const info = db.prepare("INSERT INTO users (role, name, email, password_hash, city, phone, email_verified, phone_verified, accepted_terms_at) VALUES (?,?,?,?,?,?,1,0,datetime('now'))")
+    .run(role, String(name).trim(), email.toLowerCase(), hash, String(city || '').slice(0, 120), phone ? normalizePhone(phone) || '' : '');
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid);
   if (role === 'investor') db.prepare('INSERT INTO investor_profiles (user_id) VALUES (?)').run(user.id);
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });

@@ -74,3 +74,47 @@ variables (SMS) for real delivery before launch.
 - **Pitch videos:** for smooth 12-minute streaming at scale, store videos in object storage or a video CDN (Mux/Cloudflare Stream) and save the URL — the app already accepts external video URLs.
 - **Email:** notification preferences exist in-app; wire an SMTP/Resend key to send them by email.
 - **Remove demo data:** set `AUTO_SEED=false` before first boot, or delete `server/fundamental.db` and restart.
+
+---
+
+## Production launch checklist (security hardening)
+
+The server now **fails closed**: with `NODE_ENV=production` it refuses to boot unless the
+required configuration is present, and it will not run with demo/seed accounts in the database.
+
+**Required in production**
+
+| Variable | Purpose |
+| --- | --- |
+| `NODE_ENV=production` | Enables secure cookies, HSTS, and the fail-closed checks |
+| `JWT_SECRET` | Long random secret (`openssl rand -hex 32`) |
+| `APP_URL` (or `PUBLIC_URL`) | Your public site URL |
+| `RESEND_API_KEY` *or* Twilio (`TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/`TWILIO_FROM`) | OTP delivery — without a provider, signup fails closed (no codes are shown) |
+
+**Admin bootstrap (no public admin signup)**
+
+Set these once to create the first admin; rotate the password after first sign-in:
+
+```
+ADMIN_EMAIL=you@yourco.com
+ADMIN_PASSWORD=<at least 12 characters>
+ADMIN_NAME="Your Name"
+```
+
+**Operational requirements (not yet provisioned in code)**
+
+- **Persistent storage:** SQLite at `server/fundamental.db` and uploads at
+  `server/uploads` + `server/uploads-private` must live on a persistent disk, or be
+  migrated to managed Postgres + S3/R2 before real launch. Private documents
+  (`uploads-private/`) are never served statically — they stream through
+  access-checked endpoints.
+- **Backups & encryption at rest** for the database and private documents.
+- **Malware scanning** for uploaded documents (integrate a scanner in the
+  `/api/upload/private` pipeline).
+- **Distributed rate limiting** (Redis) if running more than one instance — the
+  built-in limiter is per-process.
+- **Investor KYC/accreditation:** the approval workflow and gating are built in
+  (`investor_approved`); connect your KYC provider and approve via the Admin panel.
+
+Run `npm test` for the security self-checks (input validation, upload sniffing,
+visibility rules).

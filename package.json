@@ -12,7 +12,8 @@
     "build": "cd client && npm run build",
     "dev": "node server/index.js & npm run dev --prefix client",
     "seed": "node server/seed.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "test": "node server/selftest.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

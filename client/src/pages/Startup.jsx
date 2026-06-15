@@ -62,8 +62,15 @@ export default function Startup() {
   }, d.connected ? null : 'Connection request sent');
 
   const share = async () => {
+    // Public sharing is founder opt-in. Owners enable it on first share.
+    if (is_owner && !s.public_share) {
+      try { await api.post('/api/startups/mine', { public_share: 1 }); load(); }
+      catch (e) { return toast(e.message, 'error'); }
+    } else if (!is_owner && !s.public_share) {
+      return toast('The founder has not enabled a public link for this startup.', 'info');
+    }
     const url = `${window.location.origin}/s/${s.id}`;
-    try { await navigator.clipboard.writeText(url); toast('Public link copied — anyone can view it, no login required', 'success'); }
+    try { await navigator.clipboard.writeText(url); toast(is_owner && !s.public_share ? 'Public sharing enabled — link copied.' : 'Public link copied.', 'success'); }
     catch { toast(url, 'info'); }
   };
 

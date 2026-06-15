@@ -82,16 +82,26 @@ function Users() {
                 {u.verified === 1 && <span className="chip-blue mr-1">Verified</span>}
                 {u.verified === 2 && <span className="chip-gold mr-1">Enhanced</span>}
                 {u.verified === 3 && <span className="chip mr-1 !border-violet-500/40 !text-violet-400">Institution</span>}
+                {u.role === 'investor' && (u.investor_approved ? <span className="chip-green mr-1">Approved</span> : <span className="chip mr-1">Pending</span>)}
+                {u.status === 'suspended' && <span className="chip-red mr-1">Suspended</span>}
                 {!!u.flagged && <span className="chip-red">Flagged</span>}
               </td>
               <td className="px-4 py-3">
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button className="btn-ghost btn-sm" title="Cycle: None → Verified → Enhanced → Institution"
                     onClick={async () => { await api.post(`/api/admin/verify-user/${u.id}`); load(); toast('Verification tier updated', 'success'); }}>
                     Tier ↻
                   </button>
+                  {u.role === 'investor' && (
+                    <button className="btn-ghost btn-sm" onClick={async () => { const r = await api.post(`/api/admin/approve-investor/${u.id}`); load(); toast(r.investor_approved ? 'Investor approved' : 'Approval revoked', 'success'); }}>
+                      {u.investor_approved ? 'Revoke' : 'Approve'}
+                    </button>
+                  )}
+                  <button className="btn-ghost btn-sm" onClick={async () => { const r = await api.post(`/api/admin/suspend-user/${u.id}`); load(); toast(r.status === 'suspended' ? 'Account suspended' : 'Account reinstated', 'success'); }}>
+                    {u.status === 'suspended' ? 'Reinstate' : 'Suspend'}
+                  </button>
                   <button className="btn-danger btn-sm" onClick={async () => { await api.post(`/api/admin/flag-user/${u.id}`); load(); }}>
-                    {u.flagged ? 'Unflag' : 'Flag for fraud'}
+                    {u.flagged ? 'Unflag' : 'Flag'}
                   </button>
                 </div>
               </td>
@@ -133,12 +143,18 @@ function StartupsAdmin() {
                 {s.verified === 1 && <span className="chip-blue">Verified</span>}
                 {s.verified === 2 && <span className="chip-gold">Enhanced</span>}
                 {s.verified === 3 && <span className="chip !border-violet-500/40 !text-violet-400">Institution</span>}
+                {!!s.hidden && <span className="chip-red ml-1">Hidden</span>}
               </td>
               <td className="px-4 py-3">
-                <button className="btn-ghost btn-sm" title="Cycle verification tier"
-                  onClick={async () => { await api.post(`/api/admin/verify-startup/${s.id}`); load(); toast('Tier updated', 'success'); }}>
-                  Tier ↻
-                </button>
+                <div className="flex gap-2">
+                  <button className="btn-ghost btn-sm" title="Cycle verification tier"
+                    onClick={async () => { await api.post(`/api/admin/verify-startup/${s.id}`); load(); toast('Tier updated', 'success'); }}>
+                    Tier ↻
+                  </button>
+                  <button className="btn-ghost btn-sm" onClick={async () => { const r = await api.post(`/api/admin/hide-startup/${s.id}`); load(); toast(r.hidden ? 'Startup hidden' : 'Startup restored', 'success'); }}>
+                    {s.hidden ? 'Unhide' : 'Hide'}
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

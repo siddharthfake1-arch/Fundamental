@@ -50,23 +50,27 @@ export default function Auth() {
   const [mode, setMode] = useState('login');
   const [role, setRole] = useState('founder');
   const [form, setForm] = useState({ name: '', email: '', password: '', city: '', phone: '' });
-  const [otp, setOtp] = useState({ channel: 'email', sent: false, sending: false, code: '', demo_code: '' });
+  const [otp, setOtp] = useState({ sent: false, sending: false, code: '', demo_code: '' });
+  const [accepted, setAccepted] = useState(false);
+  const [cfg, setCfg] = useState({ demo: false, google_enabled: false });
   const [busy, setBusy] = useState(false);
   const { setUser } = useAuth();
   const toast = useToast();
   const nav = useNavigate();
 
+  useEffect(() => { api.get('/api/config').then(setCfg).catch(() => {}); }, []);
+
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
-  const otpIdentifier = otp.channel === 'email' ? form.email : form.phone;
+  // Email is the account credential, so verification is by email (P0-2).
+  const otpIdentifier = form.email;
 
   const sendCode = async () => {
-    if (!otpIdentifier) return toast(otp.channel === 'email' ? 'Enter your email first' : 'Enter your phone number first', 'error');
-
+    if (!otpIdentifier) return toast('Enter your email first', 'error');
     setOtp(o => ({ ...o, sending: true }));
     try {
-      const d = await api.post('/api/auth/send-otp', { channel: otp.channel, identifier: otpIdentifier });
+      const d = await api.post('/api/auth/send-otp', { channel: 'email', identifier: otpIdentifier });
       setOtp(o => ({ ...o, sent: true, sending: false, demo_code: d.demo_code || '' }));
-      toast(d.demo ? 'Demo mode — your code is shown below' : `Code sent to your ${otp.channel}`, 'success');
+      toast(d.demo ? 'Demo mode — your code is shown below' : 'Code sent to your email', 'success');
     } catch (err) {
       setOtp(o => ({ ...o, sending: false }));
       toast(err.message, 'error');
@@ -81,9 +85,10 @@ export default function Auth() {
       if (mode === 'login') {
         ({ user } = await api.post('/api/auth/login', { email: form.email, password: form.password }));
       } else {
-        if (!otp.sent || !otp.code) throw new Error('Verify your email or phone first — request a code and enter it.');
+        if (!accepted) throw new Error('Please accept the Terms of Service and Privacy Policy to continue.');
+        if (!otp.sent || !otp.code) throw new Error('Verify your email first — request a code and enter it.');
         const { otp_token } = await api.post('/api/auth/verify-otp', { identifier: otpIdentifier, code: otp.code });
-        ({ user } = await api.post('/api/auth/signup', { ...form, role, otp_token }));
+        ({ user } = await api.post('/api/auth/signup', { ...form, role, otp_token, accept_terms: true }));
       }
       setUser(user);
       nav(user.onboarded ? '/discover' : '/onboarding');
@@ -198,20 +203,11 @@ export default function Auth() {
               <div><span className="label">City</span><input className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
             )}
             {mode === 'signup' && (
+              <div><span className="label">Phone <span className="normal-case font-normal text-mist-500">(optional)</span></span><input className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="With country code, e.g. +966 5x xxx xxxx" /></div>
+            )}
+            {mode === 'signup' && (
               <div className="card p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-mist-100">Verify your identity</span>
-                  <div className="flex rounded-lg bg-ink-850 border border-ink-600/60 p-0.5">
-                    {[['email', 'Email'], ['phone', 'Phone']].map(([v, l]) => (
-                      <button type="button" key={v}
-                        onClick={() => setOtp(o => ({ ...o, channel: v, sent: false, code: '', demo_code: '' }))}
-                        className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors ${otp.channel === v ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
-                    ))}
-                  </div>
-                </div>
-                {otp.channel === 'phone' && (
-                  <input className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="Phone with country code, e.g. +966 5x xxx xxxx" />
-                )}
+                <span className="text-sm font-semibold text-mist-100">Verify your email</span>
                 <div className="flex gap-2">
                   <input className="input flex-1" inputMode="numeric" maxLength={6} value={otp.code}
                     onChange={(e) => setOtp(o => ({ ...o, code: e.target.value.replace(/\D/g, '') }))}
@@ -222,10 +218,16 @@ export default function Auth() {
                 </div>
                 {otp.demo_code && (
                   <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">
-                    Demo mode (no email or SMS provider configured) — your code is <code className="font-bold">{otp.demo_code}</code>
+                    Demo mode (no email provider configured) — your code is <code className="font-bold">{otp.demo_code}</code>
                   </div>
                 )}
               </div>
+            )}
+            {mode === 'signup' && (
+              <label className="flex items-start gap-2.5 cursor-pointer text-xs text-mist-400 leading-relaxed">
+                <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="accent-gold-400 w-4 h-4 mt-0.5 shrink-0" />
+                <span>I agree to Fundamental's <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:text-gold-200">Terms of Service</a> and <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:text-gold-200">Privacy Policy</a>, and understand that information on the platform is not investment advice.</span>
+              </label>
             )}
             <button disabled={busy} className="btn-primary w-full !py-3 group">
               {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : `Create ${role === 'founder' ? 'founder' : 'investor'} account`}
@@ -233,15 +235,19 @@ export default function Auth() {
             </button>
           </form>
 
-          <div className="flex items-center gap-3 my-5 text-[11px] text-mist-500 uppercase tracking-widest">
-            <div className="divider flex-1" />or<div className="divider flex-1" />
-          </div>
-          <button onClick={google} className="btn-ghost w-full !py-3">
-            <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18A10.97 10.97 0 001 12c0 1.77.43 3.45 1.18 4.94l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-            Sign in with Google
-          </button>
+          {cfg.google_enabled && (
+            <>
+              <div className="flex items-center gap-3 my-5 text-[11px] text-mist-500 uppercase tracking-widest">
+                <div className="divider flex-1" />or<div className="divider flex-1" />
+              </div>
+              <button onClick={google} className="btn-ghost w-full !py-3">
+                <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18A10.97 10.97 0 001 12c0 1.77.43 3.45 1.18 4.94l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
+                Sign in with Google
+              </button>
+            </>
+          )}
 
-          {mode === 'login' && (
+          {mode === 'login' && cfg.demo && (
             <div className="mt-6 card p-4 text-xs text-mist-400 leading-relaxed">
               <span className="text-mist-300 font-semibold">Demo accounts</span> (password <code className="text-gold-300">demo1234</code>):<br />
               Founder — <code className="text-mist-200">founder1@demo.app</code> · Investor — <code className="text-mist-200">investor1@demo.app</code> · Admin — <code className="text-mist-200">admin@fundamental.app</code>

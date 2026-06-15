@@ -79,8 +79,12 @@ async function sendOtp(channel, rawIdentifier) {
 
   const delivered = await deliver(channel, identifier, code);
   if (delivered) return { ok: true, identifier };
-  // Demo mode: no provider configured. Surfacing the code keeps signup functional;
-  // it is clearly labelled in the UI so operators know to configure delivery.
+  // Fail closed in production: never surface the code to the client (P0-2).
+  if (process.env.NODE_ENV === 'production') {
+    return { error: 'We could not send your verification code right now. Please try again shortly.' };
+  }
+  // Development only: return the code (clearly labelled in the UI) so local signup
+  // works without an email/SMS provider configured.
   return { ok: true, identifier, demo_code: code };
 }
 

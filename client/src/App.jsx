@@ -21,6 +21,7 @@ import Admin from './pages/Admin';
 import PublicStartup from './pages/PublicStartup';
 import Pulse from './pages/Pulse';
 import Communities from './pages/Communities';
+import Legal from './pages/Legal';
 
 function RedirectToStartup() {
   const { id } = useParams();
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Auth />} />
         <Route path="/s/:id" element={<PublicStartup />} />
+        <Route path="/legal/:doc" element={<Legal />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -75,6 +77,7 @@ export default function App() {
           <Route path="/social" element={<Social />} />
           <Route path="/watchlist" element={<Watchlist />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/legal/:doc" element={<Legal />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/discover" replace />} />
         </Routes>

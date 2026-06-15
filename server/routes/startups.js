@@ -139,7 +139,7 @@ function fireDealAlerts(s) {
 // ---- Create / update own startup (founder onboarding + settings) ----
 const FIELDS = ['name','sector','subsector','stage','city','founded_year','raising_status','raising_amount',
   'one_liner','problem','solution','business_model','market_size','competitive_advantage','round_details',
-  'arr','mrr','growth','gross_margin','burn','runway','cac','ltv','deployment_timeline','strategic_objectives','logo','cover','video_url','video_duration'];
+  'arr','mrr','growth','gross_margin','burn','runway','cac','ltv','deployment_timeline','strategic_objectives','logo','cover','video_url','video_duration','public_share'];
 
 const MAX_PITCH_SECONDS = 12 * 60; // mandatory 12-minute pitch ceiling (P0-8)
 
@@ -168,6 +168,7 @@ router.post('/mine', requireRole('founder'), (req, res) => {
   clampStrings(b, ['problem', 'solution', 'business_model', 'market_size', 'competitive_advantage', 'round_details', 'deployment_timeline', 'strategic_objectives'], 5000);
   const data = {};
   for (const f of FIELDS) if (b[f] !== undefined) data[f] = b[f];
+  if (data.public_share !== undefined) data.public_share = data.public_share ? 1 : 0; // boolean column
   for (const jf of ['revenue_series', 'video_chapters', 'use_of_funds']) {
     if (b[jf] !== undefined) data[jf] = JSON.stringify(b[jf]);
   }
