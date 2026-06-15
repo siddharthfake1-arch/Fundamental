@@ -156,14 +156,16 @@ export function ToastProvider({ children }) {
 export const useToast = () => useContext(ToastCtx);
 
 // ---- File upload field with progress ----
-export function FileUpload({ label, accept, onUploaded, hint, currentUrl }) {
+// `private` routes the file to access-controlled storage and returns { key }
+// instead of a public { url } — used for data-room collateral and attachments.
+export function FileUpload({ label, accept, onUploaded, hint, currentUrl, uploaded, private: isPrivate }) {
   const [progress, setProgress] = useState(null);
   const toast = useToast();
   const handle = async (file) => {
     if (!file) return;
     try {
       setProgress(0);
-      const data = await api.upload(file, setProgress);
+      const data = await (isPrivate ? api.uploadPrivate(file, setProgress) : api.upload(file, setProgress));
       onUploaded(data, file);
       toast('Upload complete', 'success');
     } catch (e) {
@@ -172,6 +174,7 @@ export function FileUpload({ label, accept, onUploaded, hint, currentUrl }) {
       setProgress(null);
     }
   };
+  const isDone = currentUrl || uploaded;
   return (
     <div>
       {label && <span className="label">{label}</span>}
@@ -182,7 +185,7 @@ export function FileUpload({ label, accept, onUploaded, hint, currentUrl }) {
             <div className="text-xs text-mist-400 mb-2">Uploading… {progress}%</div>
             <div className="h-1.5 bg-ink-700 rounded-full overflow-hidden"><div className="h-full bg-gold-400 transition-all" style={{ width: progress + '%' }} /></div>
           </div>
-        ) : currentUrl ? (
+        ) : isDone ? (
           <div className="text-sm text-emerald-300 font-medium">✓ Uploaded — click to replace</div>
         ) : (
           <div className="text-sm text-mist-400">Click to upload{hint && <div className="text-xs text-mist-500 mt-1">{hint}</div>}</div>

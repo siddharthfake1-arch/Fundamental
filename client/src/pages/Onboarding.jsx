@@ -8,13 +8,15 @@ const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 
 const STAGES = ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'];
 const COLLATERAL_TYPES = ['Deck', 'IM', 'Financial Model', 'Industry Overview', 'Product Demo', 'Cap Table'];
 
-function videoDuration(file) {
+function videoDuration(fileOrUrl) {
   return new Promise((resolve) => {
     const v = document.createElement('video');
     v.preload = 'metadata';
-    v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); resolve(v.duration); };
+    const isUrl = fileOrUrl && fileOrUrl.external;
+    v.onloadedmetadata = () => { if (!isUrl) URL.revokeObjectURL(v.src); resolve(v.duration); };
     v.onerror = () => resolve(null);
-    v.src = URL.createObjectURL(file);
+    if (isUrl) { v.crossOrigin = 'anonymous'; v.src = fileOrUrl.src; }
+    else v.src = URL.createObjectURL(fileOrUrl);
   });
 }
 
@@ -95,7 +97,7 @@ const normalizeMe = (me) => ({
 const S_TEXT = ['name', 'sector', 'subsector', 'stage', 'city', 'raising_status', 'raising_amount', 'one_liner',
   'problem', 'solution', 'business_model', 'market_size', 'competitive_advantage', 'round_details',
   'deployment_timeline', 'strategic_objectives', 'logo', 'cover', 'video_url'];
-const S_NUM = ['founded_year', 'arr', 'mrr', 'growth', 'gross_margin', 'burn', 'runway', 'cac', 'ltv'];
+const S_NUM = ['founded_year', 'arr', 'mrr', 'growth', 'gross_margin', 'burn', 'runway', 'cac', 'ltv', 'video_duration'];
 
 function emptyStartup() {
   const s = Object.fromEntries([...S_TEXT, ...S_NUM].map(k => [k, '']));
@@ -302,14 +304,14 @@ function VideoStep({ s, setS, toast }) {
   return (
     <div className="space-y-4">
       <FileUpload label="Pitch Video (max 12 minutes — mandatory)" accept="video/*" currentUrl={s.video_url}
-        hint="MP4 / WebM / MOV, up to 500MB"
+        hint="MP4 / WebM / MOV, up to 600MB"
         onUploaded={async (d, file) => {
           const dur = await videoDuration(file);
-          if (dur && dur > 12.5 * 60) {
+          if (dur && dur > 12 * 60) {
             toast(`That video is ${Math.round(dur / 60)} minutes. The pitch must be 12 minutes or less — tighten it and re-upload.`, 'error');
             return;
           }
-          setS(x => ({ ...x, video_url: d.url, video_minutes: dur ? Math.round(dur / 60) : null }));
+          setS(x => ({ ...x, video_url: d.url, video_duration: dur ? Math.round(dur) : 0, video_minutes: dur ? Math.round(dur / 60) : null }));
         }} />
       {s.video_url && (
         <div className="card p-3">
@@ -319,13 +321,20 @@ function VideoStep({ s, setS, toast }) {
       )}
       <div className="text-xs text-mist-500">Hosting your video elsewhere? Paste a direct video URL:</div>
       <input className="input" placeholder="https://… (direct .mp4 link)" value={s.video_url.startsWith('/uploads') ? '' : s.video_url}
-        onChange={(e) => setS(x => ({ ...x, video_url: e.target.value, video_minutes: null }))} />
+        onChange={(e) => setS(x => ({ ...x, video_url: e.target.value, video_duration: 0, video_minutes: null }))}
+        onBlur={async (e) => {
+          const url = e.target.value.trim();
+          if (!url) return;
+          const dur = await videoDuration({ src: url, external: true }).catch(() => null);
+          if (dur && dur > 12 * 60) { toast(`That video is ${Math.round(dur / 60)} minutes. The pitch must be 12 minutes or less.`, 'error'); return; }
+          if (dur) setS(x => ({ ...x, video_duration: Math.round(dur), video_minutes: Math.round(dur / 60) }));
+        }} />
     </div>
   );
 }
 
 function CollateralStep({ docs, setDocs }) {
-  const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Public', file_url: '' });
+  const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Public', file_key: '' });
   return (
     <div className="space-y-4">
       {docs.map((doc, i) => (
@@ -348,10 +357,10 @@ function CollateralStep({ docs, setDocs }) {
             {['Public', 'Request Access', 'Connected Only'].map(a => <option key={a}>{a}</option>)}
           </select>
         </Field>
-        <FileUpload label="Document File" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,video/*" currentUrl={d.file_url}
-          onUploaded={(u) => setD(x => ({ ...x, file_url: u.url }))} />
+        <FileUpload label="Document File" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,image/*" private uploaded={!!d.file_key}
+          onUploaded={(u) => setD(x => ({ ...x, file_key: u.key }))} />
         <button className="btn-ghost w-full" disabled={!d.title}
-          onClick={() => { setDocs(ds => [...ds, d]); setD({ title: '', type: 'Deck', access_level: 'Public', file_url: '' }); }}>
+          onClick={() => { setDocs(ds => [...ds, d]); setD({ title: '', type: 'Deck', access_level: 'Public', file_key: '' }); }}>
           + Add Document
         </button>
       </div>

@@ -67,31 +67,44 @@ router.post('/', (req, res) => {
   const investorTypes = ['Investment Made', 'Investor Insight'];
   if (req.user.role === 'founder' && !founderTypes.includes(type)) return res.status(403).json({ error: 'This post type is available to investors only.' });
   if (req.user.role === 'investor' && !investorTypes.includes(type)) return res.status(403).json({ error: 'This post type is available to founders only.' });
-  const info = db.prepare('INSERT INTO posts (user_id, type, text, startup_id, media) VALUES (?,?,?,?,?)')
-    .run(req.user.id, type, text.trim(), Number(startup_id) || null, media || '');
-  if (startup_id && ['Round Closed', 'Milestone', 'Hiring'].includes(type)) {
-    // Only the startup's own founder may write to its official activity timeline
+  // A founder may only tag their own startup; investors cannot tag a startup as
+  // the official author (prevents misleading associations, P1-9).
+  let taggedId = null;
+  if (startup_id) {
+    if (req.user.role !== 'founder') return res.status(403).json({ error: 'Only a startup\'s founder can tag it in a post.' });
     const own = db.prepare('SELECT 1 FROM startups WHERE id=? AND founder_id=?').get(startup_id, req.user.id);
-    if (own) {
-      const map = { 'Round Closed': 'Round Closed', 'Milestone': 'Milestone Achieved', 'Hiring': 'Hiring Announcement' };
-      db.prepare('INSERT INTO activities (startup_id, type, text) VALUES (?,?,?)').run(startup_id, map[type], text.trim());
-    }
+    if (!own) return res.status(403).json({ error: 'You can only tag your own startup.' });
+    taggedId = Number(startup_id);
+  }
+  const info = db.prepare('INSERT INTO posts (user_id, type, text, startup_id, media) VALUES (?,?,?,?,?)')
+    .run(req.user.id, type, text.trim(), taggedId, media || '');
+  if (taggedId && ['Round Closed', 'Milestone', 'Hiring'].includes(type)) {
+    const map = { 'Round Closed': 'Round Closed', 'Milestone': 'Milestone Achieved', 'Hiring': 'Hiring Announcement' };
+    db.prepare('INSERT INTO activities (startup_id, type, text) VALUES (?,?,?)').run(taggedId, map[type], text.trim());
   }
   res.json({ post: shapePost(db.prepare('SELECT * FROM posts WHERE id=?').get(info.lastInsertRowid), req.user.id) });
 });
 
-router.post('/:id/like', (req, res) => {
+// Removed/moderated posts cannot be interacted with by direct ID (P1-10).
+function livePost(req, res, next) {
+  const post = db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id);
+  if (!post || post.removed) return res.status(404).json({ error: 'This post is no longer available.' });
+  req.post = post;
+  next();
+}
+
+router.post('/:id/like', livePost, (req, res) => {
   const exists = db.prepare('SELECT 1 FROM post_likes WHERE user_id=? AND post_id=?').get(req.user.id, req.params.id);
   if (exists) db.prepare('DELETE FROM post_likes WHERE user_id=? AND post_id=?').run(req.user.id, req.params.id);
   else db.prepare('INSERT INTO post_likes (user_id, post_id) VALUES (?,?)').run(req.user.id, req.params.id);
   res.json({ liked: !exists, likes: db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id=?').get(req.params.id).c });
 });
 
-router.post('/:id/comment', (req, res) => {
+router.post('/:id/comment', livePost, (req, res) => {
   const { text } = req.body;
   if (!text || !text.trim()) return res.status(400).json({ error: 'Please write a comment before posting.' });
   db.prepare('INSERT INTO post_comments (post_id, user_id, text) VALUES (?,?,?)').run(req.params.id, req.user.id, text.trim().slice(0, 1000));
-  const post = db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id);
+  const post = req.post;
   if (post && post.user_id !== req.user.id) {
     db.prepare('INSERT INTO notifications (user_id, type, text, link) VALUES (?,?,?,?)')
       .run(post.user_id, 'New Message', `${req.user.name} commented on your post. Open it to see what they said.`, '/social');

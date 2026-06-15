@@ -35,8 +35,8 @@ export default function Messages() {
   const send = async (extra = {}) => {
     if (!text.trim() && !attach && !extra.ref_startup_id) return;
     try {
-      await api.post(`/api/messages/${active}/send`, { text: text.trim(), attachment: attach, ...extra });
-      setText(''); setAttach('');
+      await api.post(`/api/messages/${active}/send`, { text: text.trim(), attachment_key: attach?.key || '', attachment_name: attach?.name || '', ...extra });
+      setText(''); setAttach(null);
       loadThread(); loadList();
     } catch (e) { toast(e.message, 'error'); }
   };
@@ -129,7 +129,9 @@ export default function Messages() {
                           </Link>
                         )}
                         {m.text}
-                        {m.attachment && <a href={m.attachment} target="_blank" rel="noreferrer" className="block mt-1.5 text-xs text-accent-400 underline">📎 Attachment</a>}
+                        {m.attachment_download
+                          ? <a href={m.attachment_download} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline">📎 Attachment</a>
+                          : m.attachment && <a href={m.attachment} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline">📎 Attachment</a>}
                         <div className={`text-[10px] mt-1 ${mine ? 'text-gold-300/50' : 'text-mist-500'}`}>{timeAgo(m.created_at)}</div>
                       </div>
                     </div>
@@ -139,13 +141,13 @@ export default function Messages() {
               </div>
 
               <div className="border-t border-ink-700/60 p-3">
-                {attach && <div className="text-xs text-emerald-300 mb-2">📎 File attached — sends with your message <button className="text-mist-500 ml-1" onClick={() => setAttach('')}>✕</button></div>}
+                {attach && <div className="text-xs text-emerald-300 mb-2">📎 {attach.name || 'File'} attached — sends with your message <button className="text-mist-500 ml-1" onClick={() => setAttach(null)}>✕</button></div>}
                 <div className="flex gap-2 items-end">
                   <label className="btn-ghost btn-sm !px-2.5 cursor-pointer" title="Attach file">
                     <input type="file" className="hidden" onChange={async (e) => {
                       const f = e.target.files[0];
                       if (!f) return;
-                      try { const d = await api.upload(f); setAttach(d.url); } catch (er) { toast(er.message, 'error'); }
+                      try { const d = await api.uploadPrivate(f); setAttach({ key: d.key, name: d.name }); } catch (er) { toast(er.message, 'error'); }
                     }} />📎
                   </label>
                   <button className="btn-ghost btn-sm !px-2.5" title="Reference a startup" onClick={openRef}>◳</button>

@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, publicUser, profileCompletion } = require('../db');
+const { db, publicUser, profileCompletion, notify, audit } = require('../db');
 const { auth, requireRole } = require('../authmw');
 
 const router = express.Router();
@@ -171,10 +171,10 @@ router.get('/admin/overview', (req, res) => {
   });
 });
 router.get('/admin/users', (req, res) => {
-  res.json({ users: db.prepare("SELECT id, name, email, role, city, verified, flagged, created_at FROM users WHERE role!='admin' ORDER BY id DESC").all() });
+  res.json({ users: db.prepare("SELECT id, name, email, role, city, verified, flagged, status, investor_approved, created_at FROM users WHERE role!='admin' ORDER BY id DESC").all() });
 });
 router.get('/admin/startups', (req, res) => {
-  res.json({ startups: db.prepare('SELECT id, name, sector, stage, verified, video_url, views FROM startups ORDER BY id DESC').all() });
+  res.json({ startups: db.prepare('SELECT id, name, sector, stage, verified, video_url, views, hidden FROM startups ORDER BY id DESC').all() });
 });
 // Verification tiers: 0 none → 1 Verified → 2 Enhanced → 3 Institution
 router.post('/admin/verify-user/:id', (req, res) => {
@@ -185,11 +185,36 @@ router.post('/admin/verify-user/:id', (req, res) => {
   } else {
     db.prepare('UPDATE users SET verified = (verified + 1) % 4 WHERE id=?').run(req.params.id);
   }
+  const v = (db.prepare('SELECT verified FROM users WHERE id=?').get(req.params.id) || {}).verified;
+  audit(req.user.id, 'verify-user', { targetType: 'user', targetId: Number(req.params.id), detail: `tier=${v}`, ip: req.ip });
   res.json({ ok: true });
 });
 router.post('/admin/flag-user/:id', (req, res) => {
   db.prepare('UPDATE users SET flagged = 1 - flagged WHERE id=?').run(req.params.id);
+  const f = (db.prepare('SELECT flagged FROM users WHERE id=?').get(req.params.id) || {}).flagged;
+  audit(req.user.id, f ? 'flag-user' : 'unflag-user', { targetType: 'user', targetId: Number(req.params.id), ip: req.ip });
   res.json({ ok: true });
+});
+// Suspend / reinstate an account. Suspension is enforced in auth middleware and
+// invalidates the user's active sessions immediately (P1-5).
+router.post('/admin/suspend-user/:id', (req, res) => {
+  const u = db.prepare("SELECT id, status FROM users WHERE id=? AND role!='admin'").get(req.params.id);
+  if (!u) return res.status(404).json({ error: 'User not found.' });
+  const suspend = u.status !== 'suspended';
+  db.prepare("UPDATE users SET status=?, suspended_at=?, suspended_reason=? WHERE id=?")
+    .run(suspend ? 'suspended' : 'active', suspend ? new Date().toISOString() : null, suspend ? String(req.body?.reason || '').slice(0, 500) : '', u.id);
+  audit(req.user.id, suspend ? 'suspend-user' : 'reinstate-user', { targetType: 'user', targetId: u.id, detail: String(req.body?.reason || ''), ip: req.ip });
+  res.json({ ok: true, status: suspend ? 'suspended' : 'active' });
+});
+// Approve / revoke an investor's access to deal flow (P0-5).
+router.post('/admin/approve-investor/:id', (req, res) => {
+  const u = db.prepare("SELECT id, role, investor_approved FROM users WHERE id=?").get(req.params.id);
+  if (!u || u.role !== 'investor') return res.status(404).json({ error: 'Investor not found.' });
+  const approve = !u.investor_approved;
+  db.prepare('UPDATE users SET investor_approved=? WHERE id=?').run(approve ? 1 : 0, u.id);
+  audit(req.user.id, approve ? 'approve-investor' : 'revoke-investor', { targetType: 'user', targetId: u.id, ip: req.ip });
+  if (approve) notify(u.id, 'Access Approved', 'Your investor account has been approved. You now have full access to deal flow on Fundamental.', '/discover');
+  res.json({ ok: true, investor_approved: approve });
 });
 router.post('/admin/verify-startup/:id', (req, res) => {
   if (req.body && req.body.tier !== undefined) {
@@ -199,7 +224,18 @@ router.post('/admin/verify-startup/:id', (req, res) => {
   } else {
     db.prepare('UPDATE startups SET verified = (verified + 1) % 4 WHERE id=?').run(req.params.id);
   }
+  const v = (db.prepare('SELECT verified FROM startups WHERE id=?').get(req.params.id) || {}).verified;
+  audit(req.user.id, 'verify-startup', { targetType: 'startup', targetId: Number(req.params.id), detail: `tier=${v}`, ip: req.ip });
   res.json({ ok: true });
+});
+// Hide / unhide a startup from the marketplace (P1-5).
+router.post('/admin/hide-startup/:id', (req, res) => {
+  const s = db.prepare('SELECT id, hidden FROM startups WHERE id=?').get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Startup not found.' });
+  const hide = !s.hidden;
+  db.prepare('UPDATE startups SET hidden=? WHERE id=?').run(hide ? 1 : 0, s.id);
+  audit(req.user.id, hide ? 'hide-startup' : 'unhide-startup', { targetType: 'startup', targetId: s.id, ip: req.ip });
+  res.json({ ok: true, hidden: hide });
 });
 router.get('/admin/reports', (req, res) => {
   const rows = db.prepare(`SELECT r.*, u.name reporter_name FROM reports r JOIN users u ON u.id=r.reporter_id ORDER BY r.id DESC`).all();

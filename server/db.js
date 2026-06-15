@@ -273,7 +273,26 @@ for (const stmt of [
   "ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0",
   "ALTER TABLE watchlist ADD COLUMN tags TEXT DEFAULT '[]'", // investor deal-flow tags
   "ALTER TABLE startups ADD COLUMN stage_reached_at TEXT DEFAULT NULL", // last funding-journey advance
+  // ---- Launch-hardening columns ----
+  "ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'",            // active | suspended
+  "ALTER TABLE users ADD COLUMN suspended_at TEXT DEFAULT NULL",
+  "ALTER TABLE users ADD COLUMN suspended_reason TEXT DEFAULT ''",
+  "ALTER TABLE users ADD COLUMN investor_approved INTEGER DEFAULT 0",     // investor must be approved to access deal flow
+  "ALTER TABLE users ADD COLUMN accepted_terms_at TEXT DEFAULT NULL",     // legal acceptance timestamp
+  "ALTER TABLE startups ADD COLUMN video_duration REAL DEFAULT 0",        // seconds; required <=720 to publish
+  "ALTER TABLE startups ADD COLUMN public_share INTEGER DEFAULT 0",       // founder opt-in to the public share page
+  "ALTER TABLE collateral ADD COLUMN file_key TEXT DEFAULT ''",           // private-storage filename (not publicly served)
+  "ALTER TABLE messages ADD COLUMN attachment_key TEXT DEFAULT ''",       // private message attachment
+  "ALTER TABLE messages ADD COLUMN attachment_name TEXT DEFAULT ''",
+  "ALTER TABLE startups ADD COLUMN hidden INTEGER DEFAULT 0",             // admin can hide a startup from the marketplace
 ]) { try { db.exec(stmt); } catch { /* column exists */ } }
+
+// Demo accounts (dev only) are pre-approved and pre-consented so the seeded
+// experience works; real signups remain gated. Idempotent and demo-scoped.
+try {
+  db.exec("UPDATE users SET investor_approved=1 WHERE role='investor' AND email LIKE '%@demo.app'");
+  db.exec("UPDATE users SET accepted_terms_at=datetime('now') WHERE email LIKE '%@demo.app' AND accepted_terms_at IS NULL");
+} catch { /* columns not present yet on very first run */ }
 
 // Engagement & deal-flow tables added after first release.
 db.exec(`
@@ -313,6 +332,30 @@ CREATE TABLE IF NOT EXISTS deal_shares (
   note TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now')),
   UNIQUE (from_id, to_id, startup_id)
+);
+
+-- Immutable audit trail for sensitive actions (admin moderation, verification,
+-- data-room access). Append-only; never updated or deleted by app code.
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor_id INTEGER,
+  action TEXT NOT NULL,
+  target_type TEXT DEFAULT '',
+  target_id INTEGER,
+  detail TEXT DEFAULT '',
+  ip TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Data-room access log: who did what to which document, when (P1-3).
+CREATE TABLE IF NOT EXISTS collateral_access_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  collateral_id INTEGER NOT NULL,
+  startup_id INTEGER,
+  user_id INTEGER NOT NULL,
+  action TEXT NOT NULL,            -- view | download | request | approve | reject | revoke
+  ip TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
 );
 `);
 
@@ -358,12 +401,41 @@ CREATE INDEX IF NOT EXISTS idx_interests_startup ON interests(startup_id);
 CREATE INDEX IF NOT EXISTS idx_interests_investor ON interests(investor_id);
 CREATE INDEX IF NOT EXISTS idx_update_reactions_update ON update_reactions(update_id);
 CREATE INDEX IF NOT EXISTS idx_deal_shares_to ON deal_shares(to_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, target_id);
+CREATE INDEX IF NOT EXISTS idx_collateral_access_logs ON collateral_access_logs(collateral_id, created_at);
 `);
 
 // ---- shared helpers ----
+// Respects the recipient's in-app notification preference (P1-11). Email delivery
+// is handled separately by the mailer when email_alerts is on.
 function notify(userId, type, text, link = '') {
+  const u = db.prepare('SELECT inapp_alerts FROM users WHERE id=?').get(userId);
+  if (u && u.inapp_alerts === 0) return;
   db.prepare('INSERT INTO notifications (user_id, type, text, link) VALUES (?,?,?,?)')
     .run(userId, type, text, link);
+}
+
+// Append-only audit trail for sensitive/admin actions.
+function audit(actorId, action, { targetType = '', targetId = null, detail = '', ip = '' } = {}) {
+  db.prepare('INSERT INTO audit_logs (actor_id, action, target_type, target_id, detail, ip) VALUES (?,?,?,?,?,?)')
+    .run(actorId ?? null, action, targetType, targetId, detail, ip);
+}
+
+// Data-room access log entry.
+function logCollateralAccess(collateralId, startupId, userId, action, ip = '') {
+  db.prepare('INSERT INTO collateral_access_logs (collateral_id, startup_id, user_id, action, ip) VALUES (?,?,?,?,?)')
+    .run(collateralId, startupId ?? null, userId, action, ip);
+}
+
+// A startup is "listed" (publicly discoverable) once it has a pitch video and is
+// not hidden by an admin. Non-owners/non-admins must not see unlisted startups (P0-4).
+function isListed(startup) {
+  return !!(startup && startup.video_url && !startup.hidden);
+}
+function canViewStartup(startup, user) {
+  if (!startup) return false;
+  if (isListed(startup)) return true;
+  return user && (user.role === 'admin' || startup.founder_id === user.id);
 }
 
 function addActivity(startupId, type, text) {
@@ -465,4 +537,4 @@ function trustScore(u) {
   return { total: verification + profile + network + contribution, breakdown: { verification, profile, network, contribution } };
 }
 
-module.exports = { db, notify, addActivity, areConnected, publicUser, profileCompletion, fundamentalScore, thesisFit, trustScore, FUNDING_LADDER, startupSubscribers };
+module.exports = { db, notify, audit, logCollateralAccess, isListed, canViewStartup, addActivity, areConnected, publicUser, profileCompletion, fundamentalScore, thesisFit, trustScore, FUNDING_LADDER, startupSubscribers };

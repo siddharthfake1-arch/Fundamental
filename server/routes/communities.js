@@ -63,6 +63,10 @@ router.get('/posts/:id/replies', (req, res) => {
 router.post('/posts/:id/replies', (req, res) => {
   const post = db.prepare('SELECT * FROM community_posts WHERE id=?').get(req.params.id);
   if (!post) return res.status(404).json({ error: 'We could not find that discussion. It may have been removed.' });
+  // Replying requires community membership, same as posting (P2-8).
+  if (!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=?').get(post.community_id, req.user.id)) {
+    return res.status(403).json({ error: 'Join the community to take part in the discussion.' });
+  }
   const { body } = req.body;
   if (!body || !body.trim()) return res.status(400).json({ error: 'Please write a reply before posting.' });
   db.prepare('INSERT INTO community_replies (post_id, user_id, body) VALUES (?,?,?)')

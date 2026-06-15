@@ -114,4 +114,26 @@ function randomFileName(originalName) {
   return `${crypto.randomBytes(16).toString('hex')}-${safe}`;
 }
 
-module.exports = { rateLimit, safeUrl, validateUrlFields, validateNumericFields, clampStrings, csrfOriginCheck, securityHeaders, randomFileName };
+// ---- Upload content validation (magic bytes) ----
+// Classify an uploaded file by its actual bytes, not its extension (P0-7).
+// Returns 'image' | 'video' | 'document' | null. Rejects spoofed extensions.
+function sniffFileType(buf, name = '') {
+  if (!buf || buf.length < 4) return null;
+  const b = buf;
+  const ascii = (start, end) => b.slice(start, end).toString('latin1');
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image'; // PNG
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image';                   // JPEG
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return 'image';  // GIF
+  if (b.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image'; // WEBP
+  const head = b.slice(0, 512).toString('utf8').trim().toLowerCase();
+  if (head.startsWith('<svg') || (head.startsWith('<?xml') && head.includes('<svg'))) return 'image'; // SVG
+  if (b.length >= 12 && ascii(4, 8) === 'ftyp') return 'video';                          // MP4/MOV/M4V
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return 'video';   // WEBM/MKV
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'document'; // PDF
+  if (b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) return 'document'; // ZIP / docx / xlsx / pptx / key
+  if (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0) return 'document'; // legacy MS Office
+  if (/\.(csv|txt)$/i.test(name) && !/[\x00-\x08\x0e-\x1f]/.test(head)) return 'document'; // CSV/TXT
+  return null;
+}
+
+module.exports = { rateLimit, safeUrl, validateUrlFields, validateNumericFields, clampStrings, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType };

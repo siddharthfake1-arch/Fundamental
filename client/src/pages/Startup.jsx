@@ -225,9 +225,15 @@ export default function Startup() {
                 </div>
                 <span className={c.access_level === 'Public' ? 'chip-green' : c.access_level === 'Connected Only' ? 'chip-gold' : 'chip'}>{c.access_level}</span>
                 {c.can_view ? (
-                  <button className="btn-ghost btn-sm" onClick={async () => {
-                    await api.post(`/api/startups/collateral/${c.id}/download`).catch(() => {});
-                    c.file_url ? window.open(c.file_url, '_blank') : toast('No file attached to this document yet', 'info');
+                  <button className="btn-ghost btn-sm" disabled={!c.has_file && !c.file_url} onClick={async () => {
+                    if (c.file_url) { // external link — open safely
+                      api.post(`/api/startups/collateral/${c.id}/download`).catch(() => {});
+                      window.open(c.file_url, '_blank', 'noopener,noreferrer');
+                    } else if (c.has_file) { // private file — streamed through the access-checked endpoint
+                      window.open(`/api/startups/collateral/${c.id}/download`, '_blank', 'noopener,noreferrer');
+                    } else {
+                      toast('No file attached to this document yet', 'info');
+                    }
                   }}>View</button>
                 ) : user.role === 'investor' ? (
                   c.my_request === 'pending'

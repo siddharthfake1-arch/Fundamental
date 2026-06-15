@@ -81,9 +81,12 @@ router.get('/connections', (req, res) => {
 });
 
 router.post('/follow/:id', (req, res) => {
-  const exists = db.prepare('SELECT 1 FROM follows WHERE follower_id=? AND followee_id=?').get(req.user.id, req.params.id);
-  if (exists) db.prepare('DELETE FROM follows WHERE follower_id=? AND followee_id=?').run(req.user.id, req.params.id);
-  else db.prepare('INSERT INTO follows (follower_id, followee_id) VALUES (?,?)').run(req.user.id, req.params.id);
+  const targetId = Number(req.params.id);
+  if (!targetId || targetId === req.user.id) return res.status(400).json({ error: 'You cannot follow yourself.' }); // (P2-5)
+  if (!db.prepare('SELECT 1 FROM users WHERE id=?').get(targetId)) return res.status(404).json({ error: 'We could not find that person.' });
+  const exists = db.prepare('SELECT 1 FROM follows WHERE follower_id=? AND followee_id=?').get(req.user.id, targetId);
+  if (exists) db.prepare('DELETE FROM follows WHERE follower_id=? AND followee_id=?').run(req.user.id, targetId);
+  else db.prepare('INSERT INTO follows (follower_id, followee_id) VALUES (?,?)').run(req.user.id, targetId);
   res.json({ following: !exists });
 });
 
@@ -111,7 +114,11 @@ router.get('/profile/:id', (req, res) => {
   out.following = !!db.prepare('SELECT 1 FROM follows WHERE follower_id=? AND followee_id=?').get(req.user.id, u.id);
 
   if (u.role === 'founder') {
-    out.startups = db.prepare('SELECT id, name, logo, sector, stage, one_liner, raising_status, verified FROM startups WHERE founder_id=?').all(u.id);
+    // Only the owner and admins see unlisted (draft) startups on a profile (P0-4).
+    const ownerView = req.user.id === u.id || req.user.role === 'admin';
+    out.startups = db.prepare(
+      `SELECT id, name, logo, sector, stage, one_liner, raising_status, verified FROM startups WHERE founder_id=?${ownerView ? '' : " AND video_url != ''"}`
+    ).all(u.id);
     const sids = out.startups.map(s => s.id);
     out.activity = sids.length
       ? db.prepare(`SELECT a.*, s.name startup_name FROM activities a JOIN startups s ON s.id=a.startup_id
@@ -122,9 +129,12 @@ router.get('/profile/:id', (req, res) => {
     const ip = db.prepare('SELECT * FROM investor_profiles WHERE user_id=?').get(u.id);
     out.investor = ip ? { ...ip, stage_focus: J(ip.stage_focus), sector_focus: J(ip.sector_focus), portfolio: J(ip.portfolio) } : null;
     if (out.investor) {
+      // Portfolio companies are only shown if listed (unless you own the profile / admin).
+      const ownerView = req.user.id === u.id || req.user.role === 'admin';
       out.portfolio_startups = out.investor.portfolio
-        .map(pid => db.prepare('SELECT id, name, logo, sector, stage, one_liner FROM startups WHERE id=?').get(pid))
-        .filter(Boolean);
+        .map(pid => db.prepare('SELECT id, name, logo, sector, stage, one_liner, video_url FROM startups WHERE id=?').get(pid))
+        .filter(s => s && (ownerView || s.video_url))
+        .map(({ video_url, ...s }) => s);
     }
     // Visual intelligence: where this investor's attention actually goes (aggregates only)
     const interest = db.prepare(`SELECT s.sector label, COUNT(*) n FROM upvotes u JOIN startups s ON s.id=u.startup_id
@@ -202,8 +212,17 @@ router.post('/report', (req, res) => {
   const { target_type, target_id, reason } = req.body;
   if (!target_type || !target_id || !reason) return res.status(400).json({ error: 'Please add a reason so our team can review this report.' });
   if (!['user', 'startup', 'post'].includes(target_type)) return res.status(400).json({ error: 'That report target is not supported.' });
+  // Validate the target exists (P2-9).
+  const tables = { user: 'users', startup: 'startups', post: 'posts' };
+  const tid = Number(target_id) || 0;
+  if (!db.prepare(`SELECT 1 FROM ${tables[target_type]} WHERE id=?`).get(tid)) {
+    return res.status(404).json({ error: 'We could not find the content you are reporting.' });
+  }
+  // De-duplicate: one open report per reporter per target.
+  const dup = db.prepare("SELECT 1 FROM reports WHERE reporter_id=? AND target_type=? AND target_id=? AND status='open'").get(req.user.id, target_type, tid);
+  if (dup) return res.json({ ok: true, already: true });
   db.prepare('INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?,?,?,?)')
-    .run(req.user.id, target_type, Number(target_id) || 0, String(reason).slice(0, 2000));
+    .run(req.user.id, target_type, tid, String(reason).slice(0, 2000));
   res.json({ ok: true });
 });
 

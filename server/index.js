@@ -10,10 +10,17 @@ try { require.resolve('express'); } catch {
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
+const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
-const { auth } = require('./authmw');
-const { rateLimit, csrfOriginCheck, securityHeaders, randomFileName } = require('./security');
+const { auth, validateProductionConfig } = require('./authmw');
+const { rateLimit, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType } = require('./security');
+
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// Fail closed: refuse to boot a production deployment that is missing required
+// security configuration (JWT secret, OTP provider, public URL) — P0-9.
+validateProductionConfig();
 
 const app = express();
 app.set('trust proxy', 1); // correct protocol/IP behind Render/Railway/nginx proxies
@@ -27,47 +34,103 @@ app.use('/api', rateLimit({ name: 'api', windowMs: 5 * 60_000, max: 1500 })); //
 // Health check for hosting platforms
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'fundamental' }));
 
-// First boot on a fresh database: seed demo data automatically so the deploy
-// works out of the box. Disable with AUTO_SEED=false.
+// Public client config — lets the UI hide demo hints / unconfigured sign-in
+// methods without leaking server internals.
+app.get('/api/config', (req, res) => res.json({
+  demo: !IS_PROD,
+  google_enabled: !!process.env.GOOGLE_CLIENT_ID,
+}));
+
+// ---- Database bootstrap & production safety (P0-1) ----
 {
   const { db } = require('./db');
-  const empty = db.prepare('SELECT COUNT(*) c FROM users').get().c === 0;
-  if (empty && process.env.AUTO_SEED !== 'false') {
-    console.log('Empty database detected — seeding demo data (set AUTO_SEED=false to disable)…');
+  const userCount = db.prepare('SELECT COUNT(*) c FROM users').get().c;
+
+  // Never auto-seed demo data in production, regardless of AUTO_SEED.
+  if (userCount === 0 && !IS_PROD && process.env.AUTO_SEED !== 'false') {
+    console.log('Empty database detected — seeding demo data (development only; set AUTO_SEED=false to disable)…');
     require('child_process').execFileSync(process.execPath, [path.join(__dirname, 'seed.js')], { stdio: 'inherit' });
+  }
+
+  // In production, refuse to boot if demo/seed accounts exist — a public admin
+  // with a known password is a critical risk.
+  if (IS_PROD) {
+    const demo = db.prepare("SELECT COUNT(*) c FROM users WHERE email LIKE '%@demo.app' OR email='admin@fundamental.app'").get().c;
+    if (demo > 0) {
+      console.error('FATAL: demo/seed accounts are present in a production database. Remove them before launch.');
+      console.error('Demo accounts (…@demo.app, admin@fundamental.app) must not exist in production.');
+      process.exit(1);
+    }
+  }
+
+  // Secure admin bootstrap: create the first admin from environment variables when
+  // no admin exists. Not reachable through public signup (P0-1).
+  if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) {
+    const hasAdmin = db.prepare("SELECT COUNT(*) c FROM users WHERE role='admin'").get().c > 0;
+    if (!hasAdmin) {
+      const email = String(process.env.ADMIN_EMAIL).toLowerCase();
+      if (process.env.ADMIN_PASSWORD.length < 12) {
+        console.error('FATAL: ADMIN_PASSWORD must be at least 12 characters.');
+        process.exit(1);
+      }
+      db.prepare("INSERT INTO users (role, name, email, password_hash, email_verified, accepted_terms_at, status) VALUES ('admin', ?, ?, ?, 1, datetime('now'), 'active')")
+        .run(process.env.ADMIN_NAME || 'Administrator', email, bcrypt.hashSync(process.env.ADMIN_PASSWORD, 12));
+      console.log(`Bootstrapped admin account: ${email} (rotate the password after first sign-in).`);
+    }
   }
 }
 
-// ---- Uploads (logos, photos, pitch videos, collateral, post media) ----
+// ---- Uploads ----
+// Public assets (logos, photos, pitch video, post media) are served from /uploads.
+// Private assets (data-room collateral, message attachments) go to a separate dir
+// that is NEVER served statically and is only reachable via access-checked
+// streaming endpoints (P0-3, P1-8).
+const { PRIVATE_DIR } = require('./storage');
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-const storage = multer.diskStorage({
-  destination: UPLOAD_DIR,
-  // CSPRNG filenames: /uploads is unauthenticated (public logos/videos need it),
-  // so unguessable names are the access control for non-public objects.
-  filename: (req, file, cb) => cb(null, randomFileName(file.originalname)),
+
+const SIZE_LIMITS = { image: 10 * 1024 * 1024, video: 600 * 1024 * 1024, document: 60 * 1024 * 1024 };
+const uploadLimiter = rateLimit({ name: 'upload', windowMs: 60 * 60_000, max: 40 });
+
+// Public upload: images + video only, validated by magic bytes after write.
+const publicUpload = multer({
+  storage: multer.diskStorage({ destination: UPLOAD_DIR, filename: (req, file, cb) => cb(null, randomFileName(file.originalname)) }),
+  limits: { fileSize: SIZE_LIMITS.video },
 });
-// Allowlist of content we actually have features for. Executables, scripts and
-// unknown formats are rejected outright.
-const ALLOWED_EXT = /\.(png|jpe?g|gif|webp|svg|mp4|webm|mov|m4v|pdf|pptx?|docx?|xlsx?|csv|key|zip)$/i;
-const upload = multer({
-  storage,
-  limits: { fileSize: 500 * 1024 * 1024 }, // 12-minute pitch videos
-  fileFilter: (req, file, cb) => {
-    if (!ALLOWED_EXT.test(file.originalname || '')) {
-      return cb(new Error('File type not supported. Allowed: images, video, PDF, Office documents, ZIP.'));
-    }
-    cb(null, true);
-  },
-});
-const uploadLimiter = rateLimit({ name: 'upload', windowMs: 60 * 60_000, max: 60 });
 app.post('/api/upload', auth, uploadLimiter, (req, res) => {
-  upload.single('file')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
+  publicUpload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File is too large.' : (err.message || 'Upload failed') });
     if (!req.file) return res.status(400).json({ error: 'No file received' });
+    const p = path.join(UPLOAD_DIR, req.file.filename);
+    let head;
+    try { const fd = fs.openSync(p, 'r'); const buf = Buffer.alloc(4096); const n = fs.readSync(fd, buf, 0, 4096, 0); fs.closeSync(fd); head = buf.slice(0, n); }
+    catch { return res.status(400).json({ error: 'Upload failed' }); }
+    const kind = sniffFileType(head, req.file.originalname);
+    if (!kind || !['image', 'video'].includes(kind) || req.file.size > SIZE_LIMITS[kind]) {
+      try { fs.unlinkSync(p); } catch { /* ignore */ }
+      return res.status(400).json({ error: 'Unsupported or oversized file. Allowed here: images and video.' });
+    }
     res.json({ url: `/uploads/${req.file.filename}`, name: req.file.originalname, size: req.file.size });
   });
 });
+
+// Private upload: documents + images for the data room and message attachments.
+// Returns an opaque key; the file is never publicly served.
+const privateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: SIZE_LIMITS.document } });
+app.post('/api/upload/private', auth, uploadLimiter, (req, res) => {
+  privateUpload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File is too large (max 60 MB).' : (err.message || 'Upload failed') });
+    if (!req.file) return res.status(400).json({ error: 'No file received' });
+    const kind = sniffFileType(req.file.buffer, req.file.originalname);
+    if (!kind || !['document', 'image'].includes(kind)) {
+      return res.status(400).json({ error: 'Unsupported file type. Allowed: PDF, Office documents, CSV, images, ZIP.' });
+    }
+    const fname = randomFileName(req.file.originalname);
+    fs.writeFileSync(path.join(PRIVATE_DIR, fname), req.file.buffer);
+    res.json({ key: fname, name: req.file.originalname, size: req.file.size });
+  });
+});
+
 app.use('/uploads', express.static(UPLOAD_DIR, {
   setHeaders: (res, filePath) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -84,8 +147,10 @@ app.use('/uploads', express.static(UPLOAD_DIR, {
 // ---- Public, unauthenticated startup snapshot (powers shareable pages) ----
 const { db: _db, fundamentalScore: _score } = require('./db');
 app.get('/api/public/startup/:id', (req, res) => {
-  const s = _db.prepare("SELECT * FROM startups WHERE id=? AND video_url != ''").get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  // Public sharing is founder opt-in (P1-12): only published startups whose
+  // owner enabled public_share are exposed unauthenticated.
+  const s = _db.prepare("SELECT * FROM startups WHERE id=? AND video_url != '' AND public_share = 1").get(req.params.id);
+  if (!s) return res.status(404).json({ error: 'This startup is not publicly shared.' });
   const founder = _db.prepare('SELECT name, headline, verified FROM users WHERE id=?').get(s.founder_id);
   res.json({
     startup: {
@@ -120,20 +185,23 @@ if (fs.existsSync(DIST)) {
   app.use(express.static(DIST));
   // Shareable startup pages with Open Graph tags for rich link previews
   app.get('/s/:id', (req, res) => {
-    const s = _db.prepare("SELECT * FROM startups WHERE id=? AND video_url != ''").get(req.params.id);
+    const s = _db.prepare("SELECT * FROM startups WHERE id=? AND video_url != '' AND public_share = 1").get(req.params.id);
     let html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
     if (s) {
-      const esc = (x) => String(x || '').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+      // Robust HTML-attribute escaping for all five sensitive characters (P3-4).
+      const esc = (x) => String(x || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const base = `${req.protocol}://${req.get('host')}`;
+      // Handle absolute vs relative image URLs correctly.
+      const img = /^https?:\/\//i.test(s.logo || '') ? s.logo : `${base}${s.logo || ''}`;
       const og = `
     <meta property="og:title" content="${esc(s.name)} — ${esc(s.sector)} · ${esc(s.stage)} | Fundamental" />
     <meta property="og:description" content="${esc(s.one_liner)} Watch the 12-minute pitch on Fundamental." />
-    <meta property="og:image" content="${base}${esc(s.logo)}" />
+    <meta property="og:image" content="${esc(img)}" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="${base}/s/${s.id}" />
+    <meta property="og:url" content="${esc(base)}/s/${s.id}" />
     <meta name="twitter:card" content="summary" />`;
       html = html
-        .replace('<title>Fundamental — Fundraising? Fundamental.</title>', `<title>${esc(s.name)} — ${esc(s.sector)} | Fundamental</title>${og}`);
+        .replace(/<title>[^<]*<\/title>/, `<title>${esc(s.name)} — ${esc(s.sector)} | Fundamental</title>${og}`);
     }
     res.send(html);
   });
