@@ -27,7 +27,7 @@ function Shell({ step, total, title, sub, children, completion }) {
   return (
     <div className="min-h-screen max-w-2xl mx-auto px-4 py-10">
       <div className="flex items-center justify-between mb-8">
-        <Logo className="h-10" />
+        <Logo className="h-[50px]" />
         {completion != null && (
           <div className="text-right">
             <div className="text-[11px] text-mist-400 uppercase tracking-wider font-semibold">Profile completion</div>

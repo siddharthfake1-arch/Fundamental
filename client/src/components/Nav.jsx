@@ -48,7 +48,7 @@ export default function Nav() {
   return (
     <header className="sticky top-0 z-40 bg-ink-950/85 backdrop-blur-lg border-b border-ink-700/60">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-3">
-        <Link to="/discover" className="shrink-0"><Logo className="h-10" /></Link>
+        <Link to="/discover" className="shrink-0"><Logo className="h-[50px]" /></Link>
 
         <nav className="hidden lg:flex items-center gap-0.5 mx-auto">
           {links.map(l => (
