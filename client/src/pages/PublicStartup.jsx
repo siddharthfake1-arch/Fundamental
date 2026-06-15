@@ -19,7 +19,7 @@ export default function PublicStartup() {
 
   if (err) return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-6">
-      <Logo className="h-[50px]" /><div className="text-mist-300">{err}</div>
+      <Logo className="h-[58px]" /><div className="text-mist-300">{err}</div>
       <Link to="/" className="btn-primary btn-sm">Go to Fundamental</Link>
     </div>
   );
@@ -31,7 +31,7 @@ export default function PublicStartup() {
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(55% 45% at 15% 0%, rgba(128,82,255,0.12), transparent 70%), radial-gradient(50% 40% at 90% 100%, rgba(128,82,255,0.10), transparent 70%)' }} />
 
       <header className="relative max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
-        <Link to="/"><Logo className="h-[50px]" /></Link>
+        <Link to="/"><Logo className="h-[58px]" /></Link>
         <Link to={user ? `/startup/${s.id}` : '/'} className="btn-ghost btn-sm">
           {user ? 'View full profile' : 'Sign in for full access'}
         </Link>

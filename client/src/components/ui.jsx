@@ -332,7 +332,7 @@ const LogoSvg = () => (
   </span>
 );
 
-export const Logo = ({ className = 'h-[45px]', variant = 'auto' }) => {
+export const Logo = ({ className = 'h-[52px]', variant = 'auto' }) => {
   const [failed, setFailed] = useState(false);
   const onErr = () => setFailed(true);
   return (
