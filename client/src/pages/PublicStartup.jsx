@@ -33,7 +33,7 @@ export default function PublicStartup() {
       <header className="relative max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
         <Link to="/"><Logo /></Link>
         <Link to={user ? `/startup/${s.id}` : '/'} className="btn-ghost btn-sm">
-          {user ? 'Open full profile' : 'Sign in for full access'}
+          {user ? 'View full profile' : 'Sign in for full access'}
         </Link>
       </header>
 
@@ -53,7 +53,7 @@ export default function PublicStartup() {
               </div>
               <p className="text-[15px] text-mist-200 leading-relaxed mt-3">{s.one_liner}</p>
               <div className="flex items-center gap-3 mt-4 flex-wrap">
-                {s.raising_status === 'Actively Raising' && <span className="chip-green">● Actively Raising{s.raising_amount && ` — ${s.raising_amount}`}</span>}
+                {s.raising_status === 'Actively Raising' && <span className="chip-green">● Actively raising{s.raising_amount && ` — ${s.raising_amount}`}</span>}
                 <span className="chip-gold">▲ {s.upvotes} investor upvotes</span>
               </div>
             </div>
@@ -64,7 +64,7 @@ export default function PublicStartup() {
         <div className="card p-5 sm:p-6">
           <div className="flex items-center gap-2 mb-4">
             <PlayCircle className="w-4 h-4 text-gold-400" />
-            <span className="section-title">The 12-Minute Pitch</span>
+            <span className="section-title">The 12-minute pitch</span>
           </div>
           <video src={s.video_url} controls playsInline preload="metadata" className="w-full aspect-video rounded-xl bg-black border border-ink-600/50" />
           {founder && (
@@ -78,9 +78,9 @@ export default function PublicStartup() {
 
         {!user && (
           <div className="card p-6 text-center">
-            <h2 className="h-display text-xl">Metrics, data room and the full diligence picture</h2>
+            <h2 className="h-display text-xl">Metrics, the data room, and the full diligence picture</h2>
             <p className="text-sm text-mist-400 mt-2 max-w-md mx-auto">
-              Investors on Fundamental see {s.name}'s revenue trends, unit economics, permissioned data room and founder updates — and can connect directly.
+              Investors on Fundamental see {s.name}'s revenue trends, unit economics, permissioned data room, and founder updates — and connect directly.
             </p>
             <Link to="/" className="btn-primary mt-5 inline-flex">Join Fundamental <MoveRight className="w-4 h-4" /></Link>
           </div>

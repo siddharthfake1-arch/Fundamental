@@ -27,7 +27,7 @@ export default function Startups() {
           <h1 className="h-display text-2xl">Startups</h1>
           <p className="text-sm text-mist-400 mt-1">Every listed company, ranked by investor conviction.</p>
         </div>
-        <input className="input !w-64" placeholder="Search startups…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input !w-64" placeholder="Search by name, sector, or city" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       {user.role === 'founder' && (
@@ -37,15 +37,15 @@ export default function Startups() {
               <Avatar src={mine.logo} name={mine.name} size={10} square />
               <div className="flex-1">
                 <div className="font-semibold text-mist-100">{mine.name}</div>
-                <div className="text-xs text-mist-400">Your startup{!mine.video_url && ' — pitch video missing: not listed in Discover'}</div>
+                <div className="text-xs text-mist-400">Your startup{!mine.video_url && ' — add your pitch to list in Discover'}</div>
               </div>
-              <Link to={`/startup/${mine.id}`} className="btn-ghost btn-sm">View Profile</Link>
+              <Link to={`/startup/${mine.id}`} className="btn-ghost btn-sm">View profile</Link>
               <button className="btn-primary btn-sm" onClick={() => nav('/settings?tab=startup')}>Manage</button>
             </>
           ) : (
             <>
               <div className="flex-1 text-sm text-mist-300">You haven't set up your startup yet.</div>
-              <button className="btn-primary btn-sm" onClick={() => nav('/onboarding')}>Set Up Startup</button>
+              <button className="btn-primary btn-sm" onClick={() => nav('/onboarding')}>Set up startup</button>
             </>
           )}
         </div>

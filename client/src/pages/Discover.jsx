@@ -80,17 +80,17 @@ export default function Discover() {
 
   const sidebar = (
     <div className="space-y-4">
-      <div><span className="label">Search</span><input className="input" value={filters.q} onChange={set('q')} placeholder="Name, keyword…" /></div>
+      <div><span className="label">Search</span><input className="input" value={filters.q} onChange={set('q')} placeholder="Name or keyword" /></div>
       <div><span className="label">Sector</span><Select k="sector" options={facets.sectors} placeholder="All sectors" /></div>
       <div><span className="label">Sub-sector</span><Select k="subsector" options={facets.subsectors} placeholder="All sub-sectors" /></div>
       <div><span className="label">Stage</span><Select k="stage" options={facets.stages} placeholder="All stages" /></div>
-      <div><span className="label">Revenue Range</span>
+      <div><span className="label">Revenue</span>
         <select className="input" value={filters.revenue} onChange={set('revenue')}>
           {REVENUE_BANDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
       <div><span className="label">Geography</span><Select k="geography" options={facets.cities} placeholder="All cities" /></div>
-      <div><span className="label">Raising Status</span>
+      <div><span className="label">Raising status</span>
         <select className="input" value={filters.raising} onChange={set('raising')}>
           <option value="">Any status</option>
           {['Actively Raising', 'Round Closing', 'Not Raising'].map(o => <option key={o}>{o}</option>)}
@@ -101,12 +101,12 @@ export default function Discover() {
         <input type="checkbox" checked={filters.verified} onChange={set('verified')} className="accent-gold-400 w-4 h-4" />
       </label>
       <div className="flex gap-2">
-        <button className="btn-ghost btn-sm flex-1" onClick={() => setFilters(EMPTY_FILTERS)}>Reset Filters</button>
-        <button className="btn-primary btn-sm flex-1" onClick={() => setSaveOpen(true)} disabled={!active}>Save Search</button>
+        <button className="btn-ghost btn-sm flex-1" onClick={() => setFilters(EMPTY_FILTERS)}>Reset filters</button>
+        <button className="btn-primary btn-sm flex-1" onClick={() => setSaveOpen(true)} disabled={!active}>Save search</button>
       </div>
       {saved.length > 0 && (
         <div>
-          <span className="label">Saved Searches</span>
+          <span className="label">Saved searches</span>
           <div className="space-y-1.5">
             {saved.map(s => (
               <div key={s.id} className="flex items-center gap-2 card !rounded-lg px-3 py-2">
@@ -133,7 +133,7 @@ export default function Discover() {
           </div>
           <div>
             <h1 className="h-display text-2xl">Discover</h1>
-            <p className="text-sm text-mist-400 mt-1">The marketplace. Every startup here has a 12-minute pitch — watch before you reach out. <Link to="/startups" className="text-gold-300 hover:text-gold-200">Index view →</Link></p>
+            <p className="text-sm text-mist-400 mt-1">Every startup here opens with a 12-minute pitch — watch it before you reach out. <Link to="/startups" className="text-gold-300 hover:text-gold-200">Index view →</Link></p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -141,10 +141,10 @@ export default function Discover() {
           <span className="text-xs text-mist-500 hidden sm:block">Sort</span>
           <select className="input !w-auto !py-2" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="recent">Recent</option>
-            <option value="upvoted">Most Upvoted</option>
-            <option value="viewed">Most Viewed</option>
-            <option value="score">Highest Score</option>
-            <option value="fit">Best Thesis Fit</option>
+            <option value="upvoted">Most upvoted</option>
+            <option value="viewed">Most viewed</option>
+            <option value="score">Highest score</option>
+            <option value="fit">Best thesis fit</option>
           </select>
         </div>
       </div>
@@ -154,7 +154,7 @@ export default function Discover() {
         <div>
           {data && <TrendingStrip startups={data.startups} />}
           {!data ? <Spinner /> : data.startups.length === 0 ? (
-            <Empty title="No startups match these filters" sub="Try widening your criteria, or save this search to be ready when matching startups list." />
+            <Empty title="No startups match these filters" sub="Widen your criteria, or save this search to be notified when a match lists." />
           ) : (
             <>
               <div className="text-xs text-mist-500 mb-3">{data.total} startup{data.total !== 1 ? 's' : ''}</div>
@@ -183,7 +183,7 @@ export default function Discover() {
                 await api.post('/api/startups/saved-searches', { name: saveName, params: { filters, sort } });
                 setSaveOpen(false); setSaveName(''); loadSaved(); toast('Search saved', 'success');
               } catch (e) { toast(e.message, 'error'); }
-            }}>Save Search</button>
+            }}>Save search</button>
         </div>
       </Modal>
     </div>

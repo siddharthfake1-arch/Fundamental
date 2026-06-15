@@ -63,21 +63,21 @@ export default function Startup() {
 
   const share = async () => {
     const url = `${window.location.origin}/s/${s.id}`;
-    try { await navigator.clipboard.writeText(url); toast('Public share link copied — anyone can view it, no login needed', 'success'); }
+    try { await navigator.clipboard.writeText(url); toast('Public link copied — anyone can view it, no login required', 'success'); }
     catch { toast(url, 'info'); }
   };
 
   const metrics = [
     ['ARR', s.arr ? fmtMoney(s.arr) : '—'], ['MRR', s.mrr ? fmtMoney(s.mrr) : '—'],
-    ['Growth (MoM)', s.growth ? s.growth + '%' : '—'], ['Gross Margin', s.gross_margin ? s.gross_margin + '%' : '—'],
-    ['Burn Rate', s.burn ? fmtMoney(s.burn) + '/mo' : '—'], ['Runway', s.runway ? s.runway + ' mo' : '—'],
+    ['Growth (MoM)', s.growth ? s.growth + '%' : '—'], ['Gross margin', s.gross_margin ? s.gross_margin + '%' : '—'],
+    ['Burn rate', s.burn ? fmtMoney(s.burn) + '/mo' : '—'], ['Runway', s.runway ? s.runway + ' mo' : '—'],
     ['CAC', s.cac ? fmtMoney(s.cac) : '—'], ['LTV', s.ltv ? fmtMoney(s.ltv) : '—'],
   ];
 
   const summary = [
-    ['One-line Positioning', s.one_liner], ['Problem', s.problem], ['Solution', s.solution],
-    ['Business Model', s.business_model], ['Market Size', s.market_size],
-    ['Competitive Advantage', s.competitive_advantage], ['Current Round', s.round_details],
+    ['One-line positioning', s.one_liner], ['Problem', s.problem], ['Solution', s.solution],
+    ['Business model', s.business_model], ['Market size', s.market_size],
+    ['Competitive advantage', s.competitive_advantage], ['Current round', s.round_details],
   ].filter(([, v]) => v);
 
   return (
@@ -104,7 +104,7 @@ export default function Startup() {
                 : s.raising_status === 'Round Closing'
                   ? <span className="chip-gold">◐ Round Closing{s.raising_amount && ` — ${s.raising_amount}`}</span>
                   : <span className="chip">Not Raising</span>}
-              {d.fit != null && <span className="chip-blue" title="Match with your declared thesis">◎ {d.fit}% thesis fit</span>}
+              {d.fit != null && <span className="chip-blue" title="Match against your declared thesis">◎ {d.fit}% thesis fit</span>}
               <span className="text-xs text-mist-500">{s.views.toLocaleString()} profile views</span>
             </div>
           </div>
@@ -117,26 +117,26 @@ export default function Startup() {
         <div className="flex items-center gap-2 flex-wrap mt-5 pt-5 border-t border-ink-700/60">
           {!is_owner && (
             <button className="btn-primary btn-sm" onClick={connectFounder} disabled={d.connection_status === 'pending'}>
-              {d.connected ? 'Message Founder' : d.connection_status === 'pending' ? 'Request Pending' : 'Connect Founder'}
+              {d.connected ? 'Message founder' : d.connection_status === 'pending' ? 'Request pending' : 'Connect with founder'}
             </button>
           )}
           {user.role === 'investor' && !is_owner && (
             <button className={`btn-ghost btn-sm ${s.interested ? '!text-emerald-300 !border-emerald-500/40' : ''}`}
               onClick={() => act(() => api.post(`/api/startups/${s.id}/interest`), s.interested ? null : 'Interest sent — the founder has been notified')}
-              title="A one-tap signal to the founder that you're interested">
-              {s.interested ? '✓ Interested' : '☆ Express Interest'}
+              title="Signal to the founder that you're interested">
+              {s.interested ? '✓ Interested' : '☆ Express interest'}
             </button>
           )}
           {user.role === 'investor' && (
             <button className={`btn-ghost btn-sm ${s.upvoted ? '!text-gold-300 !border-gold-500/40' : ''}`}
-              onClick={() => act(() => api.post(`/api/startups/${s.id}/upvote`))} title="One upvote per investor per startup">
+              onClick={() => act(() => api.post(`/api/startups/${s.id}/upvote`))} title="One upvote per investor, per startup">
               ▲ {s.upvoted ? 'Upvoted' : 'Upvote'} · {s.upvotes}
             </button>
           )}
           {!is_owner && (
             <button className={`btn-ghost btn-sm ${s.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
               onClick={() => act(() => api.post(`/api/startups/${s.id}/follow`))}
-              title="Follow this company to get its updates and milestones">
+              title="Follow this startup for updates and milestones">
               {s.following ? '✓ Following' : '+ Follow'}{s.followers > 0 ? ` · ${s.followers}` : ''}
             </button>
           )}
@@ -145,16 +145,16 @@ export default function Startup() {
             {s.saved ? '✓ Saved' : 'Save'}
           </button>
           {user.role === 'investor' && !is_owner && (
-            <button className="btn-ghost btn-sm" onClick={() => setShareOpen(true)} title="Share this deal with a connected co-investor">⇄ Share Deal</button>
+            <button className="btn-ghost btn-sm" onClick={() => setShareOpen(true)} title="Share this deal with a connected co-investor">⇄ Share deal</button>
           )}
           {user.role === 'investor' && (
-            <button className="btn-ghost btn-sm" onClick={() => { setNoteDoc(null); setNoteOpen(true); }}>+ Private Note</button>
+            <button className="btn-ghost btn-sm" onClick={() => { setNoteDoc(null); setNoteOpen(true); }}>+ Private note</button>
           )}
           {user.role === 'investor' && (
-            <button className="btn-ghost btn-sm !text-gold-300 !border-gold-500/40" onClick={openMemo}>✦ AI Memo</button>
+            <button className="btn-ghost btn-sm !text-gold-300 !border-gold-500/40" onClick={openMemo}>✦ AI memo</button>
           )}
-          <button className="btn-ghost btn-sm" onClick={share}>Share Profile Link</button>
-          {is_owner && <Link to="/settings?tab=startup" className="btn-ghost btn-sm ml-auto">Edit Startup</Link>}
+          <button className="btn-ghost btn-sm" onClick={share}>Copy share link</button>
+          {is_owner && <Link to="/settings?tab=startup" className="btn-ghost btn-sm ml-auto">Edit startup</Link>}
         </div>
         {intro && !intro.direct && intro.connectors?.length > 0 && (
           <div className="flex items-center gap-3 flex-wrap mt-4 bg-gold-500/5 border border-gold-500/20 rounded-xl px-4 py-3">
@@ -162,7 +162,7 @@ export default function Startup() {
               {intro.connectors.map(c => <Avatar key={c.id} src={c.photo} name={c.name} size={7} />)}
             </div>
             <div className="text-sm text-mist-200">
-              <span className="font-semibold text-gold-300">Warm intro available</span> — you're connected to{' '}
+              <span className="font-semibold text-gold-300">Warm introduction available</span> — you're connected to{' '}
               {intro.connectors.map((c, i) => (
                 <span key={c.id}>
                   <Link to={`/profile/${c.id}`} className="font-semibold text-mist-100 hover:text-gold-300">{c.name}</Link>
@@ -180,7 +180,7 @@ export default function Startup() {
           <VideoPlayer src={s.video_url} chapters={s.video_chapters} views={s.video_views}
             onFirstPlay={() => api.post(`/api/startups/${s.id}/video-view`).catch(() => {})} />
         ) : (
-          <Empty title="Pitch video pending" sub="This startup has not uploaded its mandatory 12-minute pitch yet." />
+          <Empty title="Pitch not uploaded yet" sub="This startup hasn't published its 12-minute pitch." />
         )}
       </Section>
 

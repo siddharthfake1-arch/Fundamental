@@ -43,17 +43,17 @@ export default function Watchlist() {
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="h-display text-2xl">Pipeline</h1>
-          <p className="text-sm text-mist-400 mt-1">Your private deal flow, from first look to decision. Only you can see this board.</p>
+          <p className="text-sm text-mist-400 mt-1">Your deal flow from first look to decision — private to you.</p>
         </div>
         <div className="flex items-center gap-2">
           <input className="input !w-56 !py-2" placeholder="Search pipeline…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <Link to="/discover" className="btn-ghost btn-sm whitespace-nowrap">+ Source</Link>
+          <Link to="/discover" className="btn-ghost btn-sm whitespace-nowrap">+ Add deal</Link>
         </div>
       </div>
 
       {shared.length > 0 && (
         <div className="card p-4 mb-6">
-          <div className="section-title mb-3">Shared with you by co-investors</div>
+          <div className="section-title mb-3">Shared by co-investors</div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {shared.map(sd => (
               <Link key={sd.id} to={`/startup/${sd.startup_id}`} className="bg-ink-850 border border-ink-700/50 rounded-xl p-3 hover:border-gold-500/40 transition-colors">
@@ -75,7 +75,7 @@ export default function Watchlist() {
       )}
 
       {list.length === 0 ? (
-        <Empty title="Your pipeline is empty" sub="Save startups from Discover and manage them through Tracking → Diligence → Decision, with private notes at every step." />
+        <Empty title="Your pipeline is empty" sub="Save startups from Discover, then move them from tracking to decision with private notes at every step." />
       ) : (
         <div className="grid grid-flow-col auto-cols-[270px] lg:auto-cols-fr gap-4 overflow-x-auto pb-4">
           {STAGES.map(stage => {
@@ -165,7 +165,7 @@ function TagsModal({ s, onClose, onChange }) {
   return (
     <Modal open={!!s} onClose={onClose} title={`Deal tags — ${s.name}`}>
       <div className="space-y-3">
-        <div className="text-xs text-mist-500">Up to 8 tags to organise your deal flow — e.g. "hot", "follow-up", "needs intro". Only you see these.</div>
+        <div className="text-xs text-mist-500">Up to 8 tags to organize your deal flow — for example "hot", "follow-up", or "needs intro". Private to you.</div>
         <div className="flex flex-wrap gap-1.5 min-h-[28px]">
           {tags.map(t => (
             <span key={t} className="chip-gold !py-1 !px-2.5 !text-xs">
@@ -174,10 +174,10 @@ function TagsModal({ s, onClose, onChange }) {
           ))}
           {tags.length === 0 && <span className="text-xs text-mist-500">No tags yet.</span>}
         </div>
-        <input className="input !py-2" placeholder="Type a tag and press Enter" value={input}
+        <input className="input !py-2" placeholder="Type a tag, then press Enter" value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(input); } }} />
-        <button className="btn-primary w-full" onClick={save}>Save Tags</button>
+        <button className="btn-primary w-full" onClick={save}>Save tags</button>
       </div>
     </Modal>
   );
@@ -190,7 +190,7 @@ function NotesModal({ s, onClose, onChange }) {
   return (
     <Modal open={!!s} onClose={onClose} title={`Private notes — ${s.name}`}>
       <div className="space-y-3">
-        <div className="text-xs text-mist-500">Saved {timeAgo(s.saved_at)} · visible only to you</div>
+        <div className="text-xs text-mist-500">Saved {timeAgo(s.saved_at)} · private to you</div>
         {s.notes.map(n => (
           <div key={n.id} className="flex gap-3 bg-gold-500/5 border border-gold-500/20 rounded-xl px-3.5 py-2.5">
             <div className="flex-1">
@@ -203,7 +203,7 @@ function NotesModal({ s, onClose, onChange }) {
           </div>
         ))}
         <div className="flex gap-2">
-          <input className="input !py-2" placeholder="Add a note… (Enter to save)" value={note} autoFocus
+          <input className="input !py-2" placeholder="Add a note — press Enter to save" value={note} autoFocus
             onChange={(e) => setNote(e.target.value)}
             onKeyDown={async (e) => {
               if (e.key === 'Enter' && note.trim()) {

@@ -60,13 +60,13 @@ router.post('/', (req, res) => {
   const urlErr = validateUrlFields(req.body, ['media']);
   if (urlErr) return res.status(400).json({ error: urlErr });
   const { type, text, startup_id, media } = req.body;
-  if (!POST_TYPES.includes(type)) return res.status(400).json({ error: 'Posts must use one of the allowed professional categories.' });
-  if (!text || text.trim().length < 10) return res.status(400).json({ error: 'Write a substantive update (min 10 characters).' });
-  if (text.trim().length > 400) return res.status(400).json({ error: 'Posts are capped at 400 characters — keep it sharp.' });
+  if (!POST_TYPES.includes(type)) return res.status(400).json({ error: 'Please choose one of the supported professional post categories.' });
+  if (!text || text.trim().length < 10) return res.status(400).json({ error: 'Share a substantive update of at least 10 characters.' });
+  if (text.trim().length > 400) return res.status(400).json({ error: 'Posts are limited to 400 characters. Please keep it sharp.' });
   const founderTypes = ['Fundraising Announcement', 'Round Closed', 'Milestone', 'Hiring', 'Product Launch'];
   const investorTypes = ['Investment Made', 'Investor Insight'];
-  if (req.user.role === 'founder' && !founderTypes.includes(type)) return res.status(403).json({ error: 'This post type is for investors.' });
-  if (req.user.role === 'investor' && !investorTypes.includes(type)) return res.status(403).json({ error: 'This post type is for founders.' });
+  if (req.user.role === 'founder' && !founderTypes.includes(type)) return res.status(403).json({ error: 'This post type is available to investors only.' });
+  if (req.user.role === 'investor' && !investorTypes.includes(type)) return res.status(403).json({ error: 'This post type is available to founders only.' });
   const info = db.prepare('INSERT INTO posts (user_id, type, text, startup_id, media) VALUES (?,?,?,?,?)')
     .run(req.user.id, type, text.trim(), Number(startup_id) || null, media || '');
   if (startup_id && ['Round Closed', 'Milestone', 'Hiring'].includes(type)) {
@@ -89,12 +89,12 @@ router.post('/:id/like', (req, res) => {
 
 router.post('/:id/comment', (req, res) => {
   const { text } = req.body;
-  if (!text || !text.trim()) return res.status(400).json({ error: 'Comment is empty' });
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Please write a comment before posting.' });
   db.prepare('INSERT INTO post_comments (post_id, user_id, text) VALUES (?,?,?)').run(req.params.id, req.user.id, text.trim().slice(0, 1000));
   const post = db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id);
   if (post && post.user_id !== req.user.id) {
     db.prepare('INSERT INTO notifications (user_id, type, text, link) VALUES (?,?,?,?)')
-      .run(post.user_id, 'New Message', `${req.user.name} commented on your post`, '/social');
+      .run(post.user_id, 'New Message', `${req.user.name} commented on your post. Open it to see what they said.`, '/social');
   }
   res.json({ post: shapePost(post, req.user.id) });
 });

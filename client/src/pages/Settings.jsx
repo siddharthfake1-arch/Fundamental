@@ -12,8 +12,8 @@ export default function Settings() {
   const { user, refresh } = useAuth();
   const [params, setParams] = useSearchParams();
   const tab = params.get('tab') || 'account';
-  const tabs = [['account', 'Account'], ...(user.role === 'founder' ? [['startup', 'Startup Settings']] : []),
-    ...(user.role === 'investor' ? [['investor', 'Investor Profile']] : []), ['appearance', 'Appearance'], ['notifications', 'Notifications'], ['security', 'Security']];
+  const tabs = [['account', 'Account'], ...(user.role === 'founder' ? [['startup', 'Startup']] : []),
+    ...(user.role === 'investor' ? [['investor', 'Investor profile']] : []), ['appearance', 'Appearance'], ['notifications', 'Notifications'], ['security', 'Security']];
 
   return (
     <div className="max-w-3xl mx-auto fade-in">
@@ -42,31 +42,31 @@ function Account({ user, refresh }) {
   return (
     <div className="card p-6 space-y-4">
       {f.cover && <img src={f.cover} alt="" className="w-full h-28 object-cover rounded-xl border border-ink-700/50" />}
-      <FileUpload label="Cover Banner (wide image, like LinkedIn)" accept="image/*" currentUrl={f.cover} onUploaded={(d) => setF(x => ({ ...x, cover: d.url }))} />
+      <FileUpload label="Cover banner — a wide image for your profile header" accept="image/*" currentUrl={f.cover} onUploaded={(d) => setF(x => ({ ...x, cover: d.url }))} />
       <div className="flex items-center gap-4">
         <Avatar src={f.photo} name={f.name} size={16} />
         <div className="flex-1">
-          <FileUpload label="Profile Photo" accept="image/*" currentUrl={f.photo} onUploaded={(d) => setF(x => ({ ...x, photo: d.url }))} />
+          <FileUpload label="Profile photo" accept="image/*" currentUrl={f.photo} onUploaded={(d) => setF(x => ({ ...x, photo: d.url }))} />
         </div>
       </div>
       <div className="grid sm:grid-cols-2 gap-4">
-        <Field label="Full Name"><input className="input" value={f.name} onChange={set('name')} /></Field>
+        <Field label="Full name"><input className="input" value={f.name} onChange={set('name')} /></Field>
         <Field label="City"><input className="input" value={f.city} onChange={set('city')} /></Field>
       </div>
       <Field label="Headline"><input className="input" value={f.headline} onChange={set('headline')} placeholder="e.g. Founder & CEO, PayLane" /></Field>
       <Field label="Bio"><textarea className="input min-h-[90px]" value={f.bio} onChange={set('bio')} /></Field>
       <div className="grid sm:grid-cols-2 gap-4">
         <Field label="Education"><input className="input" value={f.education} onChange={set('education')} /></Field>
-        <Field label="Previous Experience"><input className="input" value={f.experience} onChange={set('experience')} /></Field>
+        <Field label="Previous experience"><input className="input" value={f.experience} onChange={set('experience')} /></Field>
       </div>
       <Field label="Personal LinkedIn"><input className="input" value={f.linkedin} onChange={set('linkedin')} placeholder="https://linkedin.com/in/…" /></Field>
       <div className="flex items-center justify-between pt-2">
         <span className="text-xs text-mist-500">Google account: {user.google_linked ? <span className="text-emerald-300">Linked</span> : 'Not linked'}</span>
         <button className="btn-primary" disabled={busy} onClick={async () => {
           setBusy(true);
-          try { await api.put('/api/users/me', f); await refresh(); toast('Profile saved', 'success'); }
+          try { await api.put('/api/users/me', f); await refresh(); toast('Profile updated', 'success'); }
           catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
-        }}>Save Changes</button>
+        }}>Save changes</button>
       </div>
     </div>
   );
@@ -83,16 +83,16 @@ function StartupSettings() {
     setBusy(true);
     try {
       await api.post('/api/startups/mine', { ...s, ...extra });
-      toast('Startup updated', 'success');
+      toast('Startup profile updated', 'success');
     } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   };
-  const NUM = [['arr', 'ARR (USD)'], ['mrr', 'MRR (USD)'], ['growth', 'Growth % (MoM)'], ['gross_margin', 'Gross Margin %'], ['burn', 'Monthly Burn (USD)'], ['runway', 'Runway (months)'], ['cac', 'CAC (USD)'], ['ltv', 'LTV (USD)']];
+  const NUM = [['arr', 'ARR (USD)'], ['mrr', 'MRR (USD)'], ['growth', 'Growth % (MoM)'], ['gross_margin', 'Gross margin %'], ['burn', 'Monthly burn (USD)'], ['runway', 'Runway (months)'], ['cac', 'CAC (USD)'], ['ltv', 'LTV (USD)']];
   return (
     <div className="space-y-5">
       <div className="card p-6 space-y-4">
-        <h2 className="section-title">Basics & Raise</h2>
+        <h2 className="section-title">Basics and raise</h2>
         <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Startup Name"><input className="input" value={s.name || ''} onChange={set('name')} /></Field>
+          <Field label="Startup name"><input className="input" value={s.name || ''} onChange={set('name')} /></Field>
           <Field label="City"><input className="input" value={s.city || ''} onChange={set('city')} /></Field>
           <Field label="Sector"><input className="input" value={s.sector || ''} onChange={set('sector')} /></Field>
           <Field label="Sub-sector"><input className="input" value={s.subsector || ''} onChange={set('subsector')} /></Field>
@@ -100,25 +100,25 @@ function StartupSettings() {
             <select className="input" value={s.stage || ''} onChange={set('stage')}>
               {['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'].map(x => <option key={x}>{x}</option>)}
             </select></Field>
-          <Field label="Founded Year"><input type="number" className="input" value={s.founded_year || ''} onChange={set('founded_year')} /></Field>
-          <Field label="Raising Status (toggle)">
+          <Field label="Founded year"><input type="number" className="input" value={s.founded_year || ''} onChange={set('founded_year')} /></Field>
+          <Field label="Raising status">
             <select className="input" value={s.raising_status || ''} onChange={set('raising_status')}>
               {['Actively Raising', 'Round Closing', 'Not Raising'].map(x => <option key={x}>{x}</option>)}
             </select></Field>
-          <Field label="Raising Amount"><input className="input" value={s.raising_amount || ''} onChange={set('raising_amount')} /></Field>
+          <Field label="Raising amount"><input className="input" value={s.raising_amount || ''} onChange={set('raising_amount')} /></Field>
         </div>
-        <Field label="One-line Description"><input className="input" maxLength={140} value={s.one_liner || ''} onChange={set('one_liner')} /></Field>
+        <Field label="One-line description"><input className="input" maxLength={140} value={s.one_liner || ''} onChange={set('one_liner')} /></Field>
         <div className="grid sm:grid-cols-2 gap-4">
           <FileUpload label="Logo" accept="image/*" currentUrl={s.logo} onUploaded={(d) => setS(x => ({ ...x, logo: d.url }))} />
-          <FileUpload label="Cover Banner" accept="image/*" currentUrl={s.cover} onUploaded={(d) => setS(x => ({ ...x, cover: d.url }))} />
+          <FileUpload label="Cover banner" accept="image/*" currentUrl={s.cover} onUploaded={(d) => setS(x => ({ ...x, cover: d.url }))} />
         </div>
       </div>
 
       <div className="card p-6 space-y-4">
-        <h2 className="section-title">Executive Summary</h2>
-        {[['problem', 'Problem'], ['solution', 'Solution'], ['business_model', 'Business Model'], ['market_size', 'Market Size'],
-          ['competitive_advantage', 'Competitive Advantage'], ['round_details', 'Current Round Details'],
-          ['deployment_timeline', 'Deployment Timeline'], ['strategic_objectives', 'Strategic Objectives']].map(([k, l]) => (
+        <h2 className="section-title">Executive summary</h2>
+        {[['problem', 'Problem'], ['solution', 'Solution'], ['business_model', 'Business model'], ['market_size', 'Market size'],
+          ['competitive_advantage', 'Competitive advantage'], ['round_details', 'Current round details'],
+          ['deployment_timeline', 'Deployment timeline'], ['strategic_objectives', 'Strategic objectives']].map(([k, l]) => (
           <Field key={k} label={l}><textarea className="input min-h-[70px]" value={s[k] || ''} onChange={set(k)} /></Field>
         ))}
       </div>
@@ -131,17 +131,17 @@ function StartupSettings() {
       </div>
 
       <div className="card p-6 space-y-4">
-        <h2 className="section-title">12-Minute Pitch Video (Mandatory)</h2>
+        <h2 className="section-title">12-minute pitch video (required)</h2>
         {s.video_url && <video src={s.video_url} controls className="w-full rounded-xl aspect-video bg-black border border-ink-600/60" />}
-        <FileUpload label="Replace Pitch Video" accept="video/*" currentUrl={s.video_url} hint="Max 12 minutes"
+        <FileUpload label="Replace pitch video" accept="video/*" currentUrl={s.video_url} hint="12 minutes maximum"
           onUploaded={(d) => setS(x => ({ ...x, video_url: d.url }))} />
-        {!s.video_url && <div className="text-xs text-red-300">Without a pitch video, your startup is hidden from Discover.</div>}
+        {!s.video_url && <div className="text-xs text-red-300">Without a pitch video, your startup stays hidden from Discover.</div>}
       </div>
 
       {s.id && <ManageCollateral startupId={s.id} />}
 
       <div className="flex justify-end">
-        <button className="btn-primary" disabled={busy} onClick={() => save()}>{busy ? 'Saving…' : 'Save All Changes'}</button>
+        <button className="btn-primary" disabled={busy} onClick={() => save()}>{busy ? 'Saving…' : 'Save all changes'}</button>
       </div>
     </div>
   );
@@ -155,7 +155,7 @@ function ManageCollateral({ startupId }) {
   useEffect(load, [startupId]);
   return (
     <div className="card p-6 space-y-4">
-      <h2 className="section-title">Manage Collateral (Data Room)</h2>
+      <h2 className="section-title">Data room collateral</h2>
       {docs.map(c => (
         <div key={c.id} className="flex items-center gap-3 flex-wrap bg-ink-850 border border-ink-700/60 rounded-xl px-4 py-2.5">
           <span className="chip-blue">{c.type}</span>
@@ -168,7 +168,7 @@ function ManageCollateral({ startupId }) {
           </select>
           <button className="text-red-400 hover:text-red-300 text-xs" onClick={async () => {
             await api.del(`/api/startups/collateral/${c.id}`); load(); toast('Document removed', 'success');
-          }}>Delete</button>
+          }}>Remove</button>
         </div>
       ))}
       <div className="grid sm:grid-cols-3 gap-3">
@@ -186,7 +186,7 @@ function ManageCollateral({ startupId }) {
           await api.post(`/api/startups/${startupId}/collateral`, d);
           setD({ title: '', type: 'Deck', access_level: 'Public', file_url: '' }); load(); toast('Document added', 'success');
         } catch (e) { toast(e.message, 'error'); }
-      }}>+ Add Document</button>
+      }}>+ Add document</button>
     </div>
   );
 }
@@ -199,30 +199,30 @@ function InvestorSettings({ user, refresh }) {
   return (
     <div className="card p-6 space-y-4">
       <div className="grid sm:grid-cols-3 gap-4">
-        <Field label="Fund Name"><input className="input" value={f.fund_name} onChange={(e) => setF(x => ({ ...x, fund_name: e.target.value }))} /></Field>
-        <Field label="Fund Size"><input className="input" value={f.fund_size} onChange={(e) => setF(x => ({ ...x, fund_size: e.target.value }))} /></Field>
-        <Field label="Check Size Range"><input className="input" value={f.check_size} onChange={(e) => setF(x => ({ ...x, check_size: e.target.value }))} /></Field>
+        <Field label="Fund name"><input className="input" value={f.fund_name} onChange={(e) => setF(x => ({ ...x, fund_name: e.target.value }))} /></Field>
+        <Field label="Fund size"><input className="input" value={f.fund_size} onChange={(e) => setF(x => ({ ...x, fund_size: e.target.value }))} /></Field>
+        <Field label="Check size range"><input className="input" value={f.check_size} onChange={(e) => setF(x => ({ ...x, check_size: e.target.value }))} /></Field>
       </div>
-      <Field label="Stage Focus">
+      <Field label="Stage focus">
         <div className="flex flex-wrap gap-2">
           {['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'].map(s => (
             <button key={s} onClick={() => toggle('stage_focus', s)} className={f.stage_focus.includes(s) ? 'chip-gold !py-1.5 !px-3' : 'chip !py-1.5 !px-3 hover:border-ink-400'}>{s}</button>
           ))}
         </div>
       </Field>
-      <Field label="Sector Focus">
+      <Field label="Sector focus">
         <div className="flex flex-wrap gap-2">
           {['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer'].map(s => (
             <button key={s} onClick={() => toggle('sector_focus', s)} className={f.sector_focus.includes(s) ? 'chip-gold !py-1.5 !px-3' : 'chip !py-1.5 !px-3 hover:border-ink-400'}>{s}</button>
           ))}
         </div>
       </Field>
-      <Field label="Investment Thesis"><textarea className="input min-h-[100px]" value={f.thesis} onChange={(e) => setF(x => ({ ...x, thesis: e.target.value }))} /></Field>
+      <Field label="Investment thesis"><textarea className="input min-h-[100px]" value={f.thesis} onChange={(e) => setF(x => ({ ...x, thesis: e.target.value }))} /></Field>
       <div className="flex justify-end">
         <button className="btn-primary" onClick={async () => {
           try { await api.put('/api/users/me', { investor: f }); await refresh(); toast('Investor profile saved', 'success'); }
           catch (e) { toast(e.message, 'error'); }
-        }}>Save</button>
+        }}>Save changes</button>
       </div>
     </div>
   );
@@ -235,7 +235,7 @@ function Appearance() {
       <h2 className="section-title mb-1">Theme</h2>
       <p className="text-sm text-mist-400 mb-5">Choose how Fundamental looks for you. Your preference is saved on this device.</p>
       <div className="grid grid-cols-2 gap-4 max-w-md">
-        {[['dark', 'Dark', Moon, 'Deep navy. Easy on the eyes.'], ['light', 'Light', Sun, 'Crisp and bright for daytime.']].map(([v, label, Icon, sub]) => (
+        {[['dark', 'Dark', Moon, 'Deep navy — easy on the eyes.'], ['light', 'Light', Sun, 'Crisp and bright for daytime.']].map(([v, label, Icon, sub]) => (
           <button key={v} onClick={() => setTheme(v)}
             className={`rounded-2xl border p-5 text-left transition-all ${theme === v ? 'border-gold-500/70 bg-gold-500/10 shadow-glow' : 'border-ink-600/70 bg-ink-850 hover:border-ink-500'}`}>
             <Icon className={`w-5 h-5 mb-3 ${theme === v ? 'text-gold-300' : 'text-mist-400'}`} />
@@ -262,13 +262,13 @@ function NotifPrefs({ user, refresh }) {
   );
   return (
     <div className="card p-6 space-y-3">
-      <Toggle label="Email Alerts" sub="Connection requests, access approvals and messages by email" value={email} onChange={() => setEmail(v => !v)} />
-      <Toggle label="In-App Alerts" sub="Notification centre and badge counts" value={inapp} onChange={() => setInapp(v => !v)} />
+      <Toggle label="Email alerts" sub="Connection requests, access approvals, and messages by email" value={email} onChange={() => setEmail(v => !v)} />
+      <Toggle label="In-app alerts" sub="Notification center and badge counts" value={inapp} onChange={() => setInapp(v => !v)} />
       <div className="flex justify-end pt-2">
         <button className="btn-primary" onClick={async () => {
           try { await api.put('/api/users/me', { email_alerts: email ? 1 : 0, inapp_alerts: inapp ? 1 : 0 }); await refresh(); toast('Preferences saved', 'success'); }
           catch (e) { toast(e.message, 'error'); }
-        }}>Save Preferences</button>
+        }}>Save preferences</button>
       </div>
     </div>
   );
@@ -280,13 +280,13 @@ function Security({ user }) {
   const toast = useToast();
   return (
     <div className="card p-6 space-y-4 max-w-md">
-      <h2 className="section-title">Change Password</h2>
-      <Field label="Current Password"><input type="password" className="input" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
-      <Field label="New Password"><input type="password" className="input" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Minimum 8 characters" /></Field>
+      <h2 className="section-title">Change password</h2>
+      <Field label="Current password"><input type="password" className="input" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
+      <Field label="New password"><input type="password" className="input" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Minimum 8 characters" /></Field>
       <button className="btn-primary w-full" disabled={!cur || next.length < 8} onClick={async () => {
         try { await api.post('/api/auth/change-password', { current: cur, next }); setCur(''); setNext(''); toast('Password changed', 'success'); }
         catch (e) { toast(e.message, 'error'); }
-      }}>Update Password</button>
+      }}>Update password</button>
       <div className="text-xs text-mist-500 pt-2">Signed in as {user.email}</div>
     </div>
   );

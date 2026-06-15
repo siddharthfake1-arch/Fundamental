@@ -33,40 +33,40 @@ function FounderDash() {
     <div className="fade-in space-y-5">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="h-display text-2xl">Founder Dashboard</h1>
-          <p className="text-sm text-mist-400 mt-1">{d.startup ? `Tracking ${d.startup.name}` : 'Set up your startup to start tracking'}</p>
+          <h1 className="h-display text-2xl">Founder dashboard</h1>
+          <p className="text-sm text-mist-400 mt-1">{d.startup ? `Tracking ${d.startup.name}` : 'Set up your startup to begin tracking'}</p>
         </div>
-        {d.startup && <Link to={`/startup/${d.startup.id}`} className="btn-ghost btn-sm">View Public Profile</Link>}
+        {d.startup && <Link to={`/startup/${d.startup.id}`} className="btn-ghost btn-sm">View public profile</Link>}
       </div>
 
       {/* Profile completion */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-2">
-          <span className="section-title">Profile Completion</span>
+          <span className="section-title">Profile completion</span>
           <span className="font-display font-bold text-gold-300 tabular-nums">{d.completion}%</span>
         </div>
         <div className="h-2 bg-ink-700 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-gold-500 to-gold-300 transition-all" style={{ width: d.completion + '%' }} /></div>
-        {d.completion < 100 && <div className="text-xs text-mist-400 mt-2">Complete profiles get materially more investor views. Add missing items in <Link to="/settings" className="text-gold-300">Settings</Link>.</div>}
+        {d.completion < 100 && <div className="text-xs text-mist-400 mt-2">A complete profile draws more investor views. Add what's missing in <Link to="/settings" className="text-gold-300">Settings</Link>.</div>}
       </div>
 
       {!d.startup ? (
-        <Empty title="No startup yet" sub="Complete onboarding to list your startup in the marketplace." />
+        <Empty title="No startup yet" sub="Finish onboarding to list your startup on Fundamental." />
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-            <Stat label="Startup Views" value={d.views.toLocaleString()} />
-            <Stat label="Video Views" value={d.video_views.toLocaleString()} sub="12-min pitch plays" />
-            <Stat label="Followers" value={d.followers ?? 0} sub="Tracking your company" />
-            <Stat label="Interest" value={d.interest_count ?? 0} sub="Investors interested" />
-            <Stat label="Collateral Requests" value={d.collateral_requests} />
+            <Stat label="Startup views" value={d.views.toLocaleString()} />
+            <Stat label="Video views" value={d.video_views.toLocaleString()} sub="Pitch plays" />
+            <Stat label="Followers" value={d.followers ?? 0} sub="Tracking your startup" />
+            <Stat label="Interest" value={d.interest_count ?? 0} sub="Interested investors" />
+            <Stat label="Collateral requests" value={d.collateral_requests} />
             <Stat label="Upvotes" value={d.upvotes} sub="One per investor" />
-            <Stat label="Connection Requests" value={d.connection_requests.length} />
+            <Stat label="Connection requests" value={d.connection_requests.length} />
           </div>
 
           {d.interested_investors?.length > 0 && (
             <div className="card p-5">
-              <span className="section-title">Investors Interested in You</span>
-              <div className="text-xs text-mist-500 mt-1">They tapped "Express Interest" — the warmest inbound signal. Reach out.</div>
+              <span className="section-title">Investors interested in you</span>
+              <div className="text-xs text-mist-500 mt-1">These investors expressed interest. Reach out while it's warm.</div>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
                 {d.interested_investors.map(v => (
                   <div key={v.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
@@ -94,7 +94,7 @@ function FounderDash() {
           <div className="grid lg:grid-cols-2 gap-5">
             {/* Raise progress tracker */}
             <div className="card p-5">
-              <span className="section-title">Raise Progress Tracker</span>
+              <span className="section-title">Raise progress</span>
               <div className="mt-4 flex items-center gap-3">
                 <span className={d.raise.status === 'Actively Raising' ? 'chip-green' : d.raise.status === 'Round Closing' ? 'chip-gold' : 'chip'}>{d.raise.status}</span>
                 {d.raise.amount && <span className="font-display font-bold text-mist-100">{d.raise.amount}</span>}
@@ -111,12 +111,12 @@ function FounderDash() {
                   );
                 })}
               </div>
-              <div className="text-xs text-mist-400 mt-4">Toggle your raising status in <Link to="/settings?tab=startup" className="text-gold-300">Startup Settings</Link>.</div>
+              <div className="text-xs text-mist-400 mt-4">Update your raising status in <Link to="/settings?tab=startup" className="text-gold-300">Startup settings</Link>.</div>
             </div>
 
             {/* Pending access requests */}
             <div className="card p-5">
-              <span className="section-title">Pending Data Room Requests</span>
+              <span className="section-title">Pending data room requests</span>
               {d.pending_access.length === 0 ? <div className="text-sm text-mist-500 mt-3">No pending requests.</div> : (
                 <div className="space-y-2 mt-3">
                   {d.pending_access.map(r => (
@@ -136,8 +136,8 @@ function FounderDash() {
           {an && (an.viewers.length > 0 || an.docs.length > 0) && (
             <div className="grid lg:grid-cols-2 gap-5">
               <div className="card p-5">
-                <span className="section-title">Investors Looking at You</span>
-                <div className="text-xs text-mist-500 mt-1">Recent profile viewers — your warmest leads.</div>
+                <span className="section-title">Investors looking at you</span>
+                <div className="text-xs text-mist-500 mt-1">Investors who recently viewed your profile.</div>
                 {an.viewers.length === 0 ? <div className="text-sm text-mist-500 mt-3">No investor views yet.</div> : (
                   <div className="space-y-2 mt-3">
                     {an.viewers.slice(0, 6).map(v => (
@@ -156,8 +156,8 @@ function FounderDash() {
                 )}
               </div>
               <div className="card p-5">
-                <span className="section-title">Data Room Engagement</span>
-                <div className="text-xs text-mist-500 mt-1">Which documents investors actually open.</div>
+                <span className="section-title">Data room engagement</span>
+                <div className="text-xs text-mist-500 mt-1">Which documents investors open.</div>
                 {an.docs.length === 0 ? <div className="text-sm text-mist-500 mt-3">No documents yet.</div> : (
                   <div className="space-y-2 mt-3">
                     {an.docs.map(doc => (
@@ -176,7 +176,7 @@ function FounderDash() {
           {/* Connection requests */}
           {d.connection_requests.length > 0 && (
             <div className="card p-5">
-              <span className="section-title">Connection Requests</span>
+              <span className="section-title">Connection requests</span>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
                 {d.connection_requests.map(p => (
                   <div key={p.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl p-3">
@@ -206,27 +206,27 @@ function InvestorDash() {
   return (
     <div className="fade-in space-y-5">
       <div>
-        <h1 className="h-display text-2xl">Investor Dashboard</h1>
+        <h1 className="h-display text-2xl">Investor dashboard</h1>
         <p className="text-sm text-mist-400 mt-1">Your pipeline at a glance.</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        <Stat label="Saved Startups" value={d.watchlist.length} sub="In your pipeline" />
-        <Stat label="Requested Access" value={d.requested.length} sub="Data room requests" />
+        <Stat label="Saved startups" value={d.watchlist.length} sub="In your pipeline" />
+        <Stat label="Requested access" value={d.requested.length} sub="Data room requests" />
         <Stat label="Approved" value={d.requested.filter(r => r.status === 'approved').length} sub="Documents unlocked" />
-        <Stat label="Active Conversations" value={d.active_conversations} />
-        <Stat label="Interests Sent" value={d.interests_count ?? 0} sub="Founders notified" />
-        <Stat label="Shared With You" value={d.shared_count ?? 0} sub="By co-investors" />
+        <Stat label="Active conversations" value={d.active_conversations} />
+        <Stat label="Interests sent" value={d.interests_count ?? 0} sub="Founders notified" />
+        <Stat label="Shared with you" value={d.shared_count ?? 0} sub="By co-investors" />
       </div>
       {d.shared_count > 0 && (
-        <div className="text-xs text-mist-400 -mt-2">Co-investors shared {d.shared_count} deal{d.shared_count !== 1 ? 's' : ''} with you — see them in your <Link to="/watchlist" className="text-gold-300 hover:text-gold-200">Pipeline →</Link></div>
+        <div className="text-xs text-mist-400 -mt-2">Co-investors shared {d.shared_count} deal{d.shared_count !== 1 ? 's' : ''} with you — find them in your <Link to="/watchlist" className="text-gold-300 hover:text-gold-200">Pipeline →</Link></div>
       )}
 
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="card p-5">
           <div className="flex items-center justify-between">
             <span className="section-title">Watchlist</span>
-            <Link to="/watchlist" className="text-xs text-gold-300 hover:text-gold-200">Open Watchlist →</Link>
+            <Link to="/watchlist" className="text-xs text-gold-300 hover:text-gold-200">Open watchlist →</Link>
           </div>
           {d.watchlist.length === 0 ? <div className="text-sm text-mist-500 mt-3">Save startups from Discover to track them here.</div> : (
             <div className="space-y-2 mt-3">
@@ -245,7 +245,7 @@ function InvestorDash() {
         </div>
 
         <div className="card p-5">
-          <span className="section-title">Requested Access</span>
+          <span className="section-title">Requested access</span>
           {d.requested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No data room requests yet.</div> : (
             <div className="space-y-2 mt-3">
               {d.requested.slice(0, 6).map((r, i) => (
@@ -264,7 +264,7 @@ function InvestorDash() {
       </div>
 
       <div className="card p-5">
-        <span className="section-title">Suggested Startups</span>
+        <span className="section-title">Suggested startups</span>
         <div className="text-xs text-mist-500 mt-1">Matched to your sector and stage focus.</div>
         {d.suggested.length === 0 ? <div className="text-sm text-mist-500 mt-3">Nothing new to suggest right now.</div> : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">

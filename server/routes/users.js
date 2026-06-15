@@ -47,26 +47,26 @@ router.get('/network', (req, res) => {
 // ---- Connections ----
 router.post('/connect/:id', (req, res) => {
   const target = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!target || target.id === req.user.id) return res.status(400).json({ error: 'Invalid user' });
+  if (!target || target.id === req.user.id) return res.status(400).json({ error: 'We could not find that person. Please try a different profile.' });
   const existing = db.prepare(
     'SELECT * FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)'
   ).get(req.user.id, target.id, target.id, req.user.id);
-  if (existing && existing.status !== 'rejected') return res.status(409).json({ error: 'Connection already ' + existing.status });
+  if (existing && existing.status !== 'rejected') return res.status(409).json({ error: 'This connection is already ' + existing.status + '.' });
   if (existing) db.prepare('DELETE FROM connections WHERE id=?').run(existing.id);
   db.prepare('INSERT INTO connections (requester_id, recipient_id) VALUES (?,?)').run(req.user.id, target.id);
-  notify(target.id, 'Connection Request', `${req.user.name} wants to connect`, '/network?tab=requests');
+  notify(target.id, 'Connection Request', `${req.user.name} would like to connect with you. Review the request to respond.`, '/network?tab=requests');
   res.json({ ok: true, status: 'pending' });
 });
 
 router.post('/connections/:id/:action', (req, res) => {
   const c = db.prepare('SELECT * FROM connections WHERE id=? AND recipient_id=?').get(req.params.id, req.user.id);
-  if (!c) return res.status(404).json({ error: 'Request not found' });
+  if (!c) return res.status(404).json({ error: 'We could not find that connection request. It may have already been handled.' });
   const map = { accept: 'accepted', reject: 'rejected' };
   const status = map[req.params.action];
-  if (!status) return res.status(400).json({ error: 'Invalid action' });
+  if (!status) return res.status(400).json({ error: 'That action is not supported. Please accept or reject the request.' });
   db.prepare('UPDATE connections SET status=? WHERE id=?').run(status, c.id);
   if (status === 'accepted') {
-    notify(c.requester_id, 'Connection Accepted', `${req.user.name} accepted your connection request`, `/profile/${req.user.id}`);
+    notify(c.requester_id, 'Connection Accepted', `${req.user.name} accepted your connection request. You can now message each other.`, `/profile/${req.user.id}`);
   }
   res.json({ ok: true });
 });
@@ -90,7 +90,7 @@ router.post('/follow/:id', (req, res) => {
 // ---- Profile pages ----
 router.get('/profile/:id', (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!u) return res.status(404).json({ error: 'User not found' });
+  if (!u) return res.status(404).json({ error: 'We could not find that profile. It may have been removed.' });
   const out = { user: publicUser(u), trust: trustScore(u) };
 
   const myConns = db.prepare(
@@ -145,7 +145,7 @@ router.get('/profile/:id', (req, res) => {
     (SELECT COUNT(*) FROM post_comments WHERE post_id=p.id) comments
     FROM posts p WHERE p.user_id=? AND p.removed=0 ORDER BY p.id DESC LIMIT 10`).all(u.id);
   if (u.id !== req.user.id) {
-    const txt = `${req.user.name} viewed your profile`;
+    const txt = `${req.user.name} viewed your profile.`;
     const dup = db.prepare("SELECT 1 FROM notifications WHERE user_id=? AND type='Profile Viewed' AND text=? AND created_at > datetime('now','-1 day')").get(u.id, txt);
     if (!dup) notify(u.id, 'Profile Viewed', txt, `/profile/${req.user.id}`);
   }
@@ -168,7 +168,7 @@ router.put('/me', (req, res) => {
     clampStrings(ip, ['fund_name', 'fund_size', 'check_size'], 200);
     clampStrings(ip, ['thesis'], 5000);
     for (const k of ['stage_focus', 'sector_focus', 'portfolio']) {
-      if (ip[k] !== undefined && !Array.isArray(ip[k])) return res.status(400).json({ error: `"${k}" must be a list` });
+      if (ip[k] !== undefined && !Array.isArray(ip[k])) return res.status(400).json({ error: `"${k}" must be a list.` });
     }
     db.prepare(`UPDATE investor_profiles SET fund_name=COALESCE(?,fund_name), fund_size=COALESCE(?,fund_size),
       check_size=COALESCE(?,check_size), stage_focus=COALESCE(?,stage_focus), sector_focus=COALESCE(?,sector_focus),
@@ -200,8 +200,8 @@ router.get('/intro-path/:id', (req, res) => {
 
 router.post('/report', (req, res) => {
   const { target_type, target_id, reason } = req.body;
-  if (!target_type || !target_id || !reason) return res.status(400).json({ error: 'Reason required' });
-  if (!['user', 'startup', 'post'].includes(target_type)) return res.status(400).json({ error: 'Invalid report target' });
+  if (!target_type || !target_id || !reason) return res.status(400).json({ error: 'Please add a reason so our team can review this report.' });
+  if (!['user', 'startup', 'post'].includes(target_type)) return res.status(400).json({ error: 'That report target is not supported.' });
   db.prepare('INSERT INTO reports (reporter_id, target_type, target_id, reason) VALUES (?,?,?,?)')
     .run(req.user.id, target_type, Number(target_id) || 0, String(reason).slice(0, 2000));
   res.json({ ok: true });

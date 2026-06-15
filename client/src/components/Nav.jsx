@@ -84,7 +84,7 @@ export default function Nav() {
                   <div className="text-xs text-mist-400 capitalize">{user.role}{user.city ? ` · ${user.city}` : ''}</div>
                 </div>
                 {user.role !== 'admin' && (
-                  <button className="w-full text-left nav-link block" onClick={() => { setMenuOpen(false); nav(`/profile/${user.id}`); }}>My Profile</button>
+                  <button className="w-full text-left nav-link block" onClick={() => { setMenuOpen(false); nav(`/profile/${user.id}`); }}>View profile</button>
                 )}
                 <button className="w-full text-left nav-link block" onClick={() => { setMenuOpen(false); nav('/settings'); }}>Settings</button>
                 <button className="w-full text-left nav-link block text-red-300 hover:text-red-200" onClick={async () => { await logout(); nav('/'); }}>Log out</button>

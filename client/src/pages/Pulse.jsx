@@ -31,7 +31,7 @@ export default function Pulse() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="h-display text-2xl flex items-center gap-2"><Activity className="w-6 h-6 text-gold-400" /> Market Pulse</h1>
-          <p className="text-sm text-mist-400 mt-1">Live intelligence from the Fundamental ecosystem. Aggregate signals only — never individual startup data.</p>
+          <p className="text-sm text-mist-400 mt-1">Live intelligence from the Fundamental ecosystem — aggregate signals only, never individual startup data.</p>
         </div>
         <input className="input !w-56" placeholder="Search sectors…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>

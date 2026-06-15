@@ -35,7 +35,7 @@ router.get('/', (req, res) => {
 router.post('/start/:userId', (req, res) => {
   const otherId = Number(req.params.userId);
   if (!areConnected(req.user.id, otherId)) {
-    return res.status(403).json({ error: 'Messaging unlocks once your connection request is accepted.' });
+    return res.status(403).json({ error: 'Messaging unlocks once your connection is accepted. Send a connection request to get started.' });
   }
   const c = getOrCreateConversation(req.user.id, otherId);
   res.json({ conversation_id: c.id });
@@ -44,7 +44,7 @@ router.post('/start/:userId', (req, res) => {
 router.get('/:id', (req, res) => {
   const c = db.prepare('SELECT * FROM conversations WHERE id=? AND (a_id=? OR b_id=?)')
     .get(req.params.id, req.user.id, req.user.id);
-  if (!c) return res.status(404).json({ error: 'Conversation not found' });
+  if (!c) return res.status(404).json({ error: 'We could not find that conversation. It may have been removed.' });
   db.prepare('UPDATE messages SET read=1 WHERE conversation_id=? AND sender_id!=?').run(c.id, req.user.id);
   const otherId = c.a_id === req.user.id ? c.b_id : c.a_id;
   const messages = db.prepare('SELECT * FROM messages WHERE conversation_id=? ORDER BY id ASC').all(c.id).map(m => ({
@@ -61,30 +61,30 @@ router.get('/:id', (req, res) => {
 router.post('/:id/send', (req, res) => {
   const c = db.prepare('SELECT * FROM conversations WHERE id=? AND (a_id=? OR b_id=?)')
     .get(req.params.id, req.user.id, req.user.id);
-  if (!c) return res.status(404).json({ error: 'Conversation not found' });
+  if (!c) return res.status(404).json({ error: 'We could not find that conversation. It may have been removed.' });
   const otherId = c.a_id === req.user.id ? c.b_id : c.a_id;
   if (!areConnected(req.user.id, otherId)) {
-    return res.status(403).json({ error: 'Messaging requires an accepted connection.' });
+    return res.status(403).json({ error: 'You can message this person once your connection is accepted.' });
   }
   // Attachments render as <a href> for the recipient — must be a real link (stored XSS)
   const urlErr = validateUrlFields(req.body, ['attachment']);
   if (urlErr) return res.status(400).json({ error: urlErr });
   clampStrings(req.body, ['text'], 5000);
   const { text, attachment, ref_startup_id } = req.body;
-  if (!text && !attachment && !ref_startup_id) return res.status(400).json({ error: 'Message is empty' });
+  if (!text && !attachment && !ref_startup_id) return res.status(400).json({ error: 'Add a message, attachment, or startup before sending.' });
   db.prepare('INSERT INTO messages (conversation_id, sender_id, text, attachment, ref_startup_id) VALUES (?,?,?,?,?)')
     .run(c.id, req.user.id, text || '', attachment || '', Number(ref_startup_id) || null);
   db.prepare("UPDATE conversations SET updated_at=datetime('now') WHERE id=?").run(c.id);
-  notify(otherId, 'New Message', `New message from ${req.user.name}`, `/messages?c=${c.id}`);
+  notify(otherId, 'New Message', `${req.user.name} sent you a new message. Open the conversation to reply.`, `/messages?c=${c.id}`);
   res.json({ ok: true });
 });
 
 router.post('/:id/deal-stage', (req, res) => {
   const c = db.prepare('SELECT * FROM conversations WHERE id=? AND (a_id=? OR b_id=?)')
     .get(req.params.id, req.user.id, req.user.id);
-  if (!c) return res.status(404).json({ error: 'Conversation not found' });
+  if (!c) return res.status(404).json({ error: 'We could not find that conversation. It may have been removed.' });
   const { stage } = req.body;
-  if (stage !== '' && !DEAL_STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid deal stage' });
+  if (stage !== '' && !DEAL_STAGES.includes(stage)) return res.status(400).json({ error: 'Please choose a valid deal stage: Intro, Due Diligence, Closed, or Passed.' });
   db.prepare('UPDATE conversations SET deal_stage=? WHERE id=?').run(stage, c.id);
   res.json({ ok: true });
 });

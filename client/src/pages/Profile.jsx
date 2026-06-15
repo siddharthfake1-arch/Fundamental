@@ -64,13 +64,13 @@ export default function Profile() {
               })}>Message</button>
             ) : d.connection_status === 'pending' && d.connection_direction === 'incoming' ? (
               <>
-                <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${d.connection_id}/accept`), 'Connected — messaging unlocked')}>Accept Request</button>
+                <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${d.connection_id}/accept`), 'Connected — messaging is now open')}>Accept request</button>
                 <button className="btn-danger btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${d.connection_id}/reject`))}>Reject</button>
               </>
             ) : (
               <button className="btn-primary btn-sm" disabled={d.connection_status === 'pending'}
                 onClick={() => act(() => api.post(`/api/users/connect/${u.id}`), 'Connection request sent')}>
-                {d.connection_status === 'pending' ? 'Request Pending' : 'Connect'}
+                {d.connection_status === 'pending' ? 'Request pending' : 'Connect'}
               </button>
             )}
             <button className={`btn-ghost btn-sm ${d.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
@@ -78,7 +78,7 @@ export default function Profile() {
             {u.linkedin && <a href={u.linkedin} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">LinkedIn ↗</a>}
             <button className="btn-ghost btn-sm ml-auto !text-mist-500" onClick={() => {
               const reason = prompt('Report this profile — describe the issue:');
-              if (reason) act(() => api.post('/api/users/report', { target_type: 'user', target_id: u.id, reason }), 'Report submitted to moderation');
+              if (reason) act(() => api.post('/api/users/report', { target_type: 'user', target_id: u.id, reason }), 'Report sent to our moderation team');
             }}>Report</button>
           </div>
         )}
@@ -98,7 +98,7 @@ export default function Profile() {
           </div>
           {d.investor.thesis && (
             <div className="card p-6">
-              <h2 className="section-title mb-3">Investment Thesis</h2>
+              <h2 className="section-title mb-3">Investment thesis</h2>
               <p className="text-[15px] text-mist-200 leading-relaxed">“{d.investor.thesis}”</p>
               <div className="flex gap-2 flex-wrap mt-4">
                 {d.investor.sector_focus.map(s => <span key={s} className="chip-gold">{s}</span>)}
@@ -112,18 +112,18 @@ export default function Profile() {
       {/* Investor visual intelligence — aggregate attention, never confidential data */}
       {u.role === 'investor' && (d.interest_allocation?.length > 0 || d.stage_allocation?.length > 0) && (
         <div className="card p-6">
-          <h2 className="section-title mb-1">Where Their Attention Goes</h2>
-          <p className="text-xs text-mist-500 mb-5">Based on aggregate platform activity — conviction signals and pipeline composition.</p>
+          <h2 className="section-title mb-1">Where their attention goes</h2>
+          <p className="text-xs text-mist-500 mb-5">Drawn from aggregate activity on Fundamental — conviction signals and pipeline composition.</p>
           <div className="grid sm:grid-cols-2 gap-8">
             {d.interest_allocation?.length > 0 && (
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-3">Sector Conviction</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-3">Sector conviction</div>
                 <BarBreakdown items={d.interest_allocation} />
               </div>
             )}
             {d.stage_allocation?.length > 0 && (
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-3">Pipeline by Stage</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-3">Pipeline by stage</div>
                 <BarBreakdown items={d.stage_allocation} />
               </div>
             )}

@@ -39,7 +39,7 @@ export default function Notifications() {
       </div>
 
       {shown.length === 0 ? (
-        <Empty title="All quiet" sub="Profile views, upvotes, connection and data room activity will appear here." />
+        <Empty title="No notifications yet" sub="Profile views, upvotes, connections, and data room activity appear here." />
       ) : (
         <div className="card overflow-hidden">
           {shown.map(n => (

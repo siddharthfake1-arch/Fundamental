@@ -180,7 +180,7 @@ router.get('/admin/startups', (req, res) => {
 router.post('/admin/verify-user/:id', (req, res) => {
   if (req.body && req.body.tier !== undefined) {
     const tier = Number(req.body.tier);
-    if (!Number.isInteger(tier)) return res.status(400).json({ error: 'Tier must be 0–3' });
+    if (!Number.isInteger(tier)) return res.status(400).json({ error: 'Verification tier must be a whole number from 0 to 3.' });
     db.prepare('UPDATE users SET verified=? WHERE id=?').run(Math.max(0, Math.min(3, tier)), req.params.id);
   } else {
     db.prepare('UPDATE users SET verified = (verified + 1) % 4 WHERE id=?').run(req.params.id);
@@ -194,7 +194,7 @@ router.post('/admin/flag-user/:id', (req, res) => {
 router.post('/admin/verify-startup/:id', (req, res) => {
   if (req.body && req.body.tier !== undefined) {
     const tier = Number(req.body.tier);
-    if (!Number.isInteger(tier)) return res.status(400).json({ error: 'Tier must be 0–3' });
+    if (!Number.isInteger(tier)) return res.status(400).json({ error: 'Verification tier must be a whole number from 0 to 3.' });
     db.prepare('UPDATE startups SET verified=? WHERE id=?').run(Math.max(0, Math.min(3, tier)), req.params.id);
   } else {
     db.prepare('UPDATE startups SET verified = (verified + 1) % 4 WHERE id=?').run(req.params.id);
@@ -207,7 +207,7 @@ router.get('/admin/reports', (req, res) => {
 });
 router.post('/admin/reports/:id/:action', (req, res) => {
   const map = { resolve: 'resolved', dismiss: 'dismissed' };
-  if (!map[req.params.action]) return res.status(400).json({ error: 'Invalid action' });
+  if (!map[req.params.action]) return res.status(400).json({ error: 'That action is not supported. Please resolve or dismiss the report.' });
   db.prepare('UPDATE reports SET status=? WHERE id=?').run(map[req.params.action], req.params.id);
   res.json({ ok: true });
 });
