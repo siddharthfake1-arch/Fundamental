@@ -1,8 +1,8 @@
 const Database = require('better-sqlite3');
-const path = require('path');
 
-// DB_PATH lets tests (and alternate deployments) use a separate database file.
-const DB_FILE = process.env.DB_PATH || path.join(__dirname, 'fundamental.db');
+// DATA_DIR / DB_PATH resolution lives in paths.js so the DB and upload folders
+// all agree on where persistent data is stored (see paths.js).
+const { DB_FILE } = require('./paths');
 const db = new Database(DB_FILE);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
@@ -292,6 +292,7 @@ for (const stmt of [
   "ALTER TABLE messages ADD COLUMN attachment_key TEXT DEFAULT ''",       // private message attachment
   "ALTER TABLE messages ADD COLUMN attachment_name TEXT DEFAULT ''",
   "ALTER TABLE startups ADD COLUMN hidden INTEGER DEFAULT 0",             // admin can hide a startup from the marketplace
+  "ALTER TABLE users ADD COLUMN links TEXT DEFAULT '[]'",                 // up to 10 user-added profile links [{label,url}]
 ]) { try { db.exec(stmt); } catch { /* column exists */ } }
 
 // Demo accounts (dev only) are pre-approved and pre-consented so the seeded
@@ -481,6 +482,7 @@ function publicUser(u) {
   if (!u) return null;
   const { password_hash, pwd_changed_at, email, phone, email_alerts, inapp_alerts, ...rest } = u;
   rest.badges = JSON.parse(rest.badges || '[]');
+  try { rest.links = JSON.parse(rest.links || '[]'); } catch { rest.links = []; }
   return rest;
 }
 

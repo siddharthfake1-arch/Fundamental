@@ -3,7 +3,23 @@ const fs = require('fs');
 const path = require('path');
 const { db, notify, audit, areConnected, publicUser, trustScore } = require('../db');
 const { auth, requireRole } = require('../authmw');
-const { validateUrlFields, clampStrings } = require('../security');
+const { validateUrlFields, clampStrings, safeUrl } = require('../security');
+
+// Profile links: up to 10 freeform [{label,url}] entries. Each URL must be a safe
+// http(s) link (blocks javascript:/data: stored XSS); labels are optional and clamped.
+const MAX_LINKS = 10;
+function sanitizeLinks(input) {
+  if (!Array.isArray(input)) return { error: 'Links must be a list.' };
+  if (input.length > MAX_LINKS) return { error: `You can add up to ${MAX_LINKS} links.` };
+  const out = [];
+  for (const item of input) {
+    const url = safeUrl(item && item.url);
+    if (!url) return { error: 'Each link needs a valid http or https URL.' };
+    const label = String((item && item.label) || '').split('<').join('').split('>').join('').trim().slice(0, 80);
+    out.push({ label, url });
+  }
+  return { links: out };
+}
 const { deletePrivate } = require('../storage');
 const { J, qstr } = require('../util');
 
@@ -238,7 +254,7 @@ router.delete('/me', (req, res) => {
 
   // Remove files only after the DB row is gone.
   for (const key of privateKeys) deletePrivate(key);
-  const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+  const { UPLOAD_DIR } = require('../paths');
   for (const url of publicUrls) {
     if (typeof url === 'string' && url.startsWith('/uploads/')) {
       try { fs.unlinkSync(path.join(UPLOAD_DIR, path.basename(url))); } catch { /* already gone / external */ }
@@ -258,6 +274,13 @@ router.put('/me', (req, res) => {
   if (urlErr) return res.status(400).json({ error: urlErr });
   clampStrings(req.body, ['name', 'city', 'headline'], 200);
   clampStrings(req.body, ['bio', 'education', 'experience'], 5000);
+  // Profile links are an array, validated/serialized separately from the flat fields.
+  if (req.body.links !== undefined) {
+    const r = sanitizeLinks(req.body.links);
+    if (r.error) return res.status(400).json({ error: r.error });
+    req.body.links = JSON.stringify(r.links);
+    allowed.push('links');
+  }
   const sets = [], vals = [];
   for (const k of allowed) if (req.body[k] !== undefined) { sets.push(`${k}=?`); vals.push(req.body[k]); }
   if (sets.length) db.prepare(`UPDATE users SET ${sets.join(',')} WHERE id=?`).run(...vals, req.user.id);

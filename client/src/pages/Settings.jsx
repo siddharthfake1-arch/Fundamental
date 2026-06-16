@@ -35,10 +35,14 @@ export default function Settings() {
 }
 
 function Account({ user, refresh }) {
-  const [f, setF] = useState({ name: user.name, city: user.city, headline: user.headline, bio: user.bio, linkedin: user.linkedin, education: user.education, experience: user.experience, photo: user.photo, cover: user.cover || '' });
+  const [f, setF] = useState({ name: user.name, city: user.city, headline: user.headline, bio: user.bio, linkedin: user.linkedin, education: user.education, experience: user.experience, photo: user.photo, cover: user.cover || '', links: Array.isArray(user.links) ? user.links : [] });
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
+  const MAX_LINKS = 10;
+  const setLink = (i, k, v) => setF(x => ({ ...x, links: x.links.map((l, j) => j === i ? { ...l, [k]: v } : l) }));
+  const addLink = () => setF(x => x.links.length >= MAX_LINKS ? x : ({ ...x, links: [...x.links, { label: '', url: '' }] }));
+  const removeLink = (i) => setF(x => ({ ...x, links: x.links.filter((_, j) => j !== i) }));
   return (
     <div className="card p-6 space-y-4">
       {f.cover && <img src={f.cover} alt="" className="w-full h-28 object-cover rounded-xl border border-ink-700/50" />}
@@ -60,11 +64,32 @@ function Account({ user, refresh }) {
         <Field label="Previous experience"><input className="input" value={f.experience} onChange={set('experience')} /></Field>
       </div>
       <Field label="Personal LinkedIn"><input className="input" value={f.linkedin} onChange={set('linkedin')} placeholder="https://linkedin.com/in/…" /></Field>
+
+      <div className="pt-2 border-t border-ink-700/60">
+        <div className="flex items-center justify-between">
+          <span className="label !mb-0">Links</span>
+          <span className="text-xs text-mist-500">{f.links.length}/{MAX_LINKS}</span>
+        </div>
+        <p className="text-xs text-mist-500 mt-1 mb-3">Add up to {MAX_LINKS} links — website, X, GitHub, deck, press, anything.</p>
+        <div className="space-y-2">
+          {f.links.map((l, i) => (
+            <div key={i} className="flex gap-2">
+              <input className="input !w-40" placeholder="Label (optional)" value={l.label || ''} onChange={(e) => setLink(i, 'label', e.target.value)} />
+              <input className="input flex-1" placeholder="https://…" value={l.url || ''} onChange={(e) => setLink(i, 'url', e.target.value)} />
+              <button type="button" className="btn-ghost btn-sm shrink-0" aria-label="Remove link" onClick={() => removeLink(i)}>Remove</button>
+            </div>
+          ))}
+        </div>
+        {f.links.length < MAX_LINKS && <button type="button" className="btn-ghost btn-sm mt-2" onClick={addLink}>+ Add link</button>}
+      </div>
+
       <div className="flex items-center justify-between pt-2">
         <span className="text-xs text-mist-500">Google account: {user.google_linked ? <span className="text-emerald-300">Linked</span> : 'Not linked'}</span>
         <button className="btn-primary" disabled={busy} onClick={async () => {
           setBusy(true);
-          try { await api.put('/api/users/me', f); await refresh(); toast('Profile updated', 'success'); }
+          // Drop blank rows before saving; the server requires a valid URL per link.
+          const payload = { ...f, links: f.links.filter(l => (l.url || '').trim()) };
+          try { await api.put('/api/users/me', payload); await refresh(); toast('Profile updated', 'success'); }
           catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
         }}>Save changes</button>
       </div>
@@ -133,7 +158,7 @@ function StartupSettings() {
       <div className="card p-6 space-y-4">
         <h2 className="section-title">12-minute pitch video (required)</h2>
         {s.video_url && <video src={s.video_url} controls className="w-full rounded-xl aspect-video bg-black border border-ink-600/60" />}
-        <FileUpload label="Replace pitch video" accept="video/*" currentUrl={s.video_url} hint="12 minutes maximum"
+        <FileUpload label="Replace pitch video" accept="video/*" currentUrl={s.video_url} hint="12 minutes · max 50 MB" maxBytes={50 * 1024 * 1024}
           onUploaded={(d) => {
             if (d.duration && d.duration > 12 * 60) { toast(`That video is ${Math.round(d.duration / 60)} minutes. The pitch must be 12 minutes or less.`, 'error'); return; }
             setS(x => ({ ...x, video_url: d.url, video_duration: d.duration || x.video_duration || 0 }));
@@ -183,7 +208,7 @@ function ManageCollateral({ startupId }) {
           {['Public', 'Request Access', 'Connected Only'].map(a => <option key={a}>{a}</option>)}
         </select>
       </div>
-      <FileUpload label="File" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,image/*" private uploaded={!!d.file_key} onUploaded={(u) => setD(x => ({ ...x, file_key: u.key }))} />
+      <FileUpload label="File" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,image/*" hint="Max 25 MB per file" maxBytes={25 * 1024 * 1024} private uploaded={!!d.file_key} onUploaded={(u) => setD(x => ({ ...x, file_key: u.key }))} />
       <button className="btn-ghost w-full" disabled={!d.title} onClick={async () => {
         try {
           await api.post(`/api/startups/${startupId}/collateral`, d);

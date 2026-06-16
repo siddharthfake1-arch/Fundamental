@@ -25,15 +25,23 @@ React app on one port. Fresh databases seed themselves with demo data on first b
 
 **Persistence note:** the free tier has an ephemeral disk — the SQLite database and
 uploaded files reset on each deploy/restart (demo data re-seeds automatically). For
-real users, add a **Persistent Disk** (Render paid feature, ~$1/mo for 1GB):
-mount it at `/opt/render/project/src/server`, which keeps `fundamental.db` and `uploads/`.
+real users, add a **Persistent Disk** (Render paid feature, ~$1/mo for 1GB), mount it
+at `/opt/render/project/src/data`, and point the app at it with these env vars:
+
+```
+DATA_DIR=/opt/render/project/src/data
+DB_PATH=/opt/render/project/src/data/fundamental.db
+```
+
+The database **and** all uploads (public `uploads/` + private `uploads-private/`) are
+stored under `DATA_DIR`, so everything survives deploys and restarts on the mounted disk.
 
 ## Option B — Railway.app
 
 1. https://railway.app → **New Project → Deploy from GitHub repo**.
 2. Railway auto-detects Node. Set **Start Command** to `npm start` if asked.
 3. Add the same env vars: `NODE_ENV=production`, `JWT_SECRET=<random string>`.
-4. Add a **Volume** mounted at `/app/server` to persist the database and uploads.
+4. Add a **Volume** (e.g. mounted at `/app/data`) and set `DATA_DIR=/app/data` to persist the database and uploads.
 5. Open the generated domain.
 
 ## Option C — Your own VPS (DigitalOcean / Hetzner / EC2)
@@ -57,6 +65,8 @@ Use `pm2` to keep it running: `npm i -g pm2 && pm2 start server/index.js --name 
 | `JWT_SECRET` | **Yes (production)** | Signs login sessions. Long random string. The server **refuses to start** in production without it. |
 | `NODE_ENV` | Yes | Set `production` (enables secure cookies). |
 | `PORT` | No | Defaults to 3000. Render/Railway set it automatically. |
+| `DATA_DIR` | Recommended | Directory for the SQLite DB and all uploads (public + private). Point it at a mounted persistent disk so data survives restarts. Defaults to the `server/` folder. |
+| `DB_PATH` | No | Explicit path to the SQLite file. Defaults to `<DATA_DIR>/fundamental.db`. |
 | `AUTO_SEED` | No | `false` to start with an empty database instead of demo data. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | No | Enables the "Sign in with Google" button. |
 | `RESEND_API_KEY` (+ optional `OTP_FROM`) | Recommended | Sends signup verification codes by **email** via [Resend](https://resend.com). |
@@ -103,11 +113,13 @@ ADMIN_NAME="Your Name"
 
 **Operational requirements (not yet provisioned in code)**
 
-- **Persistent storage:** SQLite at `server/fundamental.db` and uploads at
-  `server/uploads` + `server/uploads-private` must live on a persistent disk, or be
-  migrated to managed Postgres + S3/R2 before real launch. Private documents
-  (`uploads-private/`) are never served statically — they stream through
-  access-checked endpoints.
+- **Persistent storage:** set `DATA_DIR` to a mounted persistent disk so the SQLite
+  database (`<DATA_DIR>/fundamental.db`) and uploads (`<DATA_DIR>/uploads` +
+  `<DATA_DIR>/uploads-private`) survive restarts — or migrate to managed Postgres +
+  S3/R2 before a large launch. Private documents (`uploads-private/`) are never served
+  statically — they stream through access-checked endpoints.
+- **Upload size limits:** pitch videos cap at 50 MB, each data-room file at 25 MB,
+  images at 10 MB (enforced server-side after a magic-byte content check).
 - **Backups & encryption at rest** for the database and private documents.
 - **Malware scanning** for uploaded documents (integrate a scanner in the
   `/api/upload/private` pipeline).

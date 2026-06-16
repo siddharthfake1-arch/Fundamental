@@ -169,7 +169,7 @@ router.post('/mine', requireRole('founder'), (req, res) => {
     if (!/^\/uploads\//.test(String(b.video_url))) {
       return res.status(400).json({ error: 'Upload your pitch video here so we can verify it is 12 minutes or less. External video links are not accepted for the pitch.' });
     }
-    const filePath = require('path').join(__dirname, '..', 'uploads', require('path').basename(String(b.video_url)));
+    const filePath = require('path').join(require('../paths').UPLOAD_DIR, require('path').basename(String(b.video_url)));
     const probed = require('../videometa').probeVideoDuration(filePath);
     if (probed == null) {
       return res.status(400).json({ error: 'We could not read that video. Please re-upload an MP4/MOV pitch.' });

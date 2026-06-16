@@ -6,8 +6,8 @@
 // (S3/R2) with server-side encryption; the interface here keeps that swap local.
 const path = require('path');
 const fs = require('fs');
+const { PRIVATE_DIR } = require('./paths');
 
-const PRIVATE_DIR = path.join(__dirname, 'uploads-private');
 fs.mkdirSync(PRIVATE_DIR, { recursive: true });
 
 // Resolve a stored key to a path, guarding against path traversal.

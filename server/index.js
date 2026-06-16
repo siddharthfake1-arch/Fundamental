@@ -99,10 +99,13 @@ app.get('/api/config', (req, res) => res.json({
 // that is NEVER served statically and is only reachable via access-checked
 // streaming endpoints (P0-3, P1-8).
 const { PRIVATE_DIR } = require('./storage');
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+const { UPLOAD_DIR } = require('./paths');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const SIZE_LIMITS = { image: 10 * 1024 * 1024, video: 600 * 1024 * 1024, document: 60 * 1024 * 1024 };
+// Per-kind upload ceilings (bytes). Pitch video caps at 50 MB; each data-room
+// document caps at 25 MB; images stay lean at 10 MB.
+const SIZE_LIMITS = { image: 10 * 1024 * 1024, video: 50 * 1024 * 1024, document: 25 * 1024 * 1024 };
+const MB = (n) => Math.round(n / (1024 * 1024));
 const uploadLimiter = rateLimit({ name: 'upload', windowMs: 60 * 60_000, max: 40 });
 
 // Public upload: images + video only, validated by magic bytes after write.
@@ -112,16 +115,20 @@ const publicUpload = multer({
 });
 app.post('/api/upload', auth, uploadLimiter, (req, res) => {
   publicUpload.single('file')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File is too large.' : (err.message || 'Upload failed') });
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `File is too large. Videos must be ${MB(SIZE_LIMITS.video)} MB or less, images ${MB(SIZE_LIMITS.image)} MB or less.` : (err.message || 'Upload failed') });
     if (!req.file) return res.status(400).json({ error: 'No file received' });
     const p = path.join(UPLOAD_DIR, req.file.filename);
     let head;
     try { const fd = fs.openSync(p, 'r'); const buf = Buffer.alloc(4096); const n = fs.readSync(fd, buf, 0, 4096, 0); fs.closeSync(fd); head = buf.slice(0, n); }
     catch { return res.status(400).json({ error: 'Upload failed' }); }
     const kind = sniffFileType(head, req.file.originalname);
-    if (!kind || !['image', 'video'].includes(kind) || req.file.size > SIZE_LIMITS[kind]) {
+    if (!kind || !['image', 'video'].includes(kind)) {
       try { fs.unlinkSync(p); } catch { /* ignore */ }
-      return res.status(400).json({ error: 'Unsupported or oversized file. Allowed here: images and video.' });
+      return res.status(400).json({ error: 'Unsupported file. Allowed here: images and video.' });
+    }
+    if (req.file.size > SIZE_LIMITS[kind]) {
+      try { fs.unlinkSync(p); } catch { /* ignore */ }
+      return res.status(400).json({ error: `That ${kind} is too large. The limit is ${MB(SIZE_LIMITS[kind])} MB.` });
     }
     const out = { url: `/uploads/${req.file.filename}`, name: req.file.originalname, size: req.file.size };
     if (kind === 'video') {
@@ -144,7 +151,7 @@ const privateUpload = multer({
 });
 app.post('/api/upload/private', auth, uploadLimiter, (req, res) => {
   privateUpload.single('file')(req, res, (err) => {
-    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File is too large (max 60 MB).' : (err.message || 'Upload failed') });
+    if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? `File is too large. Each data-room file must be ${MB(SIZE_LIMITS.document)} MB or less.` : (err.message || 'Upload failed') });
     if (!req.file) return res.status(400).json({ error: 'No file received' });
     const tmp = req.file.path;
     let head;

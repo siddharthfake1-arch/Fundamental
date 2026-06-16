@@ -180,11 +180,16 @@ export const useToast = () => useContext(ToastCtx);
 // ---- File upload field with progress ----
 // `private` routes the file to access-controlled storage and returns { key }
 // instead of a public { url } — used for data-room collateral and attachments.
-export function FileUpload({ label, accept, onUploaded, hint, currentUrl, uploaded, private: isPrivate }) {
+export function FileUpload({ label, accept, onUploaded, hint, currentUrl, uploaded, private: isPrivate, maxBytes }) {
   const [progress, setProgress] = useState(null);
   const toast = useToast();
   const handle = async (file) => {
     if (!file) return;
+    // Fail fast on oversized files so the user isn't left waiting on a doomed upload.
+    if (maxBytes && file.size > maxBytes) {
+      toast(`That file is ${Math.ceil(file.size / 1048576)} MB. The limit is ${Math.round(maxBytes / 1048576)} MB.`, 'error');
+      return;
+    }
     try {
       setProgress(0);
       const data = await (isPrivate ? api.uploadPrivate(file, setProgress) : api.upload(file, setProgress));

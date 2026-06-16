@@ -10,7 +10,7 @@ if (db.prepare('SELECT COUNT(*) c FROM users').get().c > 0) {
 }
 
 const PASS = bcrypt.hashSync('demo1234', 10);
-const UP = path.join(__dirname, 'uploads');
+const { UPLOAD_DIR: UP } = require('./paths');
 fs.mkdirSync(UP, { recursive: true });
 
 // ---- Brand-style logo marks: gradient tile + abstract glyph (no letters) ----

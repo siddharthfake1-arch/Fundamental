@@ -150,6 +150,21 @@ export default function Profile() {
         </div>
       )}
 
+      {/* Links */}
+      {u.links?.length > 0 && (
+        <div className="card p-6">
+          <h2 className="section-title mb-4">Links</h2>
+          <div className="flex flex-wrap gap-2">
+            {u.links.map((l, i) => (
+              <a key={i} href={l.url} target="_blank" rel="noreferrer noopener"
+                className="btn-ghost btn-sm max-w-full truncate">
+                {(l.label || l.url.replace(/^https?:\/\/(www\.)?/, '')).slice(0, 60)} ↗
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Startups / Portfolio */}
       {(d.startups?.length > 0 || d.portfolio_startups?.length > 0) && (
         <div className="card p-6">
