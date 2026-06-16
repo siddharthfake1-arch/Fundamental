@@ -4,7 +4,7 @@
   "private": true,
   "description": "Fundamental — Fundraising? Fundamental. A serious fundraising marketplace and professional network for founders and investors.",
   "engines": {
-    "node": ">=20 <23"
+    "node": ">=18.0.0"
   },
   "scripts": {
     "setup": "npm install",
@@ -28,6 +28,9 @@
     "multer": "^2.2.0"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "concurrently": "^9.1.2"
+  },
+  "overrides": {
+    "shell-quote": "^1.8.4"
   }
 }

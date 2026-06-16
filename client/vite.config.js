@@ -11,8 +11,7 @@ export default defineConfig({
     },
   },
   build: {
-    // Split heavy third-party libraries out of the app bundle so no single
-    // chunk trips the size warning and the browser can cache vendors separately.
+    target: 'esnext',
     rollupOptions: {
       output: {
         // Function form (compatible with Rollup and Vite 8's Rolldown bundler).
