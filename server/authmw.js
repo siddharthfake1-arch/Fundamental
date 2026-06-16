@@ -75,6 +75,8 @@ function validateProductionConfig() {
   const hasSmsOtp = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM);
   if (!hasEmailOtp && !hasSmsOtp) missing.push('RESEND_API_KEY (or Twilio SMS credentials)');
   if (!process.env.APP_URL && !process.env.PUBLIC_URL) missing.push('APP_URL (your public site URL)');
+  // F-006: proxy topology must be explicit in production so req.ip can't be spoofed.
+  if (process.env.TRUST_PROXY_HOPS === undefined) missing.push('TRUST_PROXY_HOPS (number of trusted proxy hops, e.g. 1 behind Render/nginx)');
   if (missing.length) {
     console.error('FATAL: production launch blocked — missing required configuration:\n  - ' + missing.join('\n  - '));
     console.error('Set these environment variables, or run with NODE_ENV unset for local development.');

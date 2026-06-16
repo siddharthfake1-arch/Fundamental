@@ -10,7 +10,9 @@
     "setup": "npm install",
     "postinstall": "cd client && npm install",
     "build": "cd client && npm run build",
-    "dev": "node server/index.js & npm run dev --prefix client",
+    "dev:server": "node server/index.js",
+    "dev:client": "npm run dev --prefix client",
+    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "seed": "node server/seed.js",
     "start": "node server/index.js",
     "test": "npm run test:unit && npm run test:routes",
@@ -24,5 +26,8 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.2.0"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
   }
 }

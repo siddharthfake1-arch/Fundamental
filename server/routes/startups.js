@@ -256,7 +256,9 @@ router.get('/:id', dealFlowGate, (req, res) => {
     const can = isOwner || c.access_level === 'Public' ||
       (c.access_level === 'Connected Only' && connected) ||
       (myReq && myReq.status === 'approved');
-    const out = { ...c, can_view: !!can, my_request: myReq ? myReq.status : null, has_file: !!(c.file_key || c.file_url) };
+    // F-015: external links are NOT revocable once disclosed — flag them so the UI
+    // can warn viewers (vs. platform-hosted private files which are access-checked).
+    const out = { ...c, can_view: !!can, my_request: myReq ? myReq.status : null, has_file: !!(c.file_key || c.file_url), external: !c.file_key && !!c.file_url };
     // Never expose the private storage key, and never expose the external file URL
     // to viewers without access — the data room must be permissioned (P0-3).
     delete out.file_key;

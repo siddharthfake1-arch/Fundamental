@@ -11,9 +11,14 @@ setInterval(() => {
   for (const [k, b] of buckets) if (b.reset < now) buckets.delete(k);
 }, 60_000).unref();
 
-function rateLimit({ windowMs, max, name }) {
+// `keyFn(req)` lets callers throttle by something other than IP (e.g. the target
+// email/identifier), which is harder to evade across distributed clients (F-011).
+// For multi-instance deployments, back this with Redis (documented in DEPLOYMENT.md).
+function rateLimit({ windowMs, max, name, keyFn }) {
   return (req, res, next) => {
-    const key = `${name}:${req.ip}`;
+    const extra = keyFn ? keyFn(req) : req.ip;
+    if (extra == null) return next(); // nothing to key on (e.g. no email supplied yet)
+    const key = `${name}:${extra}`;
     const now = Date.now();
     let b = buckets.get(key);
     if (!b || b.reset < now) { b = { count: 0, reset: now + windowMs }; buckets.set(key, b); }

@@ -23,13 +23,20 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 validateProductionConfig();
 
 const app = express();
-// Trusted proxy hop count — set TRUST_PROXY_HOPS to match your deployment topology
-// so req.ip (used for rate-limit keys) cannot be spoofed via X-Forwarded-For.
-app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
+// F-006: trust NO proxy by default (fail-closed) so X-Forwarded-For cannot spoof
+// req.ip / rate-limit keys. Set TRUST_PROXY_HOPS to the real hop count for your
+// topology (production boot requires it — see validateProductionConfig).
+app.set('trust proxy', process.env.TRUST_PROXY_HOPS !== undefined ? Number(process.env.TRUST_PROXY_HOPS) : 0);
 app.disable('x-powered-by');
 app.use(securityHeaders);
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
+// F-035: per-request id for correlation in logs / error tracking.
+app.use((req, res, next) => {
+  req.id = require('crypto').randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
 app.use('/api', csrfOriginCheck); // reject state-changing requests from foreign origins
 app.use('/api', rateLimit({ name: 'api', windowMs: 5 * 60_000, max: 1500 })); // generous global ceiling
 
@@ -127,18 +134,30 @@ app.post('/api/upload', auth, uploadLimiter, (req, res) => {
 });
 
 // Private upload: documents + images for the data room and message attachments.
-// Returns an opaque key; the file is never publicly served.
-const privateUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: SIZE_LIMITS.document } });
+// F-013: stream straight to disk (not RAM) so concurrent large uploads can't
+// exhaust memory; validate magic bytes by reading the head from disk afterward.
+const PRIVATE_TMP = path.join(PRIVATE_DIR, '_tmp');
+fs.mkdirSync(PRIVATE_TMP, { recursive: true });
+const privateUpload = multer({
+  storage: multer.diskStorage({ destination: PRIVATE_TMP, filename: (req, file, cb) => cb(null, randomFileName(file.originalname)) }),
+  limits: { fileSize: SIZE_LIMITS.document },
+});
 app.post('/api/upload/private', auth, uploadLimiter, (req, res) => {
   privateUpload.single('file')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'File is too large (max 60 MB).' : (err.message || 'Upload failed') });
     if (!req.file) return res.status(400).json({ error: 'No file received' });
-    const kind = sniffFileType(req.file.buffer, req.file.originalname);
+    const tmp = req.file.path;
+    let head;
+    try { const fd = fs.openSync(tmp, 'r'); const buf = Buffer.alloc(4096); const n = fs.readSync(fd, buf, 0, 4096, 0); fs.closeSync(fd); head = buf.slice(0, n); }
+    catch { try { fs.unlinkSync(tmp); } catch {} return res.status(400).json({ error: 'Upload failed' }); }
+    const kind = sniffFileType(head, req.file.originalname);
     if (!kind || !['document', 'image'].includes(kind)) {
+      try { fs.unlinkSync(tmp); } catch {}
       return res.status(400).json({ error: 'Unsupported file type. Allowed: PDF, Office documents, CSV, images, ZIP.' });
     }
-    const fname = randomFileName(req.file.originalname);
-    fs.writeFileSync(path.join(PRIVATE_DIR, fname), req.file.buffer);
+    const fname = path.basename(tmp);
+    try { fs.renameSync(tmp, path.join(PRIVATE_DIR, fname)); }
+    catch { try { fs.unlinkSync(tmp); } catch {} return res.status(500).json({ error: 'Could not store the file.' }); }
     res.json({ key: fname, name: req.file.originalname, size: req.file.size });
   });
 });
@@ -187,11 +206,38 @@ app.use('/api', require('./routes/misc'));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use((err, req, res, next) => {
-  // In production, log only a concise line (no full stack/object that may contain
-  // user data); wire a structured logger / error tracker (e.g. Sentry) here.
-  if (IS_PROD) console.error(`[error] ${req.method} ${req.path}: ${err && err.message}`);
-  else console.error(err);
-  res.status(500).json({ error: 'Something went wrong on our side' });
+  // Structured JSON log with a request id for correlation. In production we never
+  // log the full error object/stack (may contain user data) — wire Sentry here.
+  const entry = { level: 'error', ts: new Date().toISOString(), request_id: req.id, method: req.method, path: req.path, message: err && err.message };
+  if (!IS_PROD && err && err.stack) entry.stack = err.stack;
+  console.error(JSON.stringify(entry));
+  res.status(500).json({ error: 'Something went wrong on our side', request_id: req.id });
+});
+
+// F-031: robots.txt and sitemap.xml with ABSOLUTE URLs (crawlers ignore relative
+// sitemap entries). Defined before static serving so they override any built files.
+function siteBase(req) {
+  const env = process.env.APP_URL || process.env.PUBLIC_URL;
+  return (env || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+}
+app.get('/robots.txt', (req, res) => {
+  const base = siteBase(req);
+  res.type('text/plain').send(
+    'User-agent: *\n' +
+    'Allow: /$\nAllow: /s/\nAllow: /legal/\n' +
+    ['/discover', '/dashboard', '/messages', '/network', '/social', '/communities', '/settings', '/admin', '/watchlist', '/notifications', '/profile', '/startup/', '/api/']
+      .map(p => `Disallow: ${p}`).join('\n') +
+    `\n\nSitemap: ${base}/sitemap.xml\n`
+  );
+});
+app.get('/sitemap.xml', (req, res) => {
+  const base = siteBase(req);
+  const urls = ['/', '/login', '/legal/terms', '/legal/privacy', '/legal/disclosures'];
+  res.type('application/xml').send(
+    '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+    urls.map(u => `  <url><loc>${base}${u}</loc></url>`).join('\n') +
+    '\n</urlset>\n'
+  );
 });
 
 // ---- Serve built client (production) ----
@@ -222,7 +268,40 @@ if (fs.existsSync(DIST)) {
     }
     res.send(html);
   });
-  app.get(/^(?!\/api|\/uploads).*/, (req, res) => res.sendFile(path.join(DIST, 'index.html')));
+  // F-032: route-aware metadata (title/description/canonical/OG) for public pages;
+  // authenticated app routes are marked noindex.
+  const PAGE_META = {
+    '/': { title: 'Fundamental — the serious fundraising platform', desc: 'A private-market network where founders raise and investors run real diligence. Every startup opens with a 12-minute video pitch.' },
+    '/login': { title: 'Sign in · Fundamental', desc: 'Sign in or create your Fundamental account.' },
+    '/legal/terms': { title: 'Terms of Service · Fundamental', desc: 'The terms governing use of Fundamental.' },
+    '/legal/privacy': { title: 'Privacy Policy · Fundamental', desc: 'How Fundamental collects, uses, and protects your data.' },
+    '/legal/disclosures': { title: 'Investor Risk Disclosures · Fundamental', desc: 'Important risk disclosures for investors on Fundamental.' },
+  };
+  const PUBLIC = new Set(['/', '/login', '/legal/terms', '/legal/privacy', '/legal/disclosures']);
+  app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
+    let html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+    const esc = (x) => String(x || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const base = siteBase(req);
+    const m = PAGE_META[req.path];
+    const isPublic = PUBLIC.has(req.path);
+    const robots = isPublic ? 'index, follow' : 'noindex, nofollow';
+    const head = [
+      `<link rel="canonical" href="${esc(base + req.path)}" />`,
+      `<meta property="og:site_name" content="Fundamental" />`,
+      `<meta property="og:url" content="${esc(base + req.path)}" />`,
+      `<meta name="twitter:card" content="summary_large_image" />`,
+      m ? `<meta property="og:title" content="${esc(m.title)}" />` : '',
+      m ? `<meta property="og:description" content="${esc(m.desc)}" />` : '',
+    ].filter(Boolean).join('\n    ');
+    html = html.replace(/<meta name="robots"[^>]*>/, `<meta name="robots" content="${robots}" />`);
+    if (m) {
+      html = html
+        .replace(/<meta name="description"[^>]*>/, `<meta name="description" content="${esc(m.desc)}" />`)
+        .replace(/<title>[^<]*<\/title>/, `<title>${esc(m.title)}</title>`);
+    }
+    html = html.replace('</head>', `    ${head}\n  </head>`);
+    res.send(html);
+  });
 } else {
   // Client not built yet — show instructions instead of "Cannot GET /"
   app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
@@ -243,4 +322,21 @@ npm start</pre>
 // (JWT_SECRET is validated in authmw.js — the server refuses to boot in production without it.)
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Fundamental running on http://localhost:${PORT}`));
+const server = app.listen(PORT, () => console.log(`Fundamental running on http://localhost:${PORT}`));
+
+// F-034: graceful shutdown — stop accepting connections and close the SQLite
+// (WAL) database cleanly on SIGTERM/SIGINT (containers/hosts send these).
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received — shutting down gracefully…`);
+  server.close(() => {
+    try { require('./db').db.close(); } catch { /* already closed */ }
+    process.exit(0);
+  });
+  // Force-exit if connections don't drain in time.
+  setTimeout(() => process.exit(0), 10_000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

@@ -8,12 +8,17 @@
 // real launch — DEPLOYMENT.md documents this.
 const crypto = require('crypto');
 const { db } = require('./db');
+const { JWT_SECRET } = require('./authmw');
 
 const OTP_TTL_MIN = 10;
 const MAX_ATTEMPTS = 5;
 const MAX_SENDS_PER_WINDOW = 3; // per identifier per 10 minutes
 
-const hashCode = (c) => crypto.createHash('sha256').update(String(c)).digest('hex');
+// F-010: keyed HMAC instead of bare SHA-256. The 6-digit code space is tiny, so a
+// DB leak of unsalted SHA-256 hashes would be trivially reversible; an HMAC keyed by
+// the server secret cannot be brute-forced offline without that secret.
+const OTP_KEY = process.env.OTP_PEPPER || JWT_SECRET;
+const hashCode = (c) => crypto.createHmac('sha256', OTP_KEY).update(String(c)).digest('hex');
 
 const isEmail = (v) => typeof v === 'string' && v.length <= 254 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v);
 // E.164-ish: optional +, 7–15 digits (spaces/dashes tolerated then stripped)

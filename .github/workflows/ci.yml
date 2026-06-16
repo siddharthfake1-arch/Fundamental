@@ -12,7 +12,10 @@ jobs:
         run: npm install
       - name: Build client
         run: npm run build
-      - name: Run tests
+      - name: Run tests (unit + route/permission)
         run: npm test
-      - name: Security audit (production deps)
-        run: npm audit --omit=dev || true
+      # F-033/F-007: audits are BLOCKING (high/critical) for both root and client.
+      - name: Security audit — production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Security audit — client (dev tooling included)
+        run: npm audit --prefix client --audit-level=high

@@ -15,10 +15,12 @@ export default defineConfig({
     // chunk trips the size warning and the browser can cache vendors separately.
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'motion': ['motion'],
-          'icons': ['lucide-react'],
+        // Function form (compatible with Rollup and Vite 8's Rolldown bundler).
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (/[\\/]node_modules[\\/](react-router|react-router-dom|react-dom|react|scheduler)[\\/]/.test(id)) return 'react-vendor';
+          if (id.includes('node_modules/motion') || id.includes('node_modules/framer-motion')) return 'motion';
+          if (id.includes('lucide-react')) return 'icons';
         },
       },
     },

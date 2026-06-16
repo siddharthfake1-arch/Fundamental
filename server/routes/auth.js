@@ -13,6 +13,11 @@ const router = express.Router();
 const TEST = process.env.NODE_ENV === 'test';
 const authLimiter = rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: TEST ? 100000 : 25 });
 const otpLimiter = rateLimit({ name: 'otp', windowMs: 10 * 60_000, max: TEST ? 100000 : 15 });
+// F-011: also throttle by target identifier (email), not just IP, so distributed
+// clients can't spray credential attempts at one account.
+const lc = (v) => (typeof v === 'string' ? v.toLowerCase().slice(0, 254) : null);
+const loginIdLimiter = rateLimit({ name: 'login-id', windowMs: 15 * 60_000, max: TEST ? 100000 : 10, keyFn: (req) => lc(req.body && req.body.email) });
+const otpIdLimiter = rateLimit({ name: 'otp-id', windowMs: 10 * 60_000, max: TEST ? 100000 : 6, keyFn: (req) => lc(req.body && req.body.identifier) });
 const BCRYPT_ROUNDS = 12; // fintech-grade work factor; existing 10-round hashes still verify
 const COOKIE = {
   httpOnly: true,
@@ -46,7 +51,7 @@ function sessionPayload(user) {
 // Neutral response: we do not reveal whether an email is already registered here
 // (no enumeration oracle). A duplicate is only reported at the final signup step,
 // which the attacker can only reach by controlling — and verifying — that mailbox.
-router.post('/send-otp', otpLimiter, async (req, res) => {
+router.post('/send-otp', otpLimiter, otpIdLimiter, async (req, res) => {
   const { channel, identifier } = req.body;
   const out = await sendOtp(channel, identifier);
   if (out.error) return res.status(400).json({ error: out.error });
@@ -90,7 +95,7 @@ router.post('/signup', authLimiter, async (req, res) => {
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
 });
 
-router.post('/login', authLimiter, async (req, res) => {
+router.post('/login', authLimiter, loginIdLimiter, async (req, res) => {
   const { email, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE email=?').get(String(email || '').toLowerCase());
   // Async bcrypt so a slow hash doesn't block the event loop under concurrent logins.
