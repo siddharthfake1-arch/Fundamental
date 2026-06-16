@@ -217,6 +217,11 @@ CREATE TABLE IF NOT EXISTS reports (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+-- F-018: analytics/audit tables (startup_views, audit_logs, collateral_access_logs,
+-- reports.target_id) deliberately omit FK cascades so security/audit history survives
+-- cascade deletes. Lifecycle is handled explicitly instead: the retention sweep above
+-- bounds growth, and account deletion (routes/users.js) removes the deleting user's
+-- startup_views. SQLite cannot add FKs to existing tables without a full table rebuild.
 CREATE TABLE IF NOT EXISTS startup_views (
   user_id INTEGER NOT NULL,
   startup_id INTEGER NOT NULL,

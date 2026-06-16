@@ -246,7 +246,7 @@ export default function Startup() {
                 <span className="chip-blue shrink-0">{c.type}</span>
                 <div className="flex-1 min-w-[140px]">
                   <div className="text-sm font-medium text-mist-100">{c.title}</div>
-                  <div className="text-[11px] text-mist-500">Uploaded {timeAgo(c.created_at)}{is_owner && ` · ${c.downloads} downloads`}</div>
+                  <div className="text-[11px] text-mist-500">Uploaded {timeAgo(c.created_at)}{is_owner && ` · ${c.downloads} downloads`}{c.external && <span className="text-amber-400/80"> · externally hosted — access can’t be revoked</span>}</div>
                 </div>
                 <span className={c.access_level === 'Public' ? 'chip-green' : c.access_level === 'Connected Only' ? 'chip-gold' : 'chip'}>{c.access_level}</span>
                 {c.can_view ? (
@@ -407,9 +407,11 @@ export default function Startup() {
                 <button className="btn-primary btn-sm" onClick={() => {
                   const md = `# ${memo.title}\n\n${memo.sections.map(sec => `## ${sec.h}\n${sec.body.map(b => `- ${b}`).join('\n')}`).join('\n\n')}`;
                   const a = document.createElement('a');
-                  a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+                  const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
+                  a.href = url;
                   a.download = `${s.name.replace(/\s+/g, '_')}_memo.md`;
                   a.click();
+                  URL.revokeObjectURL(url); // avoid leaking the blob URL
                 }}>Download .md</button>
               </div>
             </div>

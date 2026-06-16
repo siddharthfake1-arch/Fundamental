@@ -195,21 +195,21 @@ export default function Auth() {
               </div>
             )}
             {mode === 'signup' && (
-              <div><span className="label">Full name</span><input className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
+              <div><span className="label">Full name</span><input aria-label="Full name" className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
             )}
-            <div><span className="label">Email</span><input type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
-            <div><span className="label">Password</span><input type="password" className="input" value={form.password} onChange={set('password')} placeholder={mode === 'signup' ? 'Minimum 8 characters' : '••••••••'} required /></div>
+            <div><span className="label">Email</span><input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
+            <div><span className="label">Password</span><input aria-label="Password" type="password" className="input" value={form.password} onChange={set('password')} placeholder={mode === 'signup' ? 'Minimum 8 characters' : '••••••••'} required /></div>
             {mode === 'signup' && (
-              <div><span className="label">City</span><input className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
+              <div><span className="label">City</span><input aria-label="City" className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
             )}
             {mode === 'signup' && (
-              <div><span className="label">Phone <span className="normal-case font-normal text-mist-500">(optional)</span></span><input className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="With country code, e.g. +966 5x xxx xxxx" /></div>
+              <div><span className="label">Phone <span className="normal-case font-normal text-mist-500">(optional)</span></span><input aria-label="Phone" className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="With country code, e.g. +966 5x xxx xxxx" /></div>
             )}
             {mode === 'signup' && (
               <div className="card p-4 space-y-3">
                 <span className="text-sm font-semibold text-mist-100">Verify your email</span>
                 <div className="flex gap-2">
-                  <input className="input flex-1" inputMode="numeric" maxLength={6} value={otp.code}
+                  <input aria-label="6-digit verification code" className="input flex-1" inputMode="numeric" maxLength={6} value={otp.code}
                     onChange={(e) => setOtp(o => ({ ...o, code: e.target.value.replace(/\D/g, '') }))}
                     placeholder="6-digit code" disabled={!otp.sent} />
                   <button type="button" className="btn-ghost whitespace-nowrap" onClick={sendCode} disabled={otp.sending}>

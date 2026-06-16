@@ -37,8 +37,11 @@ export default function Nav() {
 
   useEffect(() => {
     const fn = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    // F-027: Escape closes the account and mobile menus.
+    const onKey = (e) => { if (e.key === 'Escape') { setMenuOpen(false); setMobileOpen(false); } };
     document.addEventListener('mousedown', fn);
-    return () => document.removeEventListener('mousedown', fn);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', fn); document.removeEventListener('keydown', onKey); };
   }, []);
 
   const links = [...LINKS];
@@ -73,12 +76,12 @@ export default function Nav() {
           </NavLink>
 
           <div className="relative" ref={menuRef}>
-            <button onClick={() => setMenuOpen(o => !o)} className="flex items-center gap-2 rounded-xl p-1 pr-2 hover:bg-ink-800 transition-colors">
+            <button onClick={() => setMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={menuOpen} aria-controls="account-menu" aria-label="Account menu" className="flex items-center gap-2 rounded-xl p-1 pr-2 hover:bg-ink-800 transition-colors">
               <Avatar src={user.photo} name={user.name} size={8} />
               <svg className="w-3.5 h-3.5 text-mist-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
             </button>
             {menuOpen && (
-              <div className="absolute right-0 mt-2 w-60 card p-2 fade-in">
+              <div id="account-menu" role="menu" className="absolute right-0 mt-2 w-60 card p-2 fade-in">
                 <div className="px-3 py-2 border-b border-ink-700/60 mb-1">
                   <div className="flex items-center gap-1.5 font-semibold text-mist-100 text-sm">{user.name} {!!user.verified && <VerifiedBadge small />}</div>
                   <div className="text-xs text-mist-400 capitalize">{user.role}{user.city ? ` · ${user.city}` : ''}</div>
@@ -92,14 +95,14 @@ export default function Nav() {
             )}
           </div>
 
-          <button className="lg:hidden nav-link !px-2.5" onClick={() => setMobileOpen(o => !o)} aria-label="Toggle menu">
+          <button className="lg:hidden nav-link !px-2.5" onClick={() => setMobileOpen(o => !o)} aria-label="Toggle menu" aria-haspopup="menu" aria-expanded={mobileOpen} aria-controls="mobile-nav">
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" d={mobileOpen ? 'M6 18L18 6M6 6l12 12' : 'M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5'} /></svg>
           </button>
         </div>
       </div>
 
       {mobileOpen && (
-        <nav className="lg:hidden border-t border-ink-700/60 px-4 py-3 grid grid-cols-2 gap-1 fade-in bg-ink-950">
+        <nav id="mobile-nav" className="lg:hidden border-t border-ink-700/60 px-4 py-3 grid grid-cols-2 gap-1 fade-in bg-ink-950">
           {links.map(l => (
             <NavLink key={l.to} to={l.to} onClick={() => setMobileOpen(false)}
               className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>

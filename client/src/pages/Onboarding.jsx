@@ -52,11 +52,13 @@ function Shell({ step, total, title, sub, children, completion }) {
   );
 }
 
+// A real <label> wrapping the control gives screen readers / click-to-focus an
+// implicit association without per-control ids (F-024).
 const Field = ({ label, hint, children }) => (
-  <div>
+  <label className="block">
     <span className="label">{label}{hint && <span className="text-mist-500 font-normal normal-case tracking-normal"> — {hint}</span>}</span>
     {children}
-  </div>
+  </label>
 );
 
 const Optional = () => <span className="text-[10px] uppercase tracking-wider text-mist-500 ml-1.5">optional</span>;

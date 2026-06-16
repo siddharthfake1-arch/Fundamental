@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Flame } from 'lucide-react';
 import { api } from '../api';
 import StartupCard from '../components/StartupCard';
@@ -38,10 +38,24 @@ function TrendingStrip({ startups }) {
 const EMPTY_FILTERS = { sector: '', subsector: '', stage: '', revenue: '', geography: '', raising: '', verified: false, q: '' };
 const REVENUE_BANDS = [['', 'Any revenue'], ['0-100k', '$0 – $100K'], ['100k-1m', '$100K – $1M'], ['1m-10m', '$1M – $10M'], ['10m+', '$10M+']];
 
+const PAGE = 30;
+
 export default function Discover() {
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const [sort, setSort] = useState('recent');
+  const [params, setParams] = useSearchParams();
+  // F-019: initialize filters/sort from the URL so internal links like
+  // /discover?sector=Fintech actually apply.
+  const [filters, setFilters] = useState(() => {
+    const f = { ...EMPTY_FILTERS };
+    for (const k of Object.keys(EMPTY_FILTERS)) {
+      const v = params.get(k);
+      if (v != null) f[k] = k === 'verified' ? v === 'true' : v;
+    }
+    return f;
+  });
+  const [sort, setSort] = useState(() => params.get('sort') || 'recent');
   const [data, setData] = useState(null);
+  const [items, setItems] = useState([]);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [facets, setFacets] = useState({ sectors: [], subsectors: [], stages: [], cities: [] });
   const [saved, setSaved] = useState([]);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -60,19 +74,30 @@ export default function Discover() {
     api.get('/api/startups/facets').then(setFacets).catch(() => {});
     loadSaved();
   }, []);
+  // Keep the URL in sync with the active filters/sort (F-019).
+  useEffect(() => { setParams(new URLSearchParams(qs), { replace: true }); }, [qs]);
   useEffect(() => {
     let alive = true;
-    api.get('/api/startups?' + qs).then(d => alive && setData(d)).catch(e => toast(e.message, 'error'));
+    setData(null);
+    api.get(`/api/startups?${qs}&limit=${PAGE}&offset=0`).then(d => { if (alive) { setData(d); setItems(d.startups); } }).catch(e => toast(e.message, 'error'));
     return () => { alive = false; };
   }, [qs]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const d = await api.get(`/api/startups?${qs}&limit=${PAGE}&offset=${items.length}`);
+      setItems(prev => [...prev, ...d.startups]);
+    } catch (e) { toast(e.message, 'error'); } finally { setLoadingMore(false); }
+  };
 
   const loadSaved = () => api.get('/api/startups/saved-searches').then(d => setSaved(d.searches)).catch(() => {});
 
   const set = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const active = Object.entries(filters).filter(([, v]) => v).length;
 
-  const Select = ({ k, options, placeholder }) => (
-    <select className="input" value={filters[k]} onChange={set(k)}>
+  const Select = ({ k, options, placeholder, label }) => (
+    <select className="input" id={`f-${k}`} aria-label={label || placeholder} value={filters[k]} onChange={set(k)}>
       <option value="">{placeholder}</option>
       {options.map(o => <option key={o}>{o}</option>)}
     </select>
@@ -80,18 +105,18 @@ export default function Discover() {
 
   const sidebar = (
     <div className="space-y-4">
-      <div><span className="label">Search</span><input className="input" value={filters.q} onChange={set('q')} placeholder="Name or keyword" /></div>
-      <div><span className="label">Sector</span><Select k="sector" options={facets.sectors} placeholder="All sectors" /></div>
-      <div><span className="label">Sub-sector</span><Select k="subsector" options={facets.subsectors} placeholder="All sub-sectors" /></div>
-      <div><span className="label">Stage</span><Select k="stage" options={facets.stages} placeholder="All stages" /></div>
-      <div><span className="label">Revenue</span>
-        <select className="input" value={filters.revenue} onChange={set('revenue')}>
+      <div><label className="label" htmlFor="f-q">Search</label><input id="f-q" className="input" value={filters.q} onChange={set('q')} placeholder="Name or keyword" /></div>
+      <div><label className="label" htmlFor="f-sector">Sector</label><Select k="sector" options={facets.sectors} placeholder="All sectors" label="Sector" /></div>
+      <div><label className="label" htmlFor="f-subsector">Sub-sector</label><Select k="subsector" options={facets.subsectors} placeholder="All sub-sectors" label="Sub-sector" /></div>
+      <div><label className="label" htmlFor="f-stage">Stage</label><Select k="stage" options={facets.stages} placeholder="All stages" label="Stage" /></div>
+      <div><label className="label" htmlFor="f-revenue">Revenue</label>
+        <select id="f-revenue" aria-label="Revenue" className="input" value={filters.revenue} onChange={set('revenue')}>
           {REVENUE_BANDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </div>
-      <div><span className="label">Geography</span><Select k="geography" options={facets.cities} placeholder="All cities" /></div>
-      <div><span className="label">Raising status</span>
-        <select className="input" value={filters.raising} onChange={set('raising')}>
+      <div><label className="label" htmlFor="f-geography">Geography</label><Select k="geography" options={facets.cities} placeholder="All cities" label="Geography" /></div>
+      <div><label className="label" htmlFor="f-raising">Raising status</label>
+        <select id="f-raising" aria-label="Raising status" className="input" value={filters.raising} onChange={set('raising')}>
           <option value="">Any status</option>
           {['Actively Raising', 'Round Closing', 'Not Raising'].map(o => <option key={o}>{o}</option>)}
         </select>
@@ -124,7 +149,7 @@ export default function Discover() {
   );
 
   return (
-    <div className="fade-in">
+    <div className="fade-in overflow-x-clip">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div className="flex items-center gap-4">
           {/* Live brand mark — the same morphing constellation from the landing page */}
@@ -151,24 +176,29 @@ export default function Discover() {
 
       <div className="grid lg:grid-cols-[260px_1fr] gap-6 items-start">
         <aside className={`card p-4 lg:sticky lg:top-20 ${filtersOpen ? '' : 'hidden lg:block'}`}>{sidebar}</aside>
-        <div>
-          {data && <TrendingStrip startups={data.startups} />}
-          {!data ? <Spinner /> : data.startups.length === 0 ? (
+        <div className="min-w-0">
+          {data && <TrendingStrip startups={items} />}
+          {!data ? <Spinner /> : items.length === 0 ? (
             <Empty title="No startups match these filters" sub="Widen your criteria, or save this search to be notified when a match lists." />
           ) : (
             <>
-              <div className="text-xs text-mist-500 mb-3">{data.total} startup{data.total !== 1 ? 's' : ''}</div>
+              <div className="text-xs text-mist-500 mb-3">Showing {items.length} of {data.total} startup{data.total !== 1 ? 's' : ''}</div>
               <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                {data.startups.map((s, i) => (
+                {items.map((s, i) => (
                   <motion.div key={s.id}
                     initial={{ opacity: 0, y: 18 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35, delay: Math.min(i, 8) * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                    transition={{ duration: 0.35, delay: Math.min(i % PAGE, 8) * 0.05, ease: [0.22, 1, 0.36, 1] }}
                     className="h-full">
                     <StartupCard s={s} />
                   </motion.div>
                 ))}
               </div>
+              {items.length < data.total && (
+                <div className="flex justify-center mt-6">
+                  <button className="btn-ghost" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading…' : `Load more (${data.total - items.length} more)`}</button>
+                </div>
+              )}
             </>
           )}
         </div>

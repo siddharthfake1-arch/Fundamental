@@ -156,10 +156,11 @@ export function ToastProvider({ children }) {
   return (
     <ToastCtx.Provider value={toast}>
       {children}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92%] max-w-md pointer-events-none">
+      {/* F-026: announce toasts to assistive tech (errors assertively, rest politely). */}
+      <div aria-live="polite" aria-atomic="true" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92%] max-w-md pointer-events-none">
         <AnimatePresence>
           {toasts.map(t => (
-            <motion.div key={t.id}
+            <motion.div key={t.id} role={t.kind === 'error' ? 'alert' : 'status'}
               initial={{ opacity: 0, y: 24, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 12, scale: 0.97 }}
@@ -199,8 +200,11 @@ export function FileUpload({ label, accept, onUploaded, hint, currentUrl, upload
   return (
     <div>
       {label && <span className="label">{label}</span>}
-      <label className="block cursor-pointer border-2 border-dashed border-ink-600/80 hover:border-gold-500/50 rounded-xl p-4 text-center transition-colors bg-ink-850/50">
-        <input type="file" accept={accept} className="hidden" onChange={(e) => handle(e.target.files[0])} />
+      {/* F-025: focusable, keyboard-operable upload control (Enter/Space opens the picker). */}
+      <label role="button" tabIndex={0} aria-label={`${label || 'Upload file'}${hint ? ` — ${hint}` : ''}`}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.querySelector('input[type=file]').click(); } }}
+        className="block cursor-pointer border-2 border-dashed border-ink-600/80 hover:border-gold-500/50 focus-visible:border-gold-500/70 rounded-xl p-4 text-center transition-colors bg-ink-850/50">
+        <input type="file" accept={accept} className="sr-only" onChange={(e) => handle(e.target.files[0])} />
         {progress !== null ? (
           <div>
             <div className="text-xs text-mist-400 mb-2">Uploading… {progress}%</div>
@@ -226,9 +230,10 @@ export function LineChart({ data, xKey, yKey, height = 160, format = (v) => v })
   const y = (v) => h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2 - 14);
   const path = ys.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' ');
   const area = `${path} L${x(ys.length - 1)},${h - pad} L${x(0)},${h - pad} Z`;
+  const summary = `Trend over ${data.length} points: from ${format(ys[0])} to ${format(ys[ys.length - 1])}, peak ${format(max)}.`;
   return (
     <div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="none">
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full" preserveAspectRatio="none" role="img" aria-label={summary}>
         <defs>
           <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#8052ff" stopOpacity="0.28" />
@@ -253,7 +258,7 @@ export function BarBreakdown({ items }) {
   const colors = ['#8052ff', '#ffb829', '#15846e', '#b79cff', '#f87171', '#34d399'];
   return (
     <div className="space-y-3">
-      <div className="flex h-3 rounded-full overflow-hidden border border-ink-600/50">
+      <div className="flex h-3 rounded-full overflow-hidden border border-ink-600/50" role="img" aria-label={`Breakdown: ${items.map(it => `${it.label} ${it.pct}%`).join(', ')}`}>
         {items.map((it, i) => (
           <div key={i} style={{ width: it.pct + '%', background: colors[i % colors.length] }} title={`${it.label} ${it.pct}%`} />
         ))}
@@ -276,6 +281,8 @@ function CountUp({ value }) {
   const [n, setN] = useState(0);
   useEffect(() => {
     if (!Number.isFinite(target)) return;
+    // F-023: respect reduced-motion — show the final value without the count-up.
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setN(target); return; }
     let raf;
     const t0 = performance.now();
     const dur = 700;
@@ -299,7 +306,7 @@ export function ScoreRing({ score, size = 64, label = 'Score' }) {
   const color = pct >= 75 ? '#34d399' : pct >= 50 ? 'rgb(var(--acc-400))' : pct >= 30 ? '#fbbf24' : '#f87171';
   return (
     <div className="flex flex-col items-center gap-1" title={`Fundamental Score: ${pct}/100`}>
-      <svg width={size} height={size} className="-rotate-90">
+      <svg width={size} height={size} className="-rotate-90" role="img" aria-label={`${label}: ${pct} out of 100`}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--ink-700))" strokeWidth="5" />
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round"
           strokeDasharray={c} strokeDashoffset={c * (1 - pct / 100)} style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.22,1,0.36,1)' }} />

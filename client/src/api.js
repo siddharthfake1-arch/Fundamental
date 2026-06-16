@@ -4,10 +4,22 @@ async function request(method, url, body) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(url, opts);
+  // Abort hung requests so the UI never spins forever on a dead connection.
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 20000);
+  opts.signal = ctrl.signal;
+  let res;
+  try { res = await fetch(url, opts); }
+  catch (e) { clearTimeout(timeout); throw new Error(e.name === 'AbortError' ? 'The request timed out. Check your connection and try again.' : 'Network error — please try again.'); }
+  clearTimeout(timeout);
   let data = {};
   try { data = await res.json(); } catch { /* empty body */ }
   if (!res.ok) {
+    // Centralized session-expiry handling: a 401 on anything other than the
+    // session probe means the cookie is gone/expired — send the user to sign in.
+    if (res.status === 401 && !url.endsWith('/api/auth/me') && typeof window !== 'undefined' && !location.pathname.startsWith('/login') && location.pathname !== '/') {
+      location.assign('/login');
+    }
     const err = new Error(data.error || `Request failed (${res.status})`);
     err.status = res.status;
     throw err;

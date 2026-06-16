@@ -6,7 +6,7 @@ import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { FileUpload, Avatar, Spinner, useToast } from '../components/ui';
 
-const Field = ({ label, children }) => <div><span className="label">{label}</span>{children}</div>;
+const Field = ({ label, children }) => <label className="block"><span className="label">{label}</span>{children}</label>;
 
 export default function Settings() {
   const { user, refresh } = useAuth();

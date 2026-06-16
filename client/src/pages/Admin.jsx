@@ -99,10 +99,10 @@ function Users() {
                       {u.investor_approved ? 'Revoke' : 'Approve'}
                     </button>
                   )}
-                  <button className="btn-ghost btn-sm" onClick={async () => { const r = await api.post(`/api/admin/suspend-user/${u.id}`); load(); toast(r.status === 'suspended' ? 'Account suspended' : 'Account reinstated', 'success'); }}>
+                  <button className="btn-ghost btn-sm" onClick={async () => { if (u.status !== 'suspended' && !window.confirm(`Suspend ${u.name}? They will be signed out and blocked until reinstated.`)) return; const r = await api.post(`/api/admin/suspend-user/${u.id}`); load(); toast(r.status === 'suspended' ? 'Account suspended' : 'Account reinstated', 'success'); }}>
                     {u.status === 'suspended' ? 'Reinstate' : 'Suspend'}
                   </button>
-                  <button className="btn-danger btn-sm" onClick={async () => { await api.post(`/api/admin/flag-user/${u.id}`); load(); }}>
+                  <button className="btn-danger btn-sm" onClick={async () => { if (!u.flagged && !window.confirm(`Flag ${u.name} as fraudulent? They will be blocked from the platform.`)) return; await api.post(`/api/admin/flag-user/${u.id}`); load(); }}>
                     {u.flagged ? 'Unflag' : 'Flag'}
                   </button>
                 </div>
@@ -153,7 +153,7 @@ function StartupsAdmin() {
                     onClick={async () => { await api.post(`/api/admin/verify-startup/${s.id}`); load(); toast('Tier updated', 'success'); }}>
                     Tier ↻
                   </button>
-                  <button className="btn-ghost btn-sm" onClick={async () => { const r = await api.post(`/api/admin/hide-startup/${s.id}`); load(); toast(r.hidden ? 'Startup hidden' : 'Startup restored', 'success'); }}>
+                  <button className="btn-ghost btn-sm" onClick={async () => { if (!s.hidden && !window.confirm(`Hide ${s.name}? It and its documents will be removed from the marketplace.`)) return; const r = await api.post(`/api/admin/hide-startup/${s.id}`); load(); toast(r.hidden ? 'Startup hidden' : 'Startup restored', 'success'); }}>
                     {s.hidden ? 'Unhide' : 'Hide'}
                   </button>
                 </div>
@@ -187,7 +187,7 @@ function Content() {
             <p className="text-sm text-mist-300 mt-1.5 line-clamp-3">{p.text}</p>
           </div>
           <button className={p.removed ? 'btn-ghost btn-sm' : 'btn-danger btn-sm'}
-            onClick={async () => { await api.post(`/api/admin/posts/${p.id}/remove`); load(); toast(p.removed ? 'Post restored' : 'Post removed', 'success'); }}>
+            onClick={async () => { if (!p.removed && !window.confirm('Remove this post from the feed?')) return; await api.post(`/api/admin/posts/${p.id}/remove`); load(); toast(p.removed ? 'Post restored' : 'Post removed', 'success'); }}>
             {p.removed ? 'Restore' : 'Remove'}
           </button>
         </div>

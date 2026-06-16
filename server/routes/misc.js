@@ -174,10 +174,14 @@ router.get('/admin/overview', (req, res) => {
   });
 });
 router.get('/admin/users', (req, res) => {
-  res.json({ users: db.prepare("SELECT id, name, email, role, city, verified, flagged, status, investor_approved, created_at FROM users WHERE role!='admin' ORDER BY id DESC").all() });
+  const limit = qint(req.query.limit, 100, 500), offset = qint(req.query.offset, 0); // F-022
+  const total = db.prepare("SELECT COUNT(*) c FROM users WHERE role!='admin'").get().c;
+  res.json({ total, limit, offset, users: db.prepare("SELECT id, name, email, role, city, verified, flagged, status, investor_approved, created_at FROM users WHERE role!='admin' ORDER BY id DESC LIMIT ? OFFSET ?").all(limit, offset) });
 });
 router.get('/admin/startups', (req, res) => {
-  res.json({ startups: db.prepare('SELECT id, name, sector, stage, verified, video_url, views, hidden FROM startups ORDER BY id DESC').all() });
+  const limit = qint(req.query.limit, 100, 500), offset = qint(req.query.offset, 0); // F-022
+  const total = db.prepare('SELECT COUNT(*) c FROM startups').get().c;
+  res.json({ total, limit, offset, startups: db.prepare('SELECT id, name, sector, stage, verified, video_url, views, hidden FROM startups ORDER BY id DESC LIMIT ? OFFSET ?').all(limit, offset) });
 });
 // Verification tiers: 0 none → 1 Verified → 2 Enhanced → 3 Institution
 router.post('/admin/verify-user/:id', (req, res) => {
@@ -250,13 +254,17 @@ router.post('/admin/reports/:id/:action', (req, res) => {
   const map = { resolve: 'resolved', dismiss: 'dismissed' };
   if (!map[req.params.action]) return res.status(400).json({ error: 'That action is not supported. Please resolve or dismiss the report.' });
   db.prepare('UPDATE reports SET status=? WHERE id=?').run(map[req.params.action], req.params.id);
+  audit(req.user.id, `report-${req.params.action}`, { targetType: 'report', targetId: Number(req.params.id), ip: req.ip }); // F-029
   res.json({ ok: true });
 });
 router.get('/admin/posts', (req, res) => {
-  res.json({ posts: db.prepare(`SELECT p.*, u.name author FROM posts p JOIN users u ON u.id=p.user_id ORDER BY p.id DESC LIMIT 100`).all() });
+  const limit = qint(req.query.limit, 100, 200), offset = qint(req.query.offset, 0); // F-022 pagination
+  res.json({ posts: db.prepare(`SELECT p.*, u.name author FROM posts p JOIN users u ON u.id=p.user_id ORDER BY p.id DESC LIMIT ? OFFSET ?`).all(limit, offset) });
 });
 router.post('/admin/posts/:id/remove', (req, res) => {
   db.prepare('UPDATE posts SET removed = 1 - removed WHERE id=?').run(req.params.id);
+  const removed = (db.prepare('SELECT removed FROM posts WHERE id=?').get(req.params.id) || {}).removed;
+  audit(req.user.id, removed ? 'remove-post' : 'restore-post', { targetType: 'post', targetId: Number(req.params.id), ip: req.ip }); // F-029
   res.json({ ok: true });
 });
 
