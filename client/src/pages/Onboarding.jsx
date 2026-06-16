@@ -134,7 +134,8 @@ function FounderFlow({ user, refresh }) {
       try {
         const local = JSON.parse(localStorage.getItem(draftKey) || '{}');
         if (local.step) setStep(Math.min(local.step, 6));
-        if (Array.isArray(local.docs)) setDocs(local.docs);
+        // F-009: document drafts (which carry private file_keys) are NOT restored
+        // from localStorage — only the step position is persisted client-side.
       } catch { /* no local draft */ }
       setLoaded(true);
     })();
@@ -150,7 +151,7 @@ function FounderFlow({ user, refresh }) {
     try {
       await api.put('/api/users/me', normalizeMe(me));
       if (s.name) await api.post('/api/startups/mine', startupPayload());
-      localStorage.setItem(draftKey, JSON.stringify({ step, docs }));
+      localStorage.setItem(draftKey, JSON.stringify({ step })); // never persist private file keys (F-009)
       if (!silent) toast(s.name
         ? 'Progress saved. Sign out any time — you\'ll pick up where you left off.'
         : 'Profile saved. Add a startup name to save your startup draft too.', 'success');
@@ -166,7 +167,7 @@ function FounderFlow({ user, refresh }) {
       await api.put('/api/users/me', normalizeMe(me));
       const { id } = await api.post('/api/startups/mine', startupPayload());
       for (const d of docs) await api.post(`/api/startups/${id}/collateral`, d);
-      await api.put('/api/users/me', { onboarded: 1 });
+      await api.post('/api/users/complete-onboarding'); // server validates required artifacts
       localStorage.removeItem(draftKey);
       await refresh();
       toast('Welcome to Fundamental. Your startup is live.', 'success');
@@ -320,22 +321,13 @@ function VideoStep({ s, setS, toast }) {
           {s.video_minutes != null && <div className="text-xs text-mist-400 mt-2">Duration ≈ {s.video_minutes} min ✓</div>}
         </div>
       )}
-      <div className="text-xs text-mist-500">Hosting your video elsewhere? Paste a direct video URL:</div>
-      <input className="input" placeholder="https://… (direct .mp4 link)" value={s.video_url.startsWith('/uploads') ? '' : s.video_url}
-        onChange={(e) => setS(x => ({ ...x, video_url: e.target.value, video_duration: 0, video_minutes: null }))}
-        onBlur={async (e) => {
-          const url = e.target.value.trim();
-          if (!url) return;
-          const dur = await videoDuration({ src: url, external: true }).catch(() => null);
-          if (dur && dur > 12 * 60) { toast(`That video is ${Math.round(dur / 60)} minutes. The pitch must be 12 minutes or less.`, 'error'); return; }
-          if (dur) setS(x => ({ ...x, video_duration: Math.round(dur), video_minutes: Math.round(dur / 60) }));
-        }} />
+      <div className="text-xs text-mist-500">The pitch must be uploaded here so we can verify it is 12 minutes or less. External video links are not accepted for the required pitch.</div>
     </div>
   );
 }
 
 function CollateralStep({ docs, setDocs }) {
-  const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Public', file_key: '' });
+  const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Request Access', file_key: '' });
   return (
     <div className="space-y-4">
       {docs.map((doc, i) => (
@@ -361,7 +353,7 @@ function CollateralStep({ docs, setDocs }) {
         <FileUpload label="Document File" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,image/*" private uploaded={!!d.file_key}
           onUploaded={(u) => setD(x => ({ ...x, file_key: u.key }))} />
         <button className="btn-ghost w-full" disabled={!d.title}
-          onClick={() => { setDocs(ds => [...ds, d]); setD({ title: '', type: 'Deck', access_level: 'Public', file_key: '' }); }}>
+          onClick={() => { setDocs(ds => [...ds, d]); setD({ title: '', type: 'Deck', access_level: 'Request Access', file_key: '' }); }}>
           + Add Document
         </button>
       </div>
@@ -412,7 +404,8 @@ function InvestorFlow({ user, refresh }) {
   const finish = async () => {
     setBusy(true);
     try {
-      await api.put('/api/users/me', payload({ onboarded: 1 }));
+      await api.put('/api/users/me', payload());
+      await api.post('/api/users/complete-onboarding');
       localStorage.removeItem(draftKey);
       await refresh();
       toast('Welcome to Fundamental.', 'success');

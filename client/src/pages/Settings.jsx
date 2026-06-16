@@ -152,7 +152,7 @@ function StartupSettings() {
 
 function ManageCollateral({ startupId }) {
   const [docs, setDocs] = useState([]);
-  const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Public', file_key: '' });
+  const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Request Access', file_key: '' });
   const toast = useToast();
   const load = () => api.get(`/api/startups/${startupId}`).then(r => setDocs(r.collateral)).catch(() => {});
   useEffect(load, [startupId]);
@@ -187,7 +187,7 @@ function ManageCollateral({ startupId }) {
       <button className="btn-ghost w-full" disabled={!d.title} onClick={async () => {
         try {
           await api.post(`/api/startups/${startupId}/collateral`, d);
-          setD({ title: '', type: 'Deck', access_level: 'Public', file_key: '' }); load(); toast('Document added', 'success');
+          setD({ title: '', type: 'Deck', access_level: 'Request Access', file_key: '' }); load(); toast('Document added', 'success');
         } catch (e) { toast(e.message, 'error'); }
       }}>+ Add document</button>
     </div>

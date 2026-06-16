@@ -8,8 +8,11 @@ const { sendOtp, verifyOtp, normalizePhone } = require('../otp');
 
 const router = express.Router();
 // Brute-force protection: credential endpoints get a tight per-IP budget.
-const authLimiter = rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: 25 });
-const otpLimiter = rateLimit({ name: 'otp', windowMs: 10 * 60_000, max: 15 });
+// The integration test suite runs many flows from a single IP, so limits are
+// relaxed only under NODE_ENV=test (never in dev or production).
+const TEST = process.env.NODE_ENV === 'test';
+const authLimiter = rateLimit({ name: 'auth', windowMs: 15 * 60_000, max: TEST ? 100000 : 25 });
+const otpLimiter = rateLimit({ name: 'otp', windowMs: 10 * 60_000, max: TEST ? 100000 : 15 });
 const BCRYPT_ROUNDS = 12; // fintech-grade work factor; existing 10-round hashes still verify
 const COOKIE = {
   httpOnly: true,

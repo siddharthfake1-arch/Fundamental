@@ -97,7 +97,7 @@ router.get('/', dealFlowGate, (req, res) => {
   res.json({ startups: tiles.slice(offset, offset + limit), total, limit, offset });
 });
 
-router.get('/facets', (req, res) => {
+router.get('/facets', dealFlowGate, (req, res) => {
   const f = (col) => db.prepare(`SELECT DISTINCT ${col} v FROM startups WHERE ${col} != '' ORDER BY v`).all().map(r => r.v);
   res.json({ sectors: f('sector'), subsectors: f('subsector'), stages: f('stage'), cities: f('city') });
 });
@@ -158,20 +158,26 @@ router.post('/mine', requireRole('founder'), (req, res) => {
   if (urlErr) return res.status(400).json({ error: urlErr });
   const numErr = validateNumericFields(b, ['arr', 'mrr', 'growth', 'gross_margin', 'burn', 'runway', 'cac', 'ltv', 'founded_year', 'video_duration']);
   if (numErr) return res.status(400).json({ error: numErr });
-  // Pitch-video policy, enforced server-side. Uploaded videos carry a server-VERIFIED
-  // duration (probed from the file); external URLs report a client value. We only
-  // require/validate the duration when the video is actually being set or changed,
-  // so editing other fields on an existing listing never trips it.
+  // F-003: pitch-video policy is enforced ENTIRELY server-side. When the video
+  // changes we re-probe the duration from the uploaded file ourselves and ignore
+  // any client-reported value; external URLs are not accepted for the required
+  // pitch because their length cannot be verified safely. Verified duration is
+  // re-derived on every change, so a replacement can never inherit an old value.
   const existingVideo = existing ? existing.video_url : '';
   const changingVideo = b.video_url !== undefined && b.video_url !== '' && b.video_url !== existingVideo;
   if (changingVideo) {
-    const dur = Number(b.video_duration);
-    if (!Number.isFinite(dur) || dur <= 0) {
-      return res.status(400).json({ error: 'Upload a pitch video so we can verify its length before publishing.' });
+    if (!/^\/uploads\//.test(String(b.video_url))) {
+      return res.status(400).json({ error: 'Upload your pitch video here so we can verify it is 12 minutes or less. External video links are not accepted for the pitch.' });
     }
-    if (dur > MAX_PITCH_SECONDS) {
-      return res.status(400).json({ error: `Your pitch is ${Math.round(dur / 60)} minutes. The maximum is 12 minutes — please trim it.` });
+    const filePath = require('path').join(__dirname, '..', 'uploads', require('path').basename(String(b.video_url)));
+    const probed = require('../videometa').probeVideoDuration(filePath);
+    if (probed == null) {
+      return res.status(400).json({ error: 'We could not read that video. Please re-upload an MP4/MOV pitch.' });
     }
+    if (probed > MAX_PITCH_SECONDS) {
+      return res.status(400).json({ error: `Your pitch is ${Math.round(probed / 60)} minutes. The maximum is 12 minutes — please trim it.` });
+    }
+    b.video_duration = Math.round(probed); // authoritative; overwrite any client value
   }
   clampStrings(b, ['name', 'sector', 'subsector', 'stage', 'city', 'raising_status', 'raising_amount', 'one_liner'], 200);
   clampStrings(b, ['problem', 'solution', 'business_model', 'market_size', 'competitive_advantage', 'round_details', 'deployment_timeline', 'strategic_objectives'], 5000);
@@ -186,6 +192,10 @@ router.post('/mine', requireRole('founder'), (req, res) => {
     if (keys.length) {
       db.prepare(`UPDATE startups SET ${keys.map(k => `${k}=?`).join(',')} WHERE id=?`)
         .run(...keys.map(k => data[k]), existing.id);
+    }
+    // F-005: audit-log public-sharing enable/disable transitions.
+    if (data.public_share !== undefined && data.public_share !== existing.public_share) {
+      audit(req.user.id, data.public_share ? 'enable-public-share' : 'disable-public-share', { targetType: 'startup', targetId: existing.id, ip: req.ip });
     }
     // Newly listed (video just added) → fire deal alerts for matching saved searches
     if (!existing.video_url && data.video_url) {
@@ -211,7 +221,7 @@ router.get('/mine', requireRole('founder'), (req, res) => {
 
 // Deals co-investors have shared with me. Declared before "/:id" so the literal
 // path is not swallowed by the dynamic route.
-router.get('/shared-with-me', requireRole('investor'), (req, res) => {
+router.get('/shared-with-me', requireApprovedInvestor, (req, res) => {
   const rows = db.prepare(`SELECT ds.id, ds.note, ds.created_at, u.id from_id, u.name from_name, u.photo from_photo,
       s.id startup_id, s.name, s.logo, s.sector, s.stage, s.one_liner, s.verified
     FROM deal_shares ds JOIN users u ON u.id=ds.from_id JOIN startups s ON s.id=ds.startup_id
@@ -220,7 +230,7 @@ router.get('/shared-with-me', requireRole('investor'), (req, res) => {
 });
 
 // ---- Full startup profile ----
-router.get('/:id', (req, res) => {
+router.get('/:id', dealFlowGate, (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'We could not find this startup.' });
   // Draft/unlisted startups are visible only to their owner and admins (P0-4).
@@ -286,7 +296,7 @@ router.get('/:id', (req, res) => {
   });
 });
 
-router.post('/:id/video-view', (req, res) => {
+router.post('/:id/video-view', dealFlowGate, (req, res) => {
   db.prepare('UPDATE startups SET video_views = video_views + 1 WHERE id=?').run(req.params.id);
   res.json({ ok: true });
 });
@@ -305,7 +315,7 @@ router.post('/:id/upvote', requireApprovedInvestor, (req, res) => {
   res.json({ upvoted: !existing, upvotes: db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c });
 });
 
-router.post('/:id/save', (req, res) => {
+router.post('/:id/save', dealFlowGate, (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
   if (!s || !canViewStartup(s, req.user)) return res.status(404).json({ error: 'We could not find this startup.' });
   const exists = db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(req.user.id, s.id);
@@ -314,7 +324,7 @@ router.post('/:id/save', (req, res) => {
   res.json({ saved: !exists });
 });
 
-router.post('/:id/watchlist-status', requireRole('investor'), (req, res) => {
+router.post('/:id/watchlist-status', requireApprovedInvestor, (req, res) => {
   const status = req.body.status || 'Tracking';
   if (!WATCHLIST_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid pipeline stage.' });
   const exists = db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(req.user.id, req.params.id);
@@ -324,7 +334,7 @@ router.post('/:id/watchlist-status', requireRole('investor'), (req, res) => {
 });
 
 // Private notes — visible only to the creating investor.
-router.post('/:id/notes', requireRole('investor'), (req, res) => {
+router.post('/:id/notes', requireApprovedInvestor, (req, res) => {
   const { text, collateral_id } = req.body;
   if (!text || !text.trim()) return res.status(400).json({ error: 'Write a note before saving.' });
   // A note "on a document" must reference collateral that belongs to this startup (P2-6).
@@ -421,8 +431,9 @@ router.post('/:id/collateral', requireRole('founder'), (req, res) => {
     key = require('path').basename(String(file_key));
     if (!privateExists(key)) return res.status(400).json({ error: 'Re-upload the document and try again.' });
   }
+  // F-009: confidential data-room documents default to Request Access, never Public.
   db.prepare('INSERT INTO collateral (startup_id, title, type, access_level, file_url, file_key) VALUES (?,?,?,?,?,?)')
-    .run(s.id, String(title).slice(0, 200), type, access_level || 'Public', file_url || '', key);
+    .run(s.id, String(title).slice(0, 200), type, access_level || 'Request Access', file_url || '', key);
   addActivity(s.id, 'Collateral Uploaded', `New ${type} added: ${title}`);
   res.json({ ok: true });
 });
@@ -481,11 +492,22 @@ router.get('/:id/access-requests', requireRole('founder'), (req, res) => {
 // Authenticated download: re-checks access on EVERY request and streams the file
 // from private storage. Revocation takes effect immediately (P0-3, P1-3).
 function collateralAccessCheck(req, res, next) {
-  const c = db.prepare('SELECT c.*, s.founder_id FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
+  const c = db.prepare('SELECT c.*, s.founder_id, s.video_url, s.hidden FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
   if (!c) return res.status(404).json({ error: 'We could not find this document.' });
   const isOwner = c.founder_id === req.user.id;
+  const isAdmin = req.user.role === 'admin';
+  // F-002: startup-level visibility dominates document-level access. A "Public"
+  // flag must never override a hidden/draft/unlisted startup. Owner/admin bypass.
+  const startup = { founder_id: c.founder_id, video_url: c.video_url, hidden: c.hidden };
+  if (!isOwner && !isAdmin && !canViewStartup(startup, req.user)) {
+    return res.status(404).json({ error: 'We could not find this document.' });
+  }
+  // F-001: a non-owner investor must be an approved investor to reach any deal-flow document.
+  if (!isOwner && !isAdmin && req.user.role === 'investor' && !req.user.investor_approved) {
+    return res.status(403).json({ error: 'Your investor account is pending approval.' });
+  }
   const approved = db.prepare("SELECT 1 FROM access_requests WHERE collateral_id=? AND investor_id=? AND status='approved'").get(c.id, req.user.id);
-  const can = isOwner || req.user.role === 'admin' || c.access_level === 'Public' ||
+  const can = isOwner || isAdmin || c.access_level === 'Public' ||
     (c.access_level === 'Connected Only' && areConnected(req.user.id, c.founder_id)) || !!approved;
   if (!can) return res.status(403).json({ error: 'You do not have access to this document yet. Request access from the founder.' });
   req.collateral = c;
@@ -538,7 +560,7 @@ router.post('/:id/updates', requireRole('founder'), (req, res) => {
 
 // React to a founder update (one quick reaction per user; tap again to remove,
 // tap a different emoji to switch).
-router.post('/updates/:uid/react', (req, res) => {
+router.post('/updates/:uid/react', dealFlowGate, (req, res) => {
   const u = db.prepare('SELECT fu.*, s.founder_id, s.name sname FROM founder_updates fu JOIN startups s ON s.id=fu.startup_id WHERE fu.id=?').get(req.params.uid);
   if (!u) return res.status(404).json({ error: 'We could not find this update.' });
   const { emoji } = req.body;
@@ -557,7 +579,7 @@ router.post('/updates/:uid/react', (req, res) => {
 });
 
 // ---- Follow a company (anyone). Subscribes to its updates & milestones. ----
-router.post('/:id/follow', (req, res) => {
+router.post('/:id/follow', dealFlowGate, (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
   if (!s) return res.status(404).json({ error: 'Startup not found' });
   const exists = db.prepare('SELECT 1 FROM startup_follows WHERE user_id=? AND startup_id=?').get(req.user.id, s.id);
@@ -623,7 +645,7 @@ router.post('/:id/share-deal', requireApprovedInvestor, (req, res) => {
 });
 
 // Set deal-flow tags on a pipeline (watchlist) entry.
-router.post('/:id/watchlist-tags', requireRole('investor'), (req, res) => {
+router.post('/:id/watchlist-tags', requireApprovedInvestor, (req, res) => {
   const tags = Array.isArray(req.body.tags) ? req.body.tags : null;
   if (!tags) return res.status(400).json({ error: 'Tags must be a list' });
   const clean = [...new Set(tags.map(t => String(t).trim().slice(0, 24)).filter(Boolean))].slice(0, 8);

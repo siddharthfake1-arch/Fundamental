@@ -51,10 +51,8 @@ async function test(name, fn) {
 }
 
 async function getOtpAndSignup(c, email, role) {
-  await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: email });
-  const r2 = await (await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: email })).json();
-  const code = r2.demo_code;
-  const v = await (await c('POST', '/api/auth/verify-otp', { identifier: email, code })).json();
+  const s = await (await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: email })).json();
+  const v = await (await c('POST', '/api/auth/verify-otp', { identifier: email, code: s.demo_code })).json();
   return c('POST', '/api/auth/signup', { role, name: 'Test User', email, password: 'password123', otp_token: v.otp_token, accept_terms: true });
 }
 
@@ -149,6 +147,58 @@ async function run() {
     assert.ok(r.status === 404, 'private dir is not statically served');
   });
 
+  // F-001: unapproved investors must be blocked from EVERY startup read, not just listing.
+  await test('unapproved investor is blocked from facets, startup detail, and save', async () => {
+    const c = makeClient();
+    await getOtpAndSignup(c, `unapp_${Date.now()}@example.com`, 'investor');
+    assert.strictEqual((await c('GET', '/api/startups/facets')).status, 403, 'facets must be gated');
+    assert.strictEqual((await c('GET', '/api/startups/1')).status, 403, 'startup detail must be gated');
+    assert.strictEqual((await c('POST', '/api/startups/1/save')).status, 403, 'save must be gated');
+    assert.strictEqual((await c('GET', '/api/dashboard/investor')).status, 403, 'investor dashboard must be gated');
+  });
+
+  // F-001: an unapproved investor must not be able to download even Public collateral.
+  await test('unapproved investor cannot download public collateral directly', async () => {
+    // founder1 makes a Public doc
+    const f = makeClient();
+    await f('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' });
+    const fd = new FormData();
+    fd.append('file', new Blob([Buffer.from('%PDF-1.4\n%%EOF')], { type: 'application/pdf' }), 'public.pdf');
+    const up = await (await f('POST', '/api/upload/private', fd)).json();
+    const mine = await (await f('GET', '/api/startups/mine')).json();
+    await f('POST', `/api/startups/${mine.startup.id}/collateral`, { title: 'PublicDoc', type: 'Deck', access_level: 'Public', file_key: up.key });
+    const detail = await (await f('GET', `/api/startups/${mine.startup.id}`)).json();
+    const cid = detail.collateral.find(x => x.title === 'PublicDoc').id;
+    const c = makeClient();
+    await getOtpAndSignup(c, `unapp2_${Date.now()}@example.com`, 'investor');
+    assert.strictEqual((await c('GET', `/api/startups/collateral/${cid}/download`)).status, 403, 'unapproved investor blocked from public collateral');
+    global.__pubCid = cid; global.__pubSid = mine.startup.id;
+  });
+
+  // F-002: a hidden startup's "Public" collateral must NOT be downloadable by non-owners.
+  await test('hidden startup public collateral is not downloadable', async () => {
+    const cid = global.__pubCid, sid = global.__pubSid;
+    const admin = makeClient();
+    await admin('POST', '/api/auth/login', { email: 'admin@fundamental.app', password: 'demo1234' });
+    await admin('POST', `/api/admin/hide-startup/${sid}`);
+    const inv = makeClient();
+    await inv('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' }); // approved
+    assert.strictEqual((await inv('GET', `/api/startups/collateral/${cid}/download`)).status, 404, 'hidden startup collateral must 404');
+    // Owner can still reach it.
+    const f = makeClient();
+    await f('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' });
+    assert.strictEqual((await f('GET', `/api/startups/collateral/${cid}/download`)).status, 200, 'owner still downloads');
+    await admin('POST', `/api/admin/hide-startup/${sid}`); // unhide
+  });
+
+  // F-003: a forged external pitch video with a fake duration must be rejected server-side.
+  await test('external pitch video URL is rejected (no client-trusted duration)', async () => {
+    const f = makeClient();
+    await f('POST', '/api/auth/login', { email: 'founder3@demo.app', password: 'demo1234' });
+    const r = await f('POST', '/api/startups/mine', { video_url: 'https://evil.example.com/13min.mp4', video_duration: 1 });
+    assert.strictEqual(r.status, 400, 'external video URL must be rejected');
+  });
+
   await test('suspended user is blocked immediately', async () => {
     const admin = makeClient();
     await admin('POST', '/api/auth/login', { email: 'admin@fundamental.app', password: 'demo1234' });
@@ -163,13 +213,35 @@ async function run() {
     await admin('POST', `/api/admin/suspend-user/${fid}`); // reinstate
   });
 
-  await test('account deletion erases the account and ends the session', async () => {
+  await test('account deletion erases the account, its files, and the session (F-004)', async () => {
     const c = makeClient();
     const r = await getOtpAndSignup(c, `del_${Date.now()}@example.com`, 'founder');
     assert.strictEqual(r.status, 200);
+    // Upload a public image (set as profile photo) and a private document.
+    const img = new FormData();
+    img.append('file', new Blob([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])], { type: 'image/png' }), 'p.png');
+    const upRes = await c('POST', '/api/upload', img);
+    assert.strictEqual(upRes.status, 200, 'public image upload'); const pub = await upRes.json();
+    const putRes = await c('PUT', '/api/users/me', { photo: pub.url, name: 'Del User' });
+    assert.strictEqual(putRes.status, 200, 'set photo');
+    const doc = new FormData();
+    doc.append('file', new Blob([Buffer.from('%PDF-1.4\n%%EOF')], { type: 'application/pdf' }), 'd.pdf');
+    const priv = await (await c('POST', '/api/upload/private', doc)).json();
+    const mkRes = await c('POST', '/api/startups/mine', { name: 'DelCo' });
+    assert.strictEqual(mkRes.status, 200, 'create startup');
+    const mine = await (await c('GET', '/api/startups/mine')).json();
+    const colRes = await c('POST', `/api/startups/${mine.startup.id}/collateral`, { title: 'D', type: 'Deck', access_level: 'Request Access', file_key: priv.key });
+    assert.strictEqual(colRes.status, 200, 'create collateral');
+
+    const pubPath = path.join(__dirname, '..', 'uploads', path.basename(pub.url));
+    const privPath = path.join(__dirname, '..', 'uploads-private', priv.key);
+    assert.ok(fs.existsSync(pubPath) && fs.existsSync(privPath), 'files exist before deletion');
+
     assert.strictEqual((await c('GET', '/api/users/me/export')).status, 200, 'export works');
     assert.strictEqual((await c('DELETE', '/api/users/me')).status, 200, 'delete works');
     assert.strictEqual((await c('GET', '/api/auth/me')).status, 401, 'session is dead after deletion');
+    assert.ok(!fs.existsSync(pubPath), 'public upload deleted');
+    assert.ok(!fs.existsSync(privPath), 'private document deleted');
   });
 
   console.log(results.join('\n'));

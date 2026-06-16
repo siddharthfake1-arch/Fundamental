@@ -1,6 +1,6 @@
 const express = require('express');
 const { db, publicUser, profileCompletion, notify, audit } = require('../db');
-const { auth, requireRole } = require('../authmw');
+const { auth, requireRole, requireApprovedInvestor } = require('../authmw');
 const { J, qstr, qint } = require('../util');
 
 const router = express.Router();
@@ -117,7 +117,7 @@ router.get('/dashboard/founder/analytics', requireRole('founder'), (req, res) =>
 });
 
 // ---- Investor dashboard ----
-router.get('/dashboard/investor', requireRole('investor'), (req, res) => {
+router.get('/dashboard/investor', requireApprovedInvestor, (req, res) => {
   const watchlist = db.prepare(`SELECT w.status w_status, w.created_at saved_at, s.* FROM watchlist w
     JOIN startups s ON s.id=w.startup_id WHERE w.user_id=? ORDER BY w.created_at DESC`).all(req.user.id);
   const requested = db.prepare(`SELECT ar.status, ar.created_at, c2.title, c2.type, s.id startup_id, s.name startup_name, s.logo
@@ -142,7 +142,7 @@ router.get('/dashboard/investor', requireRole('investor'), (req, res) => {
 });
 
 // ---- Watchlist page (investor) ----
-router.get('/watchlist', requireRole('investor'), (req, res) => {
+router.get('/watchlist', requireApprovedInvestor, (req, res) => {
   const rows = db.prepare(`SELECT w.status w_status, w.created_at saved_at, w.tags w_tags, s.* FROM watchlist w
     JOIN startups s ON s.id=w.startup_id WHERE w.user_id=? ORDER BY w.created_at DESC`).all(req.user.id);
   res.json({

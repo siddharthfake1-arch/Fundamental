@@ -61,17 +61,26 @@ export default function Startup() {
     await api.post(`/api/users/connect/${founder.id}`);
   }, d.connected ? null : 'Connection request sent');
 
-  const share = async () => {
-    // Public sharing is founder opt-in. Owners enable it on first share.
-    if (is_owner && !s.public_share) {
-      try { await api.post('/api/startups/mine', { public_share: 1 }); load(); }
-      catch (e) { return toast(e.message, 'error'); }
-    } else if (!is_owner && !s.public_share) {
-      return toast('The founder has not enabled a public link for this startup.', 'info');
-    }
+  const copyLink = async () => {
     const url = `${window.location.origin}/s/${s.id}`;
-    try { await navigator.clipboard.writeText(url); toast(is_owner && !s.public_share ? 'Public sharing enabled — link copied.' : 'Public link copied.', 'success'); }
+    try { await navigator.clipboard.writeText(url); toast('Public link copied.', 'success'); }
     catch { toast(url, 'info'); }
+  };
+
+  // F-005: enabling public sharing is an explicit, confirmed action — never a side
+  // effect of copying. Copy only works once sharing is already on.
+  const share = async () => {
+    if (s.public_share) return copyLink();
+    if (!is_owner) return toast('The founder has not enabled a public link for this startup.', 'info');
+    const ok = window.confirm('Enable public sharing?\n\nAnyone with the link — no account needed — will be able to see this startup\'s name, sector, one-liner, score, and 12-minute pitch video. Your metrics and data room stay private. You can turn this off anytime in Settings.');
+    if (!ok) return;
+    try { await api.post('/api/startups/mine', { public_share: 1 }); await load(); toast('Public sharing enabled — link copied.', 'success'); copyLink(); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+
+  const disableShare = async () => {
+    try { await api.post('/api/startups/mine', { public_share: 0 }); await load(); toast('Public sharing disabled.', 'success'); }
+    catch (e) { toast(e.message, 'error'); }
   };
 
   const metrics = [
@@ -160,7 +169,16 @@ export default function Startup() {
           {user.role === 'investor' && (
             <button className="btn-ghost btn-sm !text-gold-300 !border-gold-500/40" onClick={openMemo}>✦ AI memo</button>
           )}
-          <button className="btn-ghost btn-sm" onClick={share}>Copy share link</button>
+          {is_owner && !s.public_share && (
+            <button className="btn-ghost btn-sm" onClick={share} title="Anyone with the link can view — off by default">Enable public link</button>
+          )}
+          {s.public_share && (
+            <>
+              <button className="btn-ghost btn-sm !text-emerald-300 !border-emerald-500/40" onClick={copyLink} title="Public sharing is on">● Public · copy link</button>
+              {is_owner && <button className="btn-ghost btn-sm" onClick={disableShare}>Make private</button>}
+            </>
+          )}
+          {!is_owner && !s.public_share && user.role === 'investor' && null}
           {is_owner && <Link to="/settings?tab=startup" className="btn-ghost btn-sm ml-auto">Edit startup</Link>}
         </div>
         {intro && !intro.direct && intro.connectors?.length > 0 && (

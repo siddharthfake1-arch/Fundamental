@@ -1,7 +1,10 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { db, notify, audit, areConnected, publicUser, trustScore } = require('../db');
 const { auth, requireRole } = require('../authmw');
 const { validateUrlFields, clampStrings } = require('../security');
+const { deletePrivate } = require('../storage');
 const { J, qstr } = require('../util');
 
 const router = express.Router();
@@ -138,20 +141,25 @@ router.get('/profile/:id', (req, res) => {
         .filter(s => s && (ownerView || s.video_url))
         .map(({ video_url, ...s }) => s);
     }
-    // Visual intelligence: where this investor's attention actually goes (aggregates only)
-    const interest = db.prepare(`SELECT s.sector label, COUNT(*) n FROM upvotes u JOIN startups s ON s.id=u.startup_id
-      WHERE u.user_id=? AND s.sector != '' GROUP BY s.sector ORDER BY n DESC`).all(u.id);
-    const totalInterest = interest.reduce((a, r) => a + r.n, 0) || 1;
-    out.interest_allocation = interest.map(r => ({ label: r.label, pct: Math.round((r.n / totalInterest) * 100) }));
-    const stageInterest = db.prepare(`SELECT s.stage label, COUNT(*) n FROM watchlist w JOIN startups s ON s.id=w.startup_id
-      WHERE w.user_id=? AND s.stage != '' GROUP BY s.stage ORDER BY n DESC`).all(u.id);
-    const totalStage = stageInterest.reduce((a, r) => a + r.n, 0) || 1;
-    out.stage_allocation = stageInterest.map(r => ({ label: r.label, pct: Math.round((r.n / totalStage) * 100) }));
-    out.activity_stats = {
-      upvotes: db.prepare('SELECT COUNT(*) c FROM upvotes WHERE user_id=?').get(u.id).c,
-      pipeline: db.prepare('SELECT COUNT(*) c FROM watchlist WHERE user_id=?').get(u.id).c,
-      posts: db.prepare('SELECT COUNT(*) c FROM posts WHERE user_id=? AND removed=0').get(u.id).c,
-    };
+    // F-008: an investor's sourcing strategy (sector/stage attention, pipeline size)
+    // is sensitive intelligence. It is SELF-ONLY (owner or admin) — never exposed on
+    // another member's view of the profile.
+    const selfView = req.user.id === u.id || req.user.role === 'admin';
+    if (selfView) {
+      const interest = db.prepare(`SELECT s.sector label, COUNT(*) n FROM upvotes u JOIN startups s ON s.id=u.startup_id
+        WHERE u.user_id=? AND s.sector != '' GROUP BY s.sector ORDER BY n DESC`).all(u.id);
+      const totalInterest = interest.reduce((a, r) => a + r.n, 0) || 1;
+      out.interest_allocation = interest.map(r => ({ label: r.label, pct: Math.round((r.n / totalInterest) * 100) }));
+      const stageInterest = db.prepare(`SELECT s.stage label, COUNT(*) n FROM watchlist w JOIN startups s ON s.id=w.startup_id
+        WHERE w.user_id=? AND s.stage != '' GROUP BY s.stage ORDER BY n DESC`).all(u.id);
+      const totalStage = stageInterest.reduce((a, r) => a + r.n, 0) || 1;
+      out.stage_allocation = stageInterest.map(r => ({ label: r.label, pct: Math.round((r.n / totalStage) * 100) }));
+      out.activity_stats = {
+        upvotes: db.prepare('SELECT COUNT(*) c FROM upvotes WHERE user_id=?').get(u.id).c,
+        pipeline: db.prepare('SELECT COUNT(*) c FROM watchlist WHERE user_id=?').get(u.id).c,
+        posts: db.prepare('SELECT COUNT(*) c FROM posts WHERE user_id=? AND removed=0').get(u.id).c,
+      };
+    }
   }
   out.posts = db.prepare(`SELECT p.*, (SELECT COUNT(*) FROM post_likes WHERE post_id=p.id) likes,
     (SELECT COUNT(*) FROM post_comments WHERE post_id=p.id) comments
@@ -177,10 +185,26 @@ router.get('/me/export', (req, res) => {
     startups: db.prepare('SELECT * FROM startups WHERE founder_id=?').all(uid),
     posts: db.prepare('SELECT * FROM posts WHERE user_id=?').all(uid),
     comments: db.prepare('SELECT * FROM post_comments WHERE user_id=?').all(uid),
-    messages_sent: db.prepare('SELECT id, conversation_id, text, created_at FROM messages WHERE sender_id=?').all(uid),
+    messages_sent: db.prepare('SELECT id, conversation_id, text, attachment_name, created_at FROM messages WHERE sender_id=?').all(uid),
+    // F-016: received messages (conversations the user is part of), full data map.
+    messages_received: db.prepare(`SELECT m.id, m.conversation_id, m.text, m.created_at FROM messages m
+      JOIN conversations c ON c.id=m.conversation_id WHERE (c.a_id=? OR c.b_id=?) AND m.sender_id!=?`).all(uid, uid, uid),
     connections: db.prepare('SELECT * FROM connections WHERE requester_id=? OR recipient_id=?').all(uid, uid),
+    follows: db.prepare('SELECT followee_id FROM follows WHERE follower_id=?').all(uid),
+    startup_follows: db.prepare('SELECT startup_id, created_at FROM startup_follows WHERE user_id=?').all(uid),
+    interests: db.prepare('SELECT startup_id, created_at FROM interests WHERE investor_id=?').all(uid),
     watchlist: db.prepare('SELECT * FROM watchlist WHERE user_id=?').all(uid),
     notes: db.prepare('SELECT * FROM notes WHERE investor_id=?').all(uid),
+    saved_searches: db.prepare('SELECT * FROM saved_searches WHERE user_id=?').all(uid),
+    access_requests: db.prepare('SELECT * FROM access_requests WHERE investor_id=?').all(uid),
+    // Private document inventory (metadata only — files are downloaded individually).
+    private_documents: db.prepare(`SELECT c.id, c.title, c.type, c.access_level FROM collateral c
+      JOIN startups s ON s.id=c.startup_id WHERE s.founder_id=? AND c.file_key != ''`).all(uid),
+    collateral_access_log: db.prepare('SELECT collateral_id, action, created_at FROM collateral_access_logs WHERE user_id=?').all(uid),
+    community_memberships: db.prepare('SELECT community_id, joined_at FROM community_members WHERE user_id=?').all(uid),
+    community_posts: db.prepare('SELECT * FROM community_posts WHERE user_id=?').all(uid),
+    community_replies: db.prepare('SELECT * FROM community_replies WHERE user_id=?').all(uid),
+    reports_filed: db.prepare('SELECT target_type, target_id, reason, status, created_at FROM reports WHERE reporter_id=?').all(uid),
     notifications: db.prepare('SELECT * FROM notifications WHERE user_id=?').all(uid),
   };
   res.setHeader('Content-Disposition', 'attachment; filename="fundamental-data-export.json"');
@@ -188,19 +212,47 @@ router.get('/me/export', (req, res) => {
 });
 
 // ---- Account deletion (right to erasure) ----
-// Cascades through every table via ON DELETE CASCADE foreign keys; also clears the
-// session cookie. Admins cannot self-delete (avoids locking out the platform).
+// F-004: enumerate and delete the user's files (public uploads + private docs +
+// message attachments) BEFORE removing the row, so no orphaned artifacts remain.
+// DB rows cascade via ON DELETE CASCADE foreign keys. Admins cannot self-delete.
 router.delete('/me', (req, res) => {
   if (req.user.role === 'admin') return res.status(400).json({ error: 'Admin accounts cannot be self-deleted. Use another admin or the server.' });
-  audit(req.user.id, 'delete-account', { targetType: 'user', targetId: req.user.id, ip: req.ip });
-  db.prepare('DELETE FROM users WHERE id=?').run(req.user.id);
+  const uid = req.user.id;
+
+  // Private files: collateral in owned startups + attachments the user sent.
+  const privateKeys = new Set();
+  for (const r of db.prepare(`SELECT c.file_key FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE s.founder_id=? AND c.file_key != ''`).all(uid)) privateKeys.add(r.file_key);
+  for (const r of db.prepare(`SELECT attachment_key FROM messages WHERE sender_id=? AND attachment_key != ''`).all(uid)) privateKeys.add(r.attachment_key);
+
+  // Public upload files: profile photo/cover, owned-startup logo/cover/video, post media.
+  const publicUrls = new Set();
+  const u = db.prepare('SELECT photo, cover FROM users WHERE id=?').get(uid);
+  [u && u.photo, u && u.cover].forEach(v => v && publicUrls.add(v));
+  for (const r of db.prepare('SELECT logo, cover, video_url FROM startups WHERE founder_id=?').all(uid)) { [r.logo, r.cover, r.video_url].forEach(v => v && publicUrls.add(v)); }
+  for (const r of db.prepare("SELECT media FROM posts WHERE user_id=? AND media != ''").all(uid)) publicUrls.add(r.media);
+  for (const r of db.prepare("SELECT attachment FROM messages WHERE sender_id=? AND attachment != ''").all(uid)) publicUrls.add(r.attachment);
+
+  audit(uid, 'delete-account', { targetType: 'user', targetId: uid, detail: `private_files=${privateKeys.size} public_files=${publicUrls.size}`, ip: req.ip });
+  db.prepare('DELETE FROM startup_views WHERE user_id=?').run(uid); // table has no FK cascade
+  db.prepare('DELETE FROM users WHERE id=?').run(uid);
+
+  // Remove files only after the DB row is gone.
+  for (const key of privateKeys) deletePrivate(key);
+  const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+  for (const url of publicUrls) {
+    if (typeof url === 'string' && url.startsWith('/uploads/')) {
+      try { fs.unlinkSync(path.join(UPLOAD_DIR, path.basename(url))); } catch { /* already gone / external */ }
+    }
+  }
   res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
   res.json({ ok: true });
 });
 
 // ---- Edit own profile / investor profile ----
 router.put('/me', (req, res) => {
-  const allowed = ['name', 'city', 'headline', 'bio', 'linkedin', 'education', 'experience', 'photo', 'cover', 'email_alerts', 'inapp_alerts', 'onboarded'];
+  // F-012: `onboarded` is NOT a generic profile field — it is set only by the
+  // server via /complete-onboarding after required artifacts are validated.
+  const allowed = ['name', 'city', 'headline', 'bio', 'linkedin', 'education', 'experience', 'photo', 'cover', 'email_alerts', 'inapp_alerts'];
   // photo/cover/linkedin render as src/href — block javascript: et al. (stored XSS)
   const urlErr = validateUrlFields(req.body, ['photo', 'cover', 'linkedin']);
   if (urlErr) return res.status(400).json({ error: urlErr });
@@ -224,6 +276,18 @@ router.put('/me', (req, res) => {
         ip.sector_focus ? JSON.stringify(ip.sector_focus) : null,
         ip.thesis ?? null, ip.portfolio ? JSON.stringify(ip.portfolio) : null, req.user.id);
   }
+  res.json({ ok: true });
+});
+
+// F-012: server-validated onboarding completion. Founders must have a startup with
+// the mandatory one-liner and a verified pitch video; investors just need a profile.
+router.post('/complete-onboarding', (req, res) => {
+  if (req.user.role === 'founder') {
+    const s = db.prepare('SELECT one_liner, video_url, video_duration FROM startups WHERE founder_id=?').get(req.user.id);
+    if (!s || !s.one_liner || !s.one_liner.trim()) return res.status(400).json({ error: 'Add your one-line description before finishing.' });
+    if (!s.video_url || !s.video_duration) return res.status(400).json({ error: 'Upload your verified 12-minute pitch video before finishing.' });
+  }
+  db.prepare('UPDATE users SET onboarded=1 WHERE id=?').run(req.user.id);
   res.json({ ok: true });
 });
 
