@@ -48,6 +48,9 @@ const FEATURES = [
 
 export default function Auth() {
   const [mode, setMode] = useState('login');
+  // Signup is a two-step flow: 'form' collects details, 'verify' confirms the email
+  // via the OTP code before the account is created and onboarding opens.
+  const [step, setStep] = useState('form');
   const [role, setRole] = useState('founder');
   const [form, setForm] = useState({ name: '', email: '', password: '', city: '', phone: '' });
   const [otp, setOtp] = useState({ sent: false, sending: false, code: '', demo_code: '' });
@@ -61,16 +64,52 @@ export default function Auth() {
   useEffect(() => { api.get('/api/config').then(setCfg).catch(() => {}); }, []);
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
-  // Email is the account credential, so verification is by email (P0-2).
-  const otpIdentifier = form.email;
 
-  const sendCode = async () => {
-    if (!otpIdentifier) return toast('Enter your email first', 'error');
+  // Switch tabs and reset the signup flow back to its first step.
+  const switchMode = (m) => { setMode(m); setStep('form'); setOtp({ sent: false, sending: false, code: '', demo_code: '' }); };
+
+  const goToDiscoverOrOnboarding = (user) => { setUser(user); nav(user.onboarded ? '/discover' : '/onboarding'); };
+
+  const doLogin = async () => {
+    setBusy(true);
+    try {
+      const { user } = await api.post('/api/auth/login', { email: form.email, password: form.password });
+      goToDiscoverOrOnboarding(user);
+    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+  };
+
+  // Step 1 → 2: validate the details, send the email code, advance to verification.
+  const startVerification = async () => {
+    if (!form.name.trim()) return toast('Enter your full name', 'error');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) return toast('Enter a valid email address', 'error');
+    if (form.password.length < 8) return toast('Use a password of at least 8 characters', 'error');
+    if (!accepted) return toast('Please accept the Terms of Service and Privacy Policy to continue.', 'error');
+    setBusy(true);
+    try {
+      const d = await api.post('/api/auth/send-otp', { channel: 'email', identifier: form.email });
+      setOtp(o => ({ ...o, sent: true, demo_code: d.demo_code || '', code: '' }));
+      setStep('verify');
+      toast(d.demo ? 'Demo mode — your code is shown below' : 'We sent a 6-digit code to your email', 'success');
+    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+  };
+
+  // Step 2: verify the code, create the account, then open onboarding.
+  const finishSignup = async () => {
+    if (!otp.code || otp.code.length < 6) return toast('Enter the 6-digit code we emailed you', 'error');
+    setBusy(true);
+    try {
+      const { otp_token } = await api.post('/api/auth/verify-otp', { identifier: form.email, code: otp.code });
+      const { user } = await api.post('/api/auth/signup', { ...form, role, otp_token, accept_terms: true });
+      goToDiscoverOrOnboarding(user);
+    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+  };
+
+  const resendCode = async () => {
     setOtp(o => ({ ...o, sending: true }));
     try {
-      const d = await api.post('/api/auth/send-otp', { channel: 'email', identifier: otpIdentifier });
+      const d = await api.post('/api/auth/send-otp', { channel: 'email', identifier: form.email });
       setOtp(o => ({ ...o, sent: true, sending: false, demo_code: d.demo_code || '' }));
-      toast(d.demo ? 'Demo mode — your code is shown below' : 'Code sent to your email', 'success');
+      toast(d.demo ? 'New code generated below' : 'A new code is on its way', 'success');
     } catch (err) {
       setOtp(o => ({ ...o, sending: false }));
       toast(err.message, 'error');
@@ -79,24 +118,9 @@ export default function Auth() {
 
   const submit = async (e) => {
     e.preventDefault();
-    setBusy(true);
-    try {
-      let user;
-      if (mode === 'login') {
-        ({ user } = await api.post('/api/auth/login', { email: form.email, password: form.password }));
-      } else {
-        if (!accepted) throw new Error('Please accept the Terms of Service and Privacy Policy to continue.');
-        if (!otp.sent || !otp.code) throw new Error('Verify your email first — request a code and enter it.');
-        const { otp_token } = await api.post('/api/auth/verify-otp', { identifier: otpIdentifier, code: otp.code });
-        ({ user } = await api.post('/api/auth/signup', { ...form, role, otp_token, accept_terms: true }));
-      }
-      setUser(user);
-      nav(user.onboarded ? '/discover' : '/onboarding');
-    } catch (err) {
-      toast(err.message, 'error');
-    } finally {
-      setBusy(false);
-    }
+    if (mode === 'login') return doLogin();
+    if (step === 'form') return startVerification();
+    return finishSignup();
   };
 
   const google = async () => {
@@ -172,65 +196,87 @@ export default function Auth() {
           className="w-full max-w-md">
           <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1 mb-7">
             {['login', 'signup'].map(m => (
-              <button key={m} onClick={() => setMode(m)}
+              <button key={m} onClick={() => switchMode(m)}
                 className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${mode === m ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>
                 {m === 'login' ? 'Sign in' : 'Create account'}
               </button>
             ))}
           </div>
 
+          {/* Step indicator for the two-step signup */}
+          {mode === 'signup' && (
+            <div className="flex items-center gap-2 mb-5 text-[11px] font-semibold uppercase tracking-wider">
+              <span className={step === 'form' ? 'text-gold-300' : 'text-mist-500'}>1 · Your details</span>
+              <span className="flex-1 h-px bg-ink-700" />
+              <span className={step === 'verify' ? 'text-gold-300' : 'text-mist-500'}>2 · Verify email</span>
+            </div>
+          )}
+
           <form onSubmit={submit} className="space-y-4">
-            {mode === 'signup' && (
-              <div>
-                <span className="label">I am a</span>
-                <div className="grid grid-cols-2 gap-3">
-                  {[['founder', 'Founder', 'Raising capital for my startup'], ['investor', 'Investor', 'Sourcing and evaluating deals']].map(([v, t, s]) => (
-                    <button type="button" key={v} onClick={() => setRole(v)}
-                      className={`rounded-xl border p-4 text-left transition-all ${role === v ? 'border-gold-500/70 bg-gold-500/10' : 'border-ink-600/70 bg-ink-850 hover:border-ink-500'}`}>
-                      <div className={`font-display font-bold text-sm ${role === v ? 'text-gold-300' : 'text-mist-100'}`}>{t}</div>
-                      <div className="text-[11px] text-mist-400 mt-1 leading-snug">{s}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {/* ---- Login ---- */}
+            {mode === 'login' && (
+              <>
+                <div><span className="label">Email</span><input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
+                <div><span className="label">Password</span><input aria-label="Password" type="password" className="input" value={form.password} onChange={set('password')} placeholder="••••••••" required /></div>
+              </>
             )}
-            {mode === 'signup' && (
-              <div><span className="label">Full name</span><input aria-label="Full name" className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
-            )}
-            <div><span className="label">Email</span><input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
-            <div><span className="label">Password</span><input aria-label="Password" type="password" className="input" value={form.password} onChange={set('password')} placeholder={mode === 'signup' ? 'Minimum 8 characters' : '••••••••'} required /></div>
-            {mode === 'signup' && (
-              <div><span className="label">City</span><input aria-label="City" className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
-            )}
-            {mode === 'signup' && (
-              <div><span className="label">Phone <span className="normal-case font-normal text-mist-500">(optional)</span></span><input aria-label="Phone" className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="With country code, e.g. +966 5x xxx xxxx" /></div>
-            )}
-            {mode === 'signup' && (
-              <div className="card p-4 space-y-3">
-                <span className="text-sm font-semibold text-mist-100">Verify your email</span>
-                <div className="flex gap-2">
-                  <input aria-label="6-digit verification code" className="input flex-1" inputMode="numeric" maxLength={6} value={otp.code}
-                    onChange={(e) => setOtp(o => ({ ...o, code: e.target.value.replace(/\D/g, '') }))}
-                    placeholder="6-digit code" disabled={!otp.sent} />
-                  <button type="button" className="btn-ghost whitespace-nowrap" onClick={sendCode} disabled={otp.sending}>
-                    {otp.sending ? 'Sending…' : otp.sent ? 'Resend code' : 'Send code'}
-                  </button>
-                </div>
-                {otp.demo_code && (
-                  <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">
-                    Demo mode (no email provider configured) — your code is <code className="font-bold">{otp.demo_code}</code>
+
+            {/* ---- Signup step 1: details ---- */}
+            {mode === 'signup' && step === 'form' && (
+              <>
+                <div>
+                  <span className="label">I am a</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[['founder', 'Founder', 'Raising capital for my startup'], ['investor', 'Investor', 'Sourcing and evaluating deals']].map(([v, t, s]) => (
+                      <button type="button" key={v} onClick={() => setRole(v)}
+                        className={`rounded-xl border p-4 text-left transition-all ${role === v ? 'border-gold-500/70 bg-gold-500/10' : 'border-ink-600/70 bg-ink-850 hover:border-ink-500'}`}>
+                        <div className={`font-display font-bold text-sm ${role === v ? 'text-gold-300' : 'text-mist-100'}`}>{t}</div>
+                        <div className="text-[11px] text-mist-400 mt-1 leading-snug">{s}</div>
+                      </button>
+                    ))}
                   </div>
-                )}
-              </div>
+                </div>
+                <div><span className="label">Full name</span><input aria-label="Full name" className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
+                <div><span className="label">Email</span><input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
+                <div><span className="label">Password</span><input aria-label="Password" type="password" className="input" value={form.password} onChange={set('password')} placeholder="Minimum 8 characters" required /></div>
+                <div><span className="label">City</span><input aria-label="City" className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
+                <div><span className="label">Phone <span className="normal-case font-normal text-mist-500">(optional)</span></span><input aria-label="Phone" className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="With country code, e.g. +966 5x xxx xxxx" /></div>
+                <label className="flex items-start gap-2.5 cursor-pointer text-xs text-mist-400 leading-relaxed">
+                  <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="accent-gold-400 w-4 h-4 mt-0.5 shrink-0" />
+                  <span>I agree to Fundamental's <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:text-gold-200">Terms of Service</a> and <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:text-gold-200">Privacy Policy</a>, and understand that information on the platform is not investment advice.</span>
+                </label>
+              </>
             )}
-            {mode === 'signup' && (
-              <label className="flex items-start gap-2.5 cursor-pointer text-xs text-mist-400 leading-relaxed">
-                <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="accent-gold-400 w-4 h-4 mt-0.5 shrink-0" />
-                <span>I agree to Fundamental's <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:text-gold-200">Terms of Service</a> and <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:text-gold-200">Privacy Policy</a>, and understand that information on the platform is not investment advice.</span>
-              </label>
+
+            {/* ---- Signup step 2: verify email ---- */}
+            {mode === 'signup' && step === 'verify' && (
+              <>
+                <div className="card p-5 space-y-3">
+                  <span className="text-sm font-semibold text-mist-100">Verify your email</span>
+                  <p className="text-xs text-mist-400 leading-relaxed">We sent a 6-digit code to <span className="text-mist-200 font-medium">{form.email}</span>. Enter it below to confirm your account.</p>
+                  <input aria-label="6-digit verification code" className="input text-center tracking-[0.5em] text-lg" inputMode="numeric" maxLength={6} autoFocus value={otp.code}
+                    onChange={(e) => setOtp(o => ({ ...o, code: e.target.value.replace(/\D/g, '') }))}
+                    placeholder="••••••" />
+                  <div className="flex items-center justify-between text-xs">
+                    <button type="button" className="text-mist-400 hover:text-mist-200" onClick={() => setStep('form')}>← Edit details</button>
+                    <button type="button" className="text-gold-300 hover:text-gold-200 disabled:opacity-50" onClick={resendCode} disabled={otp.sending}>
+                      {otp.sending ? 'Sending…' : 'Resend code'}
+                    </button>
+                  </div>
+                  {otp.demo_code && (
+                    <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">
+                      Demo mode (no email provider configured) — your code is <code className="font-bold">{otp.demo_code}</code>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
+
             <button disabled={busy} className="btn-primary w-full !py-3 group">
-              {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : `Create ${role === 'founder' ? 'founder' : 'investor'} account`}
+              {busy ? 'Please wait…'
+                : mode === 'login' ? 'Sign in'
+                : step === 'form' ? 'Continue'
+                : `Verify & create ${role === 'founder' ? 'founder' : 'investor'} account`}
               <MoveRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
           </form>
