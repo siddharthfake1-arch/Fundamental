@@ -13,7 +13,7 @@ const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
-const { auth, validateProductionConfig } = require('./authmw');
+const { auth, validateProductionConfig, JWT_SECRET } = require('./authmw');
 const { rateLimit, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType } = require('./security');
 
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -53,6 +53,29 @@ app.get('/api/config', (req, res) => res.json({
   demo: !IS_PROD,
   google_enabled: false,
 }));
+
+// Client-side render-error capture (from the browser ErrorBoundary). Public on
+// purpose: crashes can happen on public pages or with an expired session. Lightly
+// rate-limited, payload clamped, user attached when a valid session cookie exists.
+// Always succeeds from the client's perspective — logging must never block the UI.
+const clientErrorLimiter = rateLimit({ name: 'client-error', windowMs: 60_000, max: 30 });
+app.post('/api/client-errors', clientErrorLimiter, (req, res) => {
+  try {
+    const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
+    const b = req.body || {};
+    // Attach the user id only if a valid session cookie is present (best-effort).
+    let userId = null;
+    try {
+      const t = req.cookies && req.cookies.token;
+      if (t) userId = require('jsonwebtoken').verify(t, JWT_SECRET).id || null;
+    } catch { /* anonymous or expired — fine */ }
+    require('./db').db.prepare(
+      'INSERT INTO client_errors (user_id, message, stack, component_stack, path, user_agent, ip) VALUES (?,?,?,?,?,?,?)'
+    ).run(userId, clip(b.message, 1000), clip(b.stack, 8000), clip(b.componentStack, 8000),
+      clip(b.path, 500), clip(req.headers['user-agent'], 500), req.ip || '');
+  } catch { /* never surface logging failures to the user */ }
+  res.status(204).end();
+});
 
 // ---- Database bootstrap & production safety (P0-1) ----
 {

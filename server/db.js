@@ -382,6 +382,23 @@ CREATE TABLE IF NOT EXISTS otp_codes (
 CREATE INDEX IF NOT EXISTS idx_otp_identifier ON otp_codes(identifier, created_at);
 `);
 
+// Client-side render errors captured from the browser ErrorBoundary, so production
+// crashes are visible server-side without waiting on a user to send a screenshot.
+db.exec(`
+CREATE TABLE IF NOT EXISTS client_errors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  message TEXT DEFAULT '',
+  stack TEXT DEFAULT '',
+  component_stack TEXT DEFAULT '',
+  path TEXT DEFAULT '',
+  user_agent TEXT DEFAULT '',
+  ip TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_client_errors_created ON client_errors(created_at);
+`);
+
 // Indexes for every hot lookup path — without these each request full-scans tables
 // that grow linearly with usage (notifications, views, messages).
 db.exec(`
@@ -421,6 +438,7 @@ try {
   db.exec("DELETE FROM otp_codes WHERE created_at < datetime('now','-1 day')");
   db.exec("DELETE FROM collateral_access_logs WHERE created_at < datetime('now','-365 days')");
   db.exec("DELETE FROM notifications WHERE read=1 AND created_at < datetime('now','-180 days')");
+  db.exec("DELETE FROM client_errors WHERE created_at < datetime('now','-30 days')");
 } catch { /* tables may not exist on a brand-new DB yet */ }
 
 // ---- shared helpers ----

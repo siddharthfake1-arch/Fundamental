@@ -14,12 +14,30 @@ export default class ErrorBoundary extends Component {
   static getDerivedStateFromError(error) { return { error }; }
 
   componentDidCatch(error, info) {
+    const path = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
     console.error('Render error:', {
       message: error?.message,
       stack: error?.stack,
       componentStack: info?.componentStack,
-      path: typeof window !== 'undefined' ? window.location.pathname + window.location.search : '',
+      path,
     });
+    // Best-effort server-side capture so production crashes are visible without a
+    // user screenshot. Fire-and-forget: keepalive survives the navigation/reload,
+    // and any failure here is swallowed so logging never compounds the crash.
+    try {
+      fetch('/api/client-errors', {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: error?.message || String(error || ''),
+          stack: error?.stack || '',
+          componentStack: info?.componentStack || '',
+          path,
+        }),
+      }).catch(() => {});
+    } catch { /* ignore */ }
   }
 
   componentDidUpdate(prevProps) {
