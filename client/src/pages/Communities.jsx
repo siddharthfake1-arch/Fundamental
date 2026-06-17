@@ -17,7 +17,7 @@ function CommunityIndex() {
   const [q, setQ] = useState('');
   const toast = useToast();
   const load = () => api.get('/api/communities').then(d => setList(asArray(d.communities))).catch(e => toast(e.message, 'error'));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
 
   const join = async (slug) => {

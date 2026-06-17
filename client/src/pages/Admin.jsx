@@ -62,7 +62,7 @@ function Users() {
   const [q, setQ] = useState('');
   const toast = useToast();
   const load = () => api.get('/api/admin/users').then(d => setUsers(asArray(d.users))).catch(() => {});
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   if (!users) return <Spinner />;
   const shown = users.filter(u => String((u.name || '') + ' ' + (u.email || '') + ' ' + (u.role || '') + ' ' + (u.city || '')).toLowerCase().includes(q.toLowerCase()));
   return (
@@ -122,7 +122,7 @@ function StartupsAdmin() {
   const [q, setQ] = useState('');
   const toast = useToast();
   const load = () => api.get('/api/admin/startups').then(d => setList(asArray(d.startups))).catch(() => {});
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
   const shown = list.filter(s => String((s.name || '') + ' ' + (s.sector || '') + ' ' + (s.stage || '')).toLowerCase().includes(q.toLowerCase()));
   return (
@@ -172,7 +172,7 @@ function Content() {
   const [posts, setPosts] = useState(null);
   const toast = useToast();
   const load = () => api.get('/api/admin/posts').then(d => setPosts(asArray(d.posts))).catch(() => {});
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   if (!posts) return <Spinner />;
   return posts.length === 0 ? <Empty title="No content to review" /> : (
     <div className="space-y-3 max-w-3xl">
@@ -201,7 +201,7 @@ function Reports() {
   const [reports, setReports] = useState(null);
   const toast = useToast();
   const load = () => api.get('/api/admin/reports').then(d => setReports(asArray(d.reports))).catch(() => {});
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   if (!reports) return <Spinner />;
   return reports.length === 0 ? <Empty title="No reports" sub="User reports of fraudulent or inappropriate activity appear here." /> : (
     <div className="space-y-3 max-w-3xl">

@@ -25,7 +25,7 @@ export default function Network() {
     api.get('/api/users/network?' + qs).then(d => setUsers(asArray(d.users))).catch(e => toast(e.message, 'error'));
     api.get('/api/users/connections').then(d => setConns({ pending: asArray(d.pending), accepted: asArray(d.accepted) })).catch(() => {});
   };
-  useEffect(load, [qs]);
+  useEffect(() => { load(); }, [qs]);
 
   const set = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const act = async (fn, ok) => { try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } };

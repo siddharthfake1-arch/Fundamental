@@ -25,7 +25,7 @@ export default function Social() {
 
   const load = () => api.get('/api/social' + (filter ? `?type=${encodeURIComponent(filter)}` : ''))
     .then(d => setPosts(asArray(d.posts))).catch(e => toast(e.message, 'error'));
-  useEffect(load, [filter]);
+  useEffect(() => { load(); }, [filter]);
   useEffect(() => { api.get('/api/social/types').then(d => setTypes({ types: asArray(d?.types), allowed_for_me: asArray(d?.allowed_for_me) })).catch(() => {}); }, []);
 
   const visible = posts && posts

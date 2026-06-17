@@ -15,7 +15,7 @@ export default function Notifications() {
 
   const load = () => api.get('/api/notifications' + (filter ? `?type=${encodeURIComponent(filter)}` : ''))
     .then(setData).catch(e => toast(e.message, 'error'));
-  useEffect(load, [filter]);
+  useEffect(() => { load(); }, [filter]);
 
   if (!data) return <Spinner />;
   const shown = asArray(data.notifications).filter(n => !q || String(n.text || '').toLowerCase().includes(q.toLowerCase()));

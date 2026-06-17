@@ -180,7 +180,7 @@ function ManageCollateral({ startupId }) {
   const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Request Access', file_key: '' });
   const toast = useToast();
   const load = () => api.get(`/api/startups/${startupId}`).then(r => setDocs(asArray(r.collateral))).catch(() => {});
-  useEffect(load, [startupId]);
+  useEffect(() => { load(); }, [startupId]);
   return (
     <div className="card p-6 space-y-4">
       <h2 className="section-title">Data room collateral</h2>
