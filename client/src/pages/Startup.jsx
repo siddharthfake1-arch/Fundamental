@@ -59,6 +59,8 @@ export default function Startup() {
   const upvoteTrend = asArray(d.upvote_trend);
   const updates = asArray(d.updates);
   const useOfFunds = asArray(s.use_of_funds);
+  const team = asArray(s.team);
+  const links = asArray(s.links);
   const score = asObject(d.score);
   const scoreBreakdown = asObject(score.breakdown);
 
@@ -327,7 +329,34 @@ export default function Startup() {
             </div>
           </div>
         </div>
+        {team.length > 0 && (
+          <div className="mt-6 pt-6 border-t border-ink-700/50 grid sm:grid-cols-2 gap-4">
+            {team.map(m => (
+              <div key={m.id} className="flex gap-3 items-start">
+                <Avatar src={m.photo} name={m.name} size={11} />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-mist-100">{m.name}</div>
+                  {m.role && <div className="text-xs text-gold-300/90 font-medium">{m.role}</div>}
+                  {m.bio && <p className="text-xs text-mist-400 leading-relaxed mt-1">{m.bio}</p>}
+                  {m.linkedin && <a href={m.linkedin} target="_blank" rel="noreferrer noopener" className="text-xs text-mist-400 hover:text-gold-300 mt-1 inline-block">Profile ↗</a>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Section>
+
+      {links.length > 0 && (
+        <Section id="links" title="Links">
+          <div className="flex flex-wrap gap-2">
+            {links.map((l, i) => (
+              <a key={i} href={l.url} target="_blank" rel="noreferrer noopener" className="btn-ghost btn-sm max-w-full truncate">
+                {(l.label || l.url.replace(/^https?:\/\/(www\.)?/, '')).slice(0, 60)} ↗
+              </a>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {/* ---- Section 6: Activity & Signals ---- */}
       <Section id="activity" title="Section 6 — Activity & signals">

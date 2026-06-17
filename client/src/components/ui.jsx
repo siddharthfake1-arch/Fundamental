@@ -225,6 +225,116 @@ export function FileUpload({ label, accept, onUploaded, hint, currentUrl, upload
   );
 }
 
+// ---- Searchable global city picker ("City, Country") ----
+// Debounced autocomplete backed by /api/cities. Accepts free text too (so existing
+// freeform city values keep working), but guides users to the normalized format.
+export function CityInput({ value, onChange, placeholder = 'Search city…', className = '' }) {
+  const [q, setQ] = useState(value || '');
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const boxRef = useRef(null);
+  useEffect(() => { setQ(value || ''); }, [value]);
+  useEffect(() => {
+    if (!open) return;
+    const term = q.trim();
+    if (term.length < 2) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      try { const d = await api.get('/api/cities?q=' + encodeURIComponent(term)); setResults(Array.isArray(d.cities) ? d.cities : []); }
+      catch { setResults([]); }
+    }, 180);
+    return () => clearTimeout(t);
+  }, [q, open]);
+  useEffect(() => {
+    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+  const choose = (c) => { onChange(c); setQ(c); setOpen(false); setResults([]); setActive(-1); };
+  return (
+    <div className="relative" ref={boxRef}>
+      <input className={`input ${className}`} value={q} placeholder={placeholder} autoComplete="off" aria-label="City"
+        onChange={(e) => { setQ(e.target.value); onChange(e.target.value); setOpen(true); setActive(-1); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (!open || results.length === 0) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, results.length - 1)); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(a - 1, 0)); }
+          else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); choose(results[active]); }
+          else if (e.key === 'Escape') setOpen(false);
+        }} />
+      {open && results.length > 0 && (
+        <ul className="absolute z-30 mt-1 w-full max-h-60 overflow-auto rounded-xl bg-ink-850 border border-ink-600/70 shadow-lift py-1">
+          {results.map((c, i) => (
+            <li key={c}>
+              <button type="button" onMouseEnter={() => setActive(i)} onClick={() => choose(c)}
+                className={`w-full text-left px-3 py-2 text-sm ${i === active ? 'bg-ink-700 text-mist-100' : 'text-mist-300 hover:bg-ink-800'}`}>{c}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ---- Reusable links editor ([{label,url}], up to `max`) ----
+export function LinksEditor({ value, onChange, max = 10 }) {
+  const links = Array.isArray(value) ? value : [];
+  const setLink = (i, k, v) => onChange(links.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+  const add = () => { if (links.length < max) onChange([...links, { label: '', url: '' }]); };
+  const remove = (i) => onChange(links.filter((_, j) => j !== i));
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <span className="label !mb-0">Links</span>
+        <span className="text-xs text-mist-500">{links.length}/{max}</span>
+      </div>
+      <p className="text-xs text-mist-500 mt-1 mb-3">Add up to {max} links — website, X, GitHub, deck, press, anything.</p>
+      <div className="space-y-2">
+        {links.map((l, i) => (
+          <div key={i} className="flex gap-2">
+            <input className="input !w-40" placeholder="Label (optional)" value={l.label || ''} onChange={(e) => setLink(i, 'label', e.target.value)} />
+            <input className="input flex-1" placeholder="https://…" value={l.url || ''} onChange={(e) => setLink(i, 'url', e.target.value)} />
+            <button type="button" className="btn-ghost btn-sm shrink-0" aria-label="Remove link" onClick={() => remove(i)}>Remove</button>
+          </div>
+        ))}
+      </div>
+      {links.length < max && <button type="button" className="btn-ghost btn-sm mt-2" onClick={add}>+ Add link</button>}
+    </div>
+  );
+}
+
+// ---- Reusable team-member editor (add / edit / remove) ----
+export function TeamEditor({ value, onChange, max = 30 }) {
+  const team = Array.isArray(value) ? value : [];
+  const setM = (i, k, v) => onChange(team.map((m, j) => (j === i ? { ...m, [k]: v } : m)));
+  const add = () => { if (team.length < max) onChange([...team, { name: '', role: '', bio: '', linkedin: '', photo: '' }]); };
+  const remove = (i) => onChange(team.filter((_, j) => j !== i));
+  return (
+    <div className="space-y-3">
+      {team.length === 0 && <p className="text-sm text-mist-500">No team members yet. Add your co-founders and key team.</p>}
+      {team.map((m, i) => (
+        <div key={i} className="rounded-xl border border-ink-700/60 bg-ink-850 p-3.5 space-y-2.5">
+          <div className="flex items-center gap-3">
+            <Avatar src={m.photo} name={m.name || '?'} size={11} />
+            <div className="flex-1 grid sm:grid-cols-2 gap-2">
+              <input className="input" placeholder="Name (required)" value={m.name || ''} onChange={(e) => setM(i, 'name', e.target.value)} />
+              <input className="input" placeholder="Role — e.g. Co-founder & CTO" value={m.role || ''} onChange={(e) => setM(i, 'role', e.target.value)} />
+            </div>
+            <button type="button" className="btn-ghost btn-sm shrink-0" onClick={() => remove(i)}>Remove</button>
+          </div>
+          <textarea className="input min-h-[52px]" placeholder="Short bio (optional)" value={m.bio || ''} onChange={(e) => setM(i, 'bio', e.target.value)} />
+          <div className="grid sm:grid-cols-2 gap-2 items-start">
+            <input className="input" placeholder="LinkedIn / profile URL (optional)" value={m.linkedin || ''} onChange={(e) => setM(i, 'linkedin', e.target.value)} />
+            <FileUpload accept="image/*" currentUrl={m.photo} hint="Photo (optional)" onUploaded={(d) => setM(i, 'photo', d.url)} />
+          </div>
+        </div>
+      ))}
+      {team.length < max && <button type="button" className="btn-ghost btn-sm" onClick={add}>+ Add team member</button>}
+    </div>
+  );
+}
+
 // ---- Simple SVG charts (no deps) ----
 export function LineChart({ data, xKey, yKey, height = 160, format = (v) => v }) {
   if (!data || data.length < 2) return <div className="text-xs text-mist-500 py-8 text-center">Not enough data yet</div>;

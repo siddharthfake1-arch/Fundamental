@@ -28,7 +28,9 @@
     "multer": "^2.2.0"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "all-the-cities": "^3.1.0",
+    "concurrently": "^9.1.2",
+    "i18n-iso-countries": "^7.14.0"
   },
   "overrides": {
     "shell-quote": "^1.8.4"

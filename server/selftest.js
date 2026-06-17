@@ -2,10 +2,11 @@
 // These are fast, dependency-free unit checks of the rules that protect the
 // platform; extend with HTTP-level route tests as the test suite grows.
 const assert = require('assert');
-const { safeUrl, sniffFileType, validateNumericFields } = require('./security');
+const { safeUrl, sniffFileType, validateNumericFields, sanitizeLinks } = require('./security');
 // Pure module (no native sqlite dependency) so unit tests run even where the
 // better-sqlite3 binding can't build.
 const { canViewStartup, isListed } = require('./visibility');
+const { searchCities } = require('./cities');
 
 let passed = 0;
 const ok = (name, fn) => { fn(); passed++; console.log(`  ✓ ${name}`); };
@@ -51,6 +52,36 @@ ok('startup visibility hides unlisted/hidden from non-owners', () => {
   assert.strictEqual(canViewStartup(hidden, stranger), false);
   assert.strictEqual(canViewStartup(hidden, admin), true);
   assert.strictEqual(canViewStartup(live, stranger), true);
+});
+
+ok('a startup goes live only once it has a video (draft → live)', () => {
+  const draft = { id: 7, founder_id: 5, video_url: '', hidden: 0 };
+  assert.strictEqual(isListed(draft), false);                 // saved without video → not public
+  const live = { ...draft, video_url: '/uploads/pitch.mp4' }; // video added
+  assert.strictEqual(isListed(live), true);                   // now public
+});
+
+ok('sanitizeLinks normalizes, validates, drops blanks, and caps count', () => {
+  const good = sanitizeLinks([{ label: 'Site', url: 'https://example.com' }, { label: '', url: '' }]);
+  assert.deepStrictEqual(good.links, [{ label: 'Site', url: 'https://example.com' }]); // blank row dropped
+  assert.ok(sanitizeLinks([{ url: 'javascript:alert(1)' }]).error, 'rejects javascript: URLs');
+  assert.ok(sanitizeLinks('nope').error, 'rejects non-array');
+  const tooMany = Array.from({ length: 11 }, (_, i) => ({ url: `https://e${i}.com` }));
+  assert.ok(sanitizeLinks(tooMany, 10).error, 'caps at max');
+  // Angle brackets stripped from labels (anti-injection).
+  assert.strictEqual(sanitizeLinks([{ label: '<b>x', url: 'https://e.com' }]).links[0].label, 'bx');
+});
+
+ok('city search returns normalized "City, Country", deduped, ranked', () => {
+  const mumbai = searchCities('Mumbai', 20);
+  assert.ok(mumbai.includes('Mumbai, India'), 'finds Mumbai, India');
+  const sf = searchCities('San Francisco', 20);
+  assert.ok(sf.some(c => c.startsWith('San Francisco')), 'finds San Francisco');
+  // Every result is "City, Country" and unique within the response.
+  const res = searchCities('san', 20);
+  assert.ok(res.every(c => /, /.test(c)), 'all results are City, Country');
+  assert.strictEqual(new Set(res).size, res.length, 'no duplicates in results');
+  assert.deepStrictEqual(searchCities('', 20), [], 'empty query → no results');
 });
 
 console.log(`\n${passed} checks passed.`);

@@ -2,9 +2,16 @@ const express = require('express');
 const { db, publicUser, profileCompletion, notify, audit } = require('../db');
 const { auth, requireRole, requireApprovedInvestor } = require('../authmw');
 const { J, qstr, qint } = require('../util');
+const { searchCities } = require('../cities');
 
 const router = express.Router();
 router.use(auth);
+
+// Searchable global city list ("City, Country"). Backs the city autocomplete used
+// in onboarding, settings, and filters. Returns labels only — no extra metadata.
+router.get('/cities', (req, res) => {
+  res.json({ cities: searchCities(qstr(req.query.q), qint(req.query.limit, 20, 30)) });
+});
 
 // ---- Notifications ----
 router.get('/notifications', (req, res) => {

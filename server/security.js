@@ -79,6 +79,26 @@ function clampStrings(body, fields, maxLen = 5000) {
   }
 }
 
+// Validate a user/startup "links" array: up to `max` entries of { label, url }.
+// Each URL must be a safe http(s) link (blocks javascript:/data: stored XSS);
+// labels are optional, stripped of angle brackets and clamped. Blank rows are
+// skipped so a trailing empty editor row never blocks a save. Returns
+// { links } on success or { error } on the first invalid URL.
+function sanitizeLinks(input, max = 10) {
+  if (!Array.isArray(input)) return { error: 'Links must be a list.' };
+  const out = [];
+  for (const item of input) {
+    const raw = item && item.url;
+    if (!raw || !String(raw).trim()) continue; // skip empty rows
+    const url = safeUrl(raw);
+    if (!url) return { error: 'Each link needs a valid http or https URL.' };
+    const label = String((item && item.label) || '').replace(/[<>]/g, '').trim().slice(0, 80);
+    out.push({ label, url });
+    if (out.length > max) return { error: `You can add up to ${max} links.` };
+  }
+  return { links: out };
+}
+
 // ---- CSRF defense-in-depth ----
 // Cookies are SameSite=Lax (blocks cross-site POSTs in modern browsers); this adds an
 // explicit Origin check for state-changing API requests as a second layer.
@@ -141,4 +161,4 @@ function sniffFileType(buf, name = '') {
   return null;
 }
 
-module.exports = { rateLimit, safeUrl, validateUrlFields, validateNumericFields, clampStrings, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType };
+module.exports = { rateLimit, safeUrl, validateUrlFields, validateNumericFields, clampStrings, sanitizeLinks, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType };

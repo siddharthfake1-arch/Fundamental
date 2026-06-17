@@ -297,7 +297,25 @@ for (const stmt of [
   // so pre-existing/seeded communities stay live; user submissions are set 'pending'.
   "ALTER TABLE communities ADD COLUMN created_by INTEGER",
   "ALTER TABLE communities ADD COLUMN status TEXT DEFAULT 'approved'",
+  "ALTER TABLE startups ADD COLUMN links TEXT DEFAULT '[]'",              // company profile links [{label,url}]
 ]) { try { db.exec(stmt); } catch { /* column exists */ } }
+
+// Startup team members (founder can list co-founders / key team on the company
+// profile). Cascades with the startup; ordered by sort_order for stable display.
+db.exec(`
+CREATE TABLE IF NOT EXISTS team_members (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  startup_id INTEGER NOT NULL REFERENCES startups(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  role TEXT DEFAULT '',
+  bio TEXT DEFAULT '',
+  linkedin TEXT DEFAULT '',
+  photo TEXT DEFAULT '',
+  sort_order INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_team_members_startup ON team_members(startup_id);
+`);
 
 // Demo accounts (dev only) are pre-approved and pre-consented so the seeded
 // experience works; real signups remain gated. Idempotent and demo-scoped.

@@ -3,23 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { db, notify, audit, areConnected, publicUser, trustScore } = require('../db');
 const { auth, requireRole } = require('../authmw');
-const { validateUrlFields, clampStrings, safeUrl } = require('../security');
-
-// Profile links: up to 10 freeform [{label,url}] entries. Each URL must be a safe
-// http(s) link (blocks javascript:/data: stored XSS); labels are optional and clamped.
-const MAX_LINKS = 10;
-function sanitizeLinks(input) {
-  if (!Array.isArray(input)) return { error: 'Links must be a list.' };
-  if (input.length > MAX_LINKS) return { error: `You can add up to ${MAX_LINKS} links.` };
-  const out = [];
-  for (const item of input) {
-    const url = safeUrl(item && item.url);
-    if (!url) return { error: 'Each link needs a valid http or https URL.' };
-    const label = String((item && item.label) || '').split('<').join('').split('>').join('').trim().slice(0, 80);
-    out.push({ label, url });
-  }
-  return { links: out };
-}
+const { validateUrlFields, clampStrings, sanitizeLinks } = require('../security');
 const { deletePrivate } = require('../storage');
 const { J, qstr } = require('../util');
 
@@ -306,9 +290,11 @@ router.put('/me', (req, res) => {
 // the mandatory one-liner and a verified pitch video; investors just need a profile.
 router.post('/complete-onboarding', (req, res) => {
   if (req.user.role === 'founder') {
-    const s = db.prepare('SELECT one_liner, video_url, video_duration FROM startups WHERE founder_id=?').get(req.user.id);
+    // A founder can finish onboarding (and use the app) without a pitch video; the
+    // startup simply stays a non-public draft until a video is added (enforced by
+    // startup visibility rules). Only the one-line description is required here.
+    const s = db.prepare('SELECT one_liner FROM startups WHERE founder_id=?').get(req.user.id);
     if (!s || !s.one_liner || !s.one_liner.trim()) return res.status(400).json({ error: 'Add your one-line description before finishing.' });
-    if (!s.video_url || !s.video_duration) return res.status(400).json({ error: 'Upload your verified 12-minute pitch video before finishing.' });
   }
   db.prepare('UPDATE users SET onboarded=1 WHERE id=?').run(req.user.id);
   res.json({ ok: true });

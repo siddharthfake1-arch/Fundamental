@@ -4,7 +4,7 @@ import { Sun, Moon } from 'lucide-react';
 import { api, asArray } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
-import { FileUpload, Avatar, Spinner, useToast } from '../components/ui';
+import { FileUpload, Avatar, Spinner, CityInput, LinksEditor, TeamEditor, useToast } from '../components/ui';
 
 const Field = ({ label, children }) => <label className="block"><span className="label">{label}</span>{children}</label>;
 
@@ -39,10 +39,6 @@ function Account({ user, refresh }) {
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
-  const MAX_LINKS = 10;
-  const setLink = (i, k, v) => setF(x => ({ ...x, links: x.links.map((l, j) => j === i ? { ...l, [k]: v } : l) }));
-  const addLink = () => setF(x => x.links.length >= MAX_LINKS ? x : ({ ...x, links: [...x.links, { label: '', url: '' }] }));
-  const removeLink = (i) => setF(x => ({ ...x, links: x.links.filter((_, j) => j !== i) }));
   return (
     <div className="card p-6 space-y-4">
       {f.cover && <img src={f.cover} alt="" className="w-full h-28 object-cover rounded-xl border border-ink-700/50" />}
@@ -55,7 +51,7 @@ function Account({ user, refresh }) {
       </div>
       <div className="grid sm:grid-cols-2 gap-4">
         <Field label="Full name"><input className="input" value={f.name} onChange={set('name')} /></Field>
-        <Field label="City"><input className="input" value={f.city} onChange={set('city')} /></Field>
+        <Field label="City"><CityInput value={f.city} onChange={(city) => setF(x => ({ ...x, city }))} placeholder="Search city — e.g. Mumbai, India" /></Field>
       </div>
       <Field label="Headline"><input className="input" value={f.headline} onChange={set('headline')} placeholder="e.g. Founder & CEO, PayLane" /></Field>
       <Field label="Bio"><textarea className="input min-h-[90px]" value={f.bio} onChange={set('bio')} /></Field>
@@ -66,21 +62,7 @@ function Account({ user, refresh }) {
       <Field label="Personal LinkedIn"><input className="input" value={f.linkedin} onChange={set('linkedin')} placeholder="https://linkedin.com/in/…" /></Field>
 
       <div className="pt-2 border-t border-ink-700/60">
-        <div className="flex items-center justify-between">
-          <span className="label !mb-0">Links</span>
-          <span className="text-xs text-mist-500">{f.links.length}/{MAX_LINKS}</span>
-        </div>
-        <p className="text-xs text-mist-500 mt-1 mb-3">Add up to {MAX_LINKS} links — website, X, GitHub, deck, press, anything.</p>
-        <div className="space-y-2">
-          {f.links.map((l, i) => (
-            <div key={i} className="flex gap-2">
-              <input className="input !w-40" placeholder="Label (optional)" value={l.label || ''} onChange={(e) => setLink(i, 'label', e.target.value)} />
-              <input className="input flex-1" placeholder="https://…" value={l.url || ''} onChange={(e) => setLink(i, 'url', e.target.value)} />
-              <button type="button" className="btn-ghost btn-sm shrink-0" aria-label="Remove link" onClick={() => removeLink(i)}>Remove</button>
-            </div>
-          ))}
-        </div>
-        {f.links.length < MAX_LINKS && <button type="button" className="btn-ghost btn-sm mt-2" onClick={addLink}>+ Add link</button>}
+        <LinksEditor value={f.links} onChange={(links) => setF(x => ({ ...x, links }))} />
       </div>
 
       <div className="flex items-center justify-between pt-2">
@@ -107,8 +89,13 @@ function StartupSettings() {
   const save = async (extra = {}) => {
     setBusy(true);
     try {
-      await api.post('/api/startups/mine', { ...s, ...extra });
-      toast('Startup profile updated', 'success');
+      const payload = { ...s, ...extra };
+      await api.post('/api/startups/mine', payload);
+      // Team lives in its own table — persist it in the same save action.
+      if (Array.isArray(s.team)) await api.put('/api/startups/mine/team', { team: s.team });
+      toast(payload.video_url
+        ? 'Startup profile updated.'
+        : 'Your profile has been saved, but it will go live only once a video is added.', 'success');
     } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   };
   const NUM = [['arr', 'ARR (USD)'], ['mrr', 'MRR (USD)'], ['growth', 'Growth % (MoM)'], ['gross_margin', 'Gross margin %'], ['burn', 'Monthly burn (USD)'], ['runway', 'Runway (months)'], ['cac', 'CAC (USD)'], ['ltv', 'LTV (USD)']];
@@ -118,7 +105,7 @@ function StartupSettings() {
         <h2 className="section-title">Basics and raise</h2>
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Startup name"><input className="input" value={s.name || ''} onChange={set('name')} /></Field>
-          <Field label="City"><input className="input" value={s.city || ''} onChange={set('city')} /></Field>
+          <Field label="City"><CityInput value={s.city || ''} onChange={(city) => setS(x => ({ ...x, city }))} placeholder="Search city — e.g. San Francisco, USA" /></Field>
           <Field label="Sector"><input className="input" value={s.sector || ''} onChange={set('sector')} /></Field>
           <Field label="Sub-sector"><input className="input" value={s.subsector || ''} onChange={set('subsector')} /></Field>
           <Field label="Stage">
@@ -156,14 +143,30 @@ function StartupSettings() {
       </div>
 
       <div className="card p-6 space-y-4">
-        <h2 className="section-title">12-minute pitch video (required)</h2>
+        <h2 className="section-title">Links</h2>
+        <LinksEditor value={s.links} onChange={(links) => setS(x => ({ ...x, links }))} />
+      </div>
+
+      <div className="card p-6 space-y-4">
+        <h2 className="section-title">Team</h2>
+        <p className="text-sm text-mist-400 -mt-2">Add your co-founders and key team members. Shown on your company profile.</p>
+        <TeamEditor value={s.team} onChange={(team) => setS(x => ({ ...x, team }))} />
+      </div>
+
+      <div className="card p-6 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="section-title">12-minute pitch video</h2>
+          {s.video_url ? <span className="chip-green">Live</span> : <span className="chip-gold">Draft — not yet public</span>}
+        </div>
+        <div className="text-xs text-mist-300 bg-gold-500/[0.06] border border-gold-500/30 rounded-lg px-3 py-2">
+          You can save your profile without a video, but it will not go live until a video is added.
+        </div>
         {s.video_url && <video src={s.video_url} controls className="w-full rounded-xl aspect-video bg-black border border-ink-600/60" />}
-        <FileUpload label="Replace pitch video" accept="video/*" currentUrl={s.video_url} hint="12 minutes · max 50 MB" maxBytes={50 * 1024 * 1024}
+        <FileUpload label="Pitch video" accept="video/*" currentUrl={s.video_url} hint="12 minutes · max 50 MB" maxBytes={50 * 1024 * 1024}
           onUploaded={(d) => {
             if (d.duration && d.duration > 12 * 60) { toast(`That video is ${Math.round(d.duration / 60)} minutes. The pitch must be 12 minutes or less.`, 'error'); return; }
             setS(x => ({ ...x, video_url: d.url, video_duration: d.duration || x.video_duration || 0 }));
           }} />
-        {!s.video_url && <div className="text-xs text-red-300">Without a pitch video, your startup stays hidden from Discover.</div>}
       </div>
 
       {s.id && <ManageCollateral startupId={s.id} />}

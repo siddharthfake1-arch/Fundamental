@@ -1,7 +1,7 @@
 const express = require('express');
 const { db, notify, audit, logCollateralAccess, canViewStartup, isListed, addActivity, areConnected, publicUser, fundamentalScore, thesisFit, FUNDING_LADDER, startupSubscribers } = require('../db');
 const { auth, requireRole, requireApprovedInvestor } = require('../authmw');
-const { validateUrlFields, validateNumericFields, clampStrings } = require('../security');
+const { validateUrlFields, validateNumericFields, clampStrings, safeUrl, sanitizeLinks } = require('../security');
 const { streamPrivate, deletePrivate, privateExists } = require('../storage');
 const { J, qstr, qint } = require('../util');
 
@@ -187,6 +187,12 @@ router.post('/mine', requireRole('founder'), (req, res) => {
   for (const jf of ['revenue_series', 'video_chapters', 'use_of_funds']) {
     if (b[jf] !== undefined) data[jf] = JSON.stringify(b[jf]);
   }
+  // Company profile links — validated http(s), normalized, stored as JSON.
+  if (b.links !== undefined) {
+    const r = sanitizeLinks(b.links);
+    if (r.error) return res.status(400).json({ error: r.error });
+    data.links = JSON.stringify(r.links);
+  }
   if (existing) {
     const keys = Object.keys(data);
     if (keys.length) {
@@ -216,7 +222,39 @@ router.post('/mine', requireRole('founder'), (req, res) => {
 router.get('/mine', requireRole('founder'), (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE founder_id=?').get(req.user.id);
   if (!s) return res.json({ startup: null });
-  res.json({ startup: { ...s, revenue_series: J(s.revenue_series), video_chapters: J(s.video_chapters), use_of_funds: J(s.use_of_funds) } });
+  const team = db.prepare('SELECT id, name, role, bio, linkedin, photo FROM team_members WHERE startup_id=? ORDER BY sort_order, id').all(s.id);
+  res.json({
+    startup: { ...s, revenue_series: J(s.revenue_series), video_chapters: J(s.video_chapters), use_of_funds: J(s.use_of_funds), links: J(s.links, []), team },
+    // Live status mirrors backend visibility: a startup is public only with a pitch video.
+    live: isListed(s),
+  });
+});
+
+// Replace the startup's team roster in one transactional save (supports add, edit,
+// and remove from the editor). Each member requires a name; URLs are validated.
+router.put('/mine/team', requireRole('founder'), (req, res) => {
+  const s = db.prepare('SELECT id FROM startups WHERE founder_id=?').get(req.user.id);
+  if (!s) return res.status(400).json({ error: 'Create your startup profile before adding team members.' });
+  const members = req.body.team;
+  if (!Array.isArray(members)) return res.status(400).json({ error: 'Team must be a list.' });
+  if (members.length > 30) return res.status(400).json({ error: 'You can add up to 30 team members.' });
+  const clean = [];
+  for (const m of members) {
+    const name = String((m && m.name) || '').trim().slice(0, 120);
+    if (!name) return res.status(400).json({ error: 'Each team member needs a name.' });
+    const linkedin = m.linkedin ? safeUrl(m.linkedin) : '';
+    if (linkedin === null) return res.status(400).json({ error: `Enter a valid http or https link for ${name}.` });
+    const photo = m.photo ? safeUrl(m.photo) : '';
+    if (photo === null) return res.status(400).json({ error: `Enter a valid photo URL for ${name}.` });
+    clean.push({ name, role: String(m.role || '').trim().slice(0, 120), bio: String(m.bio || '').trim().slice(0, 1000), linkedin: linkedin || '', photo: photo || '' });
+  }
+  const replace = db.transaction(() => {
+    db.prepare('DELETE FROM team_members WHERE startup_id=?').run(s.id);
+    const ins = db.prepare('INSERT INTO team_members (startup_id, name, role, bio, linkedin, photo, sort_order) VALUES (?,?,?,?,?,?,?)');
+    clean.forEach((m, i) => ins.run(s.id, m.name, m.role, m.bio, m.linkedin, m.photo, i));
+  });
+  replace();
+  res.json({ ok: true, team: db.prepare('SELECT id, name, role, bio, linkedin, photo FROM team_members WHERE startup_id=? ORDER BY sort_order, id').all(s.id) });
 });
 
 // Deals co-investors have shared with me. Declared before "/:id" so the literal
@@ -273,6 +311,8 @@ router.get('/:id', dealFlowGate, (req, res) => {
   res.json({
     startup: {
       ...s, revenue_series: J(s.revenue_series), video_chapters: J(s.video_chapters), use_of_funds: J(s.use_of_funds),
+      links: J(s.links, []), live: isListed(s),
+      team: db.prepare('SELECT id, name, role, bio, linkedin, photo FROM team_members WHERE startup_id=? ORDER BY sort_order, id').all(s.id),
       upvotes: db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c,
       upvoted: !!db.prepare('SELECT 1 FROM upvotes WHERE user_id=? AND startup_id=?').get(req.user.id, s.id),
       saved: !!db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(req.user.id, s.id),

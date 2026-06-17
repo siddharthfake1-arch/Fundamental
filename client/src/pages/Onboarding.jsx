@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
-import { Logo, FileUpload, useToast } from '../components/ui';
+import { Logo, FileUpload, CityInput, LinksEditor, TeamEditor, useToast } from '../components/ui';
 
 const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer', 'Other'];
 const STAGES = ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'];
@@ -77,17 +77,21 @@ function AboutYouStep({ me, setMe }) {
       <Field label="Headline"><input className="input" value={me.headline} onChange={set('headline')} placeholder="e.g. Co-founder and CEO, PayLane" /></Field>
       <Field label="Bio"><textarea className="input min-h-[100px]" value={me.bio} onChange={set('bio')} placeholder="A few sentences on who you are. Investors and founders read this on your profile." /></Field>
       <div className="grid sm:grid-cols-2 gap-4">
-        <Field label="City"><input className="input" value={me.city} onChange={set('city')} placeholder="e.g. Riyadh, Bengaluru, London…" /></Field>
+        <Field label="City"><CityInput value={me.city} onChange={(city) => setMe(x => ({ ...x, city }))} placeholder="Search city — e.g. Mumbai, India" /></Field>
         <Field label="LinkedIn URL"><input className="input" value={me.linkedin} onChange={set('linkedin')} placeholder="https://linkedin.com/in/you" /></Field>
       </div>
       <Field label="Education"><input className="input" value={me.education} onChange={set('education')} placeholder="e.g. B.Tech CS, IIT Bombay" /></Field>
       <Field label="Experience"><input className="input" value={me.experience} onChange={set('experience')} placeholder="e.g. ex-Product at Stripe; two-time founder" /></Field>
+      <div className="pt-1"><LinksEditor value={me.links} onChange={(links) => setMe(x => ({ ...x, links }))} /></div>
     </div>
   );
 }
 
 const ME_FIELDS = ['photo', 'cover', 'headline', 'bio', 'city', 'linkedin', 'education', 'experience'];
-const meFromUser = (user) => Object.fromEntries(ME_FIELDS.map(k => [k, user[k] || '']));
+const meFromUser = (user) => ({
+  ...Object.fromEntries(ME_FIELDS.map(k => [k, user[k] || ''])),
+  links: Array.isArray(user.links) ? user.links : [],
+});
 // Server only accepts real http(s) links — quietly add the protocol people omit.
 const normalizeMe = (me) => ({
   ...me,
@@ -105,6 +109,8 @@ function emptyStartup() {
   const s = Object.fromEntries([...S_TEXT, ...S_NUM].map(k => [k, '']));
   s.raising_status = 'Actively Raising';
   s.video_minutes = null;
+  s.links = [];
+  s.team = [];
   return s;
 }
 
@@ -130,6 +136,8 @@ function FounderFlow({ user, refresh }) {
           const next = emptyStartup();
           for (const k of S_TEXT) next[k] = startup[k] || (k === 'raising_status' ? 'Actively Raising' : '');
           for (const k of S_NUM) next[k] = startup[k] ? String(startup[k]) : '';
+          next.links = Array.isArray(startup.links) ? startup.links : [];
+          next.team = Array.isArray(startup.team) ? startup.team : [];
           setS(next);
         }
       } catch { /* no draft yet */ }
@@ -147,12 +155,14 @@ function FounderFlow({ user, refresh }) {
     ...Object.fromEntries(S_TEXT.map(k => [k, s[k]])),
     ...Object.fromEntries(S_NUM.map(k => [k, s[k] === '' ? 0 : Number(s[k]) || 0])),
     founded_year: Number(s.founded_year) || new Date().getFullYear(),
+    links: Array.isArray(s.links) ? s.links : [],
   });
+  const saveTeam = async () => { if (Array.isArray(s.team)) await api.put('/api/startups/mine/team', { team: s.team }); };
 
   const saveDraft = async (silent = false) => {
     try {
       await api.put('/api/users/me', normalizeMe(me));
-      if (s.name) await api.post('/api/startups/mine', startupPayload());
+      if (s.name) { await api.post('/api/startups/mine', startupPayload()); await saveTeam(); }
       localStorage.setItem(draftKey, JSON.stringify({ step })); // never persist private file keys (F-009)
       if (!silent) toast(s.name
         ? 'Progress saved. Sign out any time — you\'ll pick up where you left off.'
@@ -161,18 +171,22 @@ function FounderFlow({ user, refresh }) {
   };
 
   const finish = async () => {
+    // A video is NOT required to finish — the startup is saved as a non-public draft
+    // and goes live automatically once a pitch video is added (enforced server-side).
     if (!s.name.trim()) return toast('Add a startup name to continue.', 'error');
     if (!s.one_liner.trim()) return toast('Add a one-line description — it\'s how investors find you.', 'error');
-    if (!s.video_url) return toast('The 12-minute pitch is required. Your startup won\'t be listed without it.', 'error');
     setBusy(true);
     try {
       await api.put('/api/users/me', normalizeMe(me));
       const { id } = await api.post('/api/startups/mine', startupPayload());
+      await saveTeam();
       for (const d of docs) await api.post(`/api/startups/${id}/collateral`, d);
       await api.post('/api/users/complete-onboarding'); // server validates required artifacts
       localStorage.removeItem(draftKey);
       await refresh();
-      toast('Welcome to Fundamental. Your startup is live.', 'success');
+      toast(s.video_url
+        ? 'Welcome to Fundamental. Your startup is live.'
+        : 'Your profile has been saved, but it will go live only once a video is added.', 'success');
       nav('/dashboard');
     } catch (e) {
       toast(e.message, 'error');
@@ -208,7 +222,7 @@ function FounderFlow({ user, refresh }) {
             <Field label={<>Founded year<Optional /></>}><input type="number" className="input" value={s.founded_year} onChange={set('founded_year')} placeholder={String(new Date().getFullYear())} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Field label={<>City<Optional /></>}><input className="input" value={s.city} onChange={set('city')} placeholder="e.g. Bengaluru, Riyadh, London…" /></Field>
+            <Field label={<>City<Optional /></>}><CityInput value={s.city} onChange={(city) => setS(x => ({ ...x, city }))} placeholder="Search city — e.g. Bengaluru, India" /></Field>
             <Field label={<>Raising amount<Optional /></>}><input className="input" value={s.raising_amount} onChange={set('raising_amount')} placeholder="e.g. $3M" /></Field>
           </div>
           <Field label="Raising status">
@@ -222,8 +236,14 @@ function FounderFlow({ user, refresh }) {
             <FileUpload label="Cover image (optional)" accept="image/*" currentUrl={s.cover} hint="Banner on your startup page"
               onUploaded={(d) => setS(x => ({ ...x, cover: d.url }))} />
           </div>
+          <div className="pt-1"><LinksEditor value={s.links} onChange={(links) => setS(x => ({ ...x, links }))} /></div>
         </div>
       ),
+    },
+    {
+      title: 'Team', sub: 'Optional. Add your co-founders and key team members — investors weigh the team heavily.',
+      valid: true,
+      body: <TeamEditor value={s.team} onChange={(team) => setS(x => ({ ...x, team }))} />,
     },
     {
       title: 'Your story', sub: 'All optional. These fill out your startup page and the AI memo investors generate.',
@@ -266,12 +286,15 @@ function FounderFlow({ user, refresh }) {
       ),
     },
     {
-      title: 'Upload your 12-minute pitch', sub: 'Required. Every startup on Fundamental opens with a video pitch — the first thing investors see.',
+      title: 'Upload your 12-minute pitch', sub: 'Every startup on Fundamental opens with a video pitch — the first thing investors see.',
       valid: true,
       body: (
         <div className="space-y-4">
           <div className="card p-4 border-gold-500/30 bg-gold-500/5 text-sm text-mist-300 leading-relaxed">
-            <span className="font-semibold text-gold-300">The 12-minute format:</span> introduction and team → problem → solution → product demo → market and business model → traction → the round. Twelve minutes maximum. Your startup is not listed in Discover without it.
+            <span className="font-semibold text-gold-300">The 12-minute format:</span> introduction and team → problem → solution → product demo → market and business model → traction → the round. Twelve minutes maximum.
+          </div>
+          <div className="card p-3 border-gold-500/30 bg-gold-500/[0.06] text-sm text-mist-300">
+            You can save your profile without a video, but it will not go live until a video is added.
           </div>
           <VideoStep s={s} setS={setS} toast={toast} />
         </div>
@@ -298,7 +321,7 @@ function FounderFlow({ user, refresh }) {
       <button className="btn-ghost w-full mt-3 !text-mist-400" onClick={() => saveDraft()}>
         Save and finish later
       </button>
-      <p className="text-[11px] text-mist-500 text-center mt-2">Only the one-line description and the pitch video are required. You can add the rest any time from Settings.</p>
+      <p className="text-[11px] text-mist-500 text-center mt-2">Only the one-line description is required. Your startup goes live once you add a pitch video — you can do that any time from Settings.</p>
     </Shell>
   );
 }
@@ -306,8 +329,8 @@ function FounderFlow({ user, refresh }) {
 function VideoStep({ s, setS, toast }) {
   return (
     <div className="space-y-4">
-      <FileUpload label="Pitch Video (max 12 minutes — mandatory)" accept="video/*" currentUrl={s.video_url}
-        hint="MP4 / WebM / MOV, up to 600MB"
+      <FileUpload label="Pitch video (max 12 minutes)" accept="video/*" currentUrl={s.video_url} maxBytes={50 * 1024 * 1024}
+        hint="MP4 / WebM / MOV, up to 50 MB"
         onUploaded={async (d, file) => {
           // Prefer the server-verified duration; fall back to client measurement.
           const dur = d.duration || await videoDuration(file);

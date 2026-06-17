@@ -244,6 +244,72 @@ async function run() {
     assert.ok(!fs.existsSync(privPath), 'private document deleted');
   });
 
+  await test('startup links are saved and returned, with bad URLs rejected', async () => {
+    const f = makeClient();
+    await f('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' });
+    const bad = await f('POST', '/api/startups/mine', { links: [{ label: 'x', url: 'javascript:alert(1)' }] });
+    assert.strictEqual(bad.status, 400, 'javascript: link must be rejected');
+    const okRes = await f('POST', '/api/startups/mine', { links: [{ label: 'Site', url: 'https://paylane.example' }, { label: '', url: '' }] });
+    assert.strictEqual(okRes.status, 200, 'valid links saved');
+    const mine = await (await f('GET', '/api/startups/mine')).json();
+    assert.deepStrictEqual(mine.startup.links, [{ label: 'Site', url: 'https://paylane.example' }], 'links returned, blank dropped');
+  });
+
+  await test('founder can save a startup without a video; it stays a non-public draft', async () => {
+    const c = makeClient();
+    await getOtpAndSignup(c, `draft_${Date.now()}@example.com`, 'founder');
+    const mk = await c('POST', '/api/startups/mine', { name: 'DraftCo', one_liner: 'No video yet' });
+    assert.strictEqual(mk.status, 200, 'save without video allowed');
+    const mine = await (await c('GET', '/api/startups/mine')).json();
+    assert.strictEqual(mine.live, false, 'no video → not live');
+    const sid = mine.startup.id;
+    // Owner can view their own draft.
+    assert.strictEqual((await c('GET', `/api/startups/${sid}`)).status, 200, 'owner sees own draft');
+    // An approved investor cannot see the draft, and it is absent from Discover.
+    const inv = makeClient();
+    await inv('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    assert.strictEqual((await inv('GET', `/api/startups/${sid}`)).status, 404, 'draft hidden from others');
+    const disc = await (await inv('GET', '/api/startups?limit=60')).json();
+    assert.ok(!disc.startups.some(t => t.id === sid), 'draft excluded from Discover');
+    // Onboarding can be completed without a video.
+    assert.strictEqual((await c('POST', '/api/users/complete-onboarding')).status, 200, 'finish without video');
+  });
+
+  await test('team members can be added, edited, removed, and are returned on the profile', async () => {
+    const c = makeClient();
+    await getOtpAndSignup(c, `team_${Date.now()}@example.com`, 'founder');
+    await c('POST', '/api/startups/mine', { name: 'TeamCo', one_liner: 'we hire' });
+    const sid = (await (await c('GET', '/api/startups/mine')).json()).startup.id;
+    // Add two.
+    let r = await c('PUT', '/api/startups/mine/team', { team: [
+      { name: 'Asha Rao', role: 'CEO', linkedin: 'https://linkedin.com/in/asha' },
+      { name: 'Ben Cole', role: 'CTO' },
+    ] });
+    assert.strictEqual(r.status, 200);
+    let team = (await r.json()).team;
+    assert.strictEqual(team.length, 2, 'two members saved');
+    // Missing name is rejected.
+    const badRes = await c('PUT', '/api/startups/mine/team', { team: [{ role: 'noname' }] });
+    assert.strictEqual(badRes.status, 400, 'name required');
+    // Edit + remove (replace roster with one edited member).
+    r = await c('PUT', '/api/startups/mine/team', { team: [{ name: 'Asha Rao', role: 'Founder & CEO' }] });
+    team = (await r.json()).team;
+    assert.strictEqual(team.length, 1, 'removed down to one');
+    assert.strictEqual(team[0].role, 'Founder & CEO', 'edit persisted');
+    // Returned on the full profile.
+    const detail = await (await c('GET', `/api/startups/${sid}`)).json();
+    assert.strictEqual(detail.startup.team.length, 1, 'team rendered on profile payload');
+  });
+
+  await test('city search returns deduped "City, Country" results', async () => {
+    const c = makeClient();
+    await c('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    const d = await (await c('GET', '/api/cities?q=mumbai')).json();
+    assert.ok(Array.isArray(d.cities) && d.cities.includes('Mumbai, India'), 'returns Mumbai, India');
+    assert.strictEqual(new Set(d.cities).size, d.cities.length, 'no duplicate city-country pairs');
+    assert.ok(d.cities.every(x => /, /.test(x)), 'all results normalized to City, Country');
+  });
+
   console.log(results.join('\n'));
   console.log(`\n${passed} route tests passed.`);
 }
