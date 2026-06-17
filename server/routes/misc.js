@@ -268,4 +268,15 @@ router.post('/admin/posts/:id/remove', (req, res) => {
   res.json({ ok: true });
 });
 
+// Read-only browser for client-side render errors captured from the ErrorBoundary.
+// Joins the user name when the crash happened in a signed-in session.
+router.get('/admin/client-errors', (req, res) => {
+  const limit = qint(req.query.limit, 100, 200), offset = qint(req.query.offset, 0);
+  const total = db.prepare('SELECT COUNT(*) c FROM client_errors').get().c;
+  const errors = db.prepare(`SELECT ce.id, ce.message, ce.stack, ce.component_stack, ce.path, ce.user_agent, ce.ip, ce.created_at,
+      ce.user_id, u.name user_name FROM client_errors ce LEFT JOIN users u ON u.id=ce.user_id
+    ORDER BY ce.id DESC LIMIT ? OFFSET ?`).all(limit, offset);
+  res.json({ total, limit, offset, errors });
+});
+
 module.exports = router;

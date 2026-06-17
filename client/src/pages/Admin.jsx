@@ -9,7 +9,7 @@ export default function Admin() {
   const [tab, setTab] = useState('analytics');
   if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
-  const tabs = [['analytics', 'Platform analytics'], ['users', 'Verify users'], ['startups', 'Verify startups'], ['content', 'Moderate content'], ['reports', 'Reports']];
+  const tabs = [['analytics', 'Platform analytics'], ['users', 'Verify users'], ['startups', 'Verify startups'], ['content', 'Moderate content'], ['reports', 'Reports'], ['errors', 'Errors']];
   return (
     <div className="fade-in">
       <h1 className="h-display text-2xl mb-1">Admin</h1>
@@ -25,6 +25,7 @@ export default function Admin() {
       {tab === 'startups' && <StartupsAdmin />}
       {tab === 'content' && <Content />}
       {tab === 'reports' && <Reports />}
+      {tab === 'errors' && <ClientErrors />}
     </div>
   );
 }
@@ -218,6 +219,45 @@ function Reports() {
             <div className="flex gap-2">
               <button className="btn-primary btn-sm" onClick={async () => { await api.post(`/api/admin/reports/${r.id}/resolve`); load(); toast('Resolved', 'success'); }}>Resolve</button>
               <button className="btn-ghost btn-sm" onClick={async () => { await api.post(`/api/admin/reports/${r.id}/dismiss`); load(); }}>Dismiss</button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Read-only browser for client-side render errors captured from the ErrorBoundary.
+function ClientErrors() {
+  const [d, setD] = useState(null);
+  const [open, setOpen] = useState(null); // id of the expanded row
+  useEffect(() => { api.get('/api/admin/client-errors').then(setD).catch(() => setD({ errors: [], total: 0 })); }, []);
+  if (!d) return <Spinner />;
+  const errors = asArray(d.errors);
+  return errors.length === 0 ? <Empty title="No client errors" sub="Render crashes captured from users' browsers will appear here." /> : (
+    <div className="space-y-2 max-w-3xl">
+      <p className="text-xs text-mist-500">{d.total} captured · showing the {errors.length} most recent. Auto-pruned after 30 days.</p>
+      {errors.map(e => (
+        <div key={e.id} className="card p-4">
+          <button className="w-full text-left" onClick={() => setOpen(o => o === e.id ? null : e.id)}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="chip-red">error</span>
+              <code className="text-xs text-mist-300">{e.path || '—'}</code>
+              <span className="text-[11px] text-mist-500 ml-auto">{e.user_name ? `${e.user_name} · ` : ''}{timeAgo(e.created_at)}</span>
+            </div>
+            <p className="text-sm text-mist-100 mt-1.5 break-words">{e.message || '(no message)'}</p>
+          </button>
+          {open === e.id && (
+            <div className="mt-3 pt-3 border-t border-ink-700/50 space-y-2">
+              {e.component_stack && (
+                <div><div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-1">Component stack</div>
+                  <pre className="text-[11px] text-mist-400 whitespace-pre-wrap break-words bg-ink-900 rounded-lg p-2.5 max-h-48 overflow-auto">{e.component_stack}</pre></div>
+              )}
+              {e.stack && (
+                <div><div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500 mb-1">Stack</div>
+                  <pre className="text-[11px] text-mist-400 whitespace-pre-wrap break-words bg-ink-900 rounded-lg p-2.5 max-h-48 overflow-auto">{e.stack}</pre></div>
+              )}
+              <div className="text-[11px] text-mist-500 break-words">{e.user_agent || '—'}{e.ip ? ` · ${e.ip}` : ''}</div>
             </div>
           )}
         </div>
