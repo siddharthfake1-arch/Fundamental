@@ -268,6 +268,35 @@ router.post('/admin/posts/:id/remove', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---- Community moderation ----
+// Member-created communities require admin approval before they go live.
+router.get('/admin/communities', (req, res) => {
+  const rows = db.prepare(`SELECT c.*, u.name creator_name,
+      (SELECT COUNT(*) FROM community_members m WHERE m.community_id=c.id) members,
+      (SELECT COUNT(*) FROM community_posts p WHERE p.community_id=c.id) posts
+    FROM communities c LEFT JOIN users u ON u.id=c.created_by
+    ORDER BY CASE c.status WHEN 'pending' THEN 0 ELSE 1 END, c.id DESC`).all();
+  res.json({ communities: rows });
+});
+router.post('/admin/communities/:id/approve', (req, res) => {
+  const c = db.prepare('SELECT * FROM communities WHERE id=?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'We could not find that community.' });
+  db.prepare("UPDATE communities SET status='approved' WHERE id=?").run(c.id);
+  audit(req.user.id, 'community-approve', { targetType: 'community', targetId: c.id, detail: c.name, ip: req.ip });
+  if (c.created_by) notify(c.created_by, 'Community Approved', `Your community “${c.name}” is now live. Invite people to join the discussion.`, `/communities/${c.slug}`);
+  res.json({ ok: true });
+});
+router.post('/admin/communities/:id/delete', (req, res) => {
+  const c = db.prepare('SELECT * FROM communities WHERE id=?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'We could not find that community.' });
+  const wasPending = c.status === 'pending';
+  db.prepare('DELETE FROM communities WHERE id=?').run(c.id); // cascades members/posts/replies
+  audit(req.user.id, wasPending ? 'community-reject' : 'community-remove', { targetType: 'community', targetId: c.id, detail: c.name, ip: req.ip });
+  if (c.created_by) notify(c.created_by, wasPending ? 'Community Declined' : 'Community Removed',
+    wasPending ? `Your community “${c.name}” was not approved. Contact support if you have questions.` : `Your community “${c.name}” was removed by a moderator.`);
+  res.json({ ok: true });
+});
+
 // Read-only browser for client-side render errors captured from the ErrorBoundary.
 // Joins the user name when the crash happened in a signed-in session.
 router.get('/admin/client-errors', (req, res) => {

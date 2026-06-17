@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Empty, LineChart, Spinner, Stat, useToast } from '../components/ui';
 
+const TAB_KEYS = ['analytics', 'users', 'startups', 'communities', 'content', 'reports', 'errors'];
+
 export default function Admin() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('analytics');
+  const [params, setParams] = useSearchParams();
+  // Deep-linkable tab (e.g. the "Community Review" notification links to ?tab=communities).
+  const tab = TAB_KEYS.includes(params.get('tab')) ? params.get('tab') : 'analytics';
+  const setTab = (t) => setParams({ tab: t });
   if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
-  const tabs = [['analytics', 'Platform analytics'], ['users', 'Verify users'], ['startups', 'Verify startups'], ['content', 'Moderate content'], ['reports', 'Reports'], ['errors', 'Errors']];
+  const tabs = [['analytics', 'Platform analytics'], ['users', 'Verify users'], ['startups', 'Verify startups'], ['communities', 'Communities'], ['content', 'Moderate content'], ['reports', 'Reports'], ['errors', 'Errors']];
   return (
     <div className="fade-in">
       <h1 className="h-display text-2xl mb-1">Admin</h1>
@@ -23,6 +28,7 @@ export default function Admin() {
       {tab === 'analytics' && <Analytics />}
       {tab === 'users' && <Users />}
       {tab === 'startups' && <StartupsAdmin />}
+      {tab === 'communities' && <CommunitiesAdmin />}
       {tab === 'content' && <Content />}
       {tab === 'reports' && <Reports />}
       {tab === 'errors' && <ClientErrors />}
@@ -223,6 +229,51 @@ function Reports() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+function CommunitiesAdmin() {
+  const [list, setList] = useState(null);
+  const toast = useToast();
+  const load = () => api.get('/api/admin/communities').then(d => setList(asArray(d.communities))).catch(() => {});
+  useEffect(() => { load(); }, []);
+  if (!list) return <Spinner />;
+  return list.length === 0 ? <Empty title="No communities yet" sub="Member-submitted communities will appear here for review." /> : (
+    <div className="card overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead><tr className="text-left text-[11px] uppercase tracking-wider text-mist-500 border-b border-ink-700/60">
+          {['Community', 'Type', 'Created by', 'Members', 'Posts', 'Status', 'Actions'].map(h => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {list.map(c => (
+            <tr key={c.id} className="border-b border-ink-700/40 last:border-0 hover:bg-ink-850">
+              <td className="px-4 py-3">
+                <Link to={`/communities/${c.slug}`} className="font-medium text-mist-100 hover:text-gold-300">{c.name}</Link>
+                {c.description && <div className="text-[11px] text-mist-500 max-w-xs truncate">{c.description}</div>}
+              </td>
+              <td className="px-4 py-3 capitalize text-mist-300">{c.kind}</td>
+              <td className="px-4 py-3 text-mist-400">{c.creator_name || '—'}</td>
+              <td className="px-4 py-3 text-mist-400 tabular-nums">{c.members}</td>
+              <td className="px-4 py-3 text-mist-400 tabular-nums">{c.posts}</td>
+              <td className="px-4 py-3">
+                {c.status === 'pending' ? <span className="chip-gold">Pending</span> : <span className="chip-green">Live</span>}
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex gap-2">
+                  {c.status === 'pending' && (
+                    <button className="btn-primary btn-sm" onClick={async () => { await api.post(`/api/admin/communities/${c.id}/approve`); load(); toast('Community approved — now live', 'success'); }}>Approve</button>
+                  )}
+                  <button className="btn-danger btn-sm" onClick={async () => {
+                    if (!window.confirm(`${c.status === 'pending' ? 'Decline' : 'Delete'} "${c.name}"? ${c.status === 'pending' ? '' : 'This removes the community and all its discussions.'}`)) return;
+                    await api.post(`/api/admin/communities/${c.id}/delete`); load(); toast(c.status === 'pending' ? 'Community declined' : 'Community deleted', 'success');
+                  }}>{c.status === 'pending' ? 'Decline' : 'Delete'}</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

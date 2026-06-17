@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Users, MessageSquare, ArrowLeft } from 'lucide-react';
+import { Users, MessageSquare, ArrowLeft, Plus } from 'lucide-react';
 import { api, asArray, asObject, timeAgo } from '../api';
-import { Avatar, Empty, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 const KIND_LABEL = { topic: 'Topics', city: 'Cities', role: 'Roles' };
+const KIND_OPTIONS = [['topic', 'Topic', 'A theme, sector, or interest — e.g. Fintech, AI, Fundraising'], ['city', 'City', 'A place — e.g. Bengaluru, London, San Francisco'], ['role', 'Role', 'A function — e.g. Founders, Angels, Operators']];
 
 export default function Communities() {
   const { slug } = useParams();
@@ -14,9 +15,11 @@ export default function Communities() {
 
 function CommunityIndex() {
   const [list, setList] = useState(null);
+  const [pending, setPending] = useState([]);
   const [q, setQ] = useState('');
+  const [creating, setCreating] = useState(false);
   const toast = useToast();
-  const load = () => api.get('/api/communities').then(d => setList(asArray(d.communities))).catch(e => toast(e.message, 'error'));
+  const load = () => api.get('/api/communities').then(d => { setList(asArray(d.communities)); setPending(asArray(d.pending)); }).catch(e => toast(e.message, 'error'));
   useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
 
@@ -35,8 +38,29 @@ function CommunityIndex() {
           <h1 className="h-display text-2xl">Communities</h1>
           <p className="text-sm text-mist-400 mt-1">Where founders, investors, and operators share what they know.</p>
         </div>
-        <input className="input !w-64" aria-label="Search" placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="flex gap-2">
+          <input className="input !w-56" aria-label="Search" placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button className="btn-primary whitespace-nowrap" onClick={() => setCreating(true)}><Plus className="w-4 h-4" /> New community</button>
+        </div>
       </div>
+
+      {pending.length > 0 && (
+        <div className="card p-4 mt-5 border-gold-500/30 bg-gold-500/[0.04]">
+          <div className="section-title mb-2">Your submissions</div>
+          <div className="space-y-2">
+            {pending.map(c => (
+              <div key={c.id} className="flex items-center gap-3 flex-wrap">
+                <span className="font-display font-bold text-mist-100 text-sm">{c.name}</span>
+                <span className="chip capitalize">{c.kind}</span>
+                <span className="chip-gold">Pending review</span>
+                <span className="text-xs text-mist-500">An admin will review it shortly. You'll be notified when it goes live.</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <CreateCommunityModal open={creating} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); load(); }} />
       <div className="mb-7" />
       {kinds.length === 0 && <Empty title="No communities match your search" sub="Try a different term." />}
       {kinds.map(kind => (
@@ -70,23 +94,109 @@ function CommunityIndex() {
   );
 }
 
+function CreateCommunityModal({ open, onClose, onCreated }) {
+  const [f, setF] = useState({ name: '', kind: 'topic', description: '' });
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const submit = async () => {
+    if (f.name.trim().length < 3) return toast('Give your community a name (at least 3 characters).', 'error');
+    setBusy(true);
+    try {
+      await api.post('/api/communities', f);
+      toast('Submitted for review — it will go live once an admin approves it.', 'success');
+      setF({ name: '', kind: 'topic', description: '' });
+      onCreated();
+    } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <Modal open={open} onClose={onClose} title="Create a community">
+      <div className="space-y-4">
+        <p className="text-sm text-mist-400">Anyone can start a community. An admin reviews it once, then it goes live for people to join, post, and discuss.</p>
+        <label className="block"><span className="label">Name</span>
+          <input className="input" maxLength={60} value={f.name} placeholder="e.g. Climate Founders" onChange={(e) => setF(x => ({ ...x, name: e.target.value }))} /></label>
+        <div>
+          <span className="label">Type</span>
+          <div className="grid sm:grid-cols-3 gap-2">
+            {KIND_OPTIONS.map(([v, t, hint]) => (
+              <button type="button" key={v} onClick={() => setF(x => ({ ...x, kind: v }))}
+                className={`rounded-xl border p-3 text-left transition-all ${f.kind === v ? 'border-gold-500/70 bg-gold-500/10' : 'border-ink-600/70 bg-ink-850 hover:border-ink-500'}`}>
+                <div className={`font-display font-bold text-sm ${f.kind === v ? 'text-gold-300' : 'text-mist-100'}`}>{t}</div>
+                <div className="text-[11px] text-mist-400 mt-1 leading-snug">{hint}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="block"><span className="label">Description <span className="normal-case font-normal text-mist-500">(optional)</span></span>
+          <textarea className="input min-h-[80px]" maxLength={300} value={f.description} placeholder="What is this community about, and who should join?" onChange={(e) => setF(x => ({ ...x, description: e.target.value }))} /></label>
+        <div className="flex justify-end gap-2">
+          <button className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn-primary" disabled={busy} onClick={submit}>{busy ? 'Submitting…' : 'Submit for review'}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// In-community networking: see who's here, view profiles, and connect.
+function MembersPanel({ slug }) {
+  const [members, setMembers] = useState(null);
+  const toast = useToast();
+  const load = () => api.get(`/api/communities/${slug}/members`).then(d => setMembers(asArray(d.members))).catch(() => setMembers([]));
+  useEffect(() => { load(); }, [slug]);
+  const connect = async (id) => {
+    try { await api.post(`/api/users/connect/${id}`); toast('Connection request sent', 'success'); load(); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  if (!members) return <div className="card p-4 mb-5"><Spinner /></div>;
+  return (
+    <div className="card p-4 mb-5">
+      <div className="section-title mb-3">Members</div>
+      <div className="grid sm:grid-cols-2 gap-2">
+        {members.map(m => (
+          <div key={m.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3 py-2">
+            <Link to={`/profile/${m.id}`}><Avatar src={m.photo} name={m.name} size={9} /></Link>
+            <div className="min-w-0 flex-1">
+              <Link to={`/profile/${m.id}`} className="flex items-center gap-1 text-sm font-semibold text-mist-100 hover:text-gold-300 truncate">
+                {m.name}{!!m.verified && <VerifiedBadge small tier={m.verified} />}
+              </Link>
+              <div className="text-[11px] text-mist-500 capitalize truncate">{m.headline || m.role}</div>
+            </div>
+            {!m.is_me && (
+              m.connection === 'accepted' ? <span className="chip-green shrink-0">Connected</span>
+              : m.connection === 'pending' ? <span className="chip shrink-0">Pending</span>
+              : <button className="btn-ghost btn-sm shrink-0" onClick={() => connect(m.id)}>Connect</button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CommunityDetail({ slug }) {
   const [d, setD] = useState(null);
   const [composer, setComposer] = useState(false);
   const [f, setF] = useState({ title: '', body: '' });
   const toast = useToast();
   const nav = useNavigate();
+  const [showMembers, setShowMembers] = useState(false);
   const load = () => api.get(`/api/communities/${slug}`).then(setD).catch(e => toast(e.message, 'error'));
   useEffect(() => { setD(null); load(); }, [slug]);
   if (!d) return <Spinner />;
   const c = asObject(d.community);
   const posts = asArray(d.posts);
+  const isPending = c.status && c.status !== 'approved';
 
   return (
     <div className="max-w-3xl mx-auto fade-in">
       <button onClick={() => nav('/communities')} className="flex items-center gap-1.5 text-sm text-mist-400 hover:text-mist-100 mb-4">
         <ArrowLeft className="w-4 h-4" /> Back to communities
       </button>
+      {isPending && (
+        <div className="card p-4 mb-5 border-gold-500/30 bg-gold-500/[0.04] text-sm text-gold-200">
+          This community is <span className="font-semibold">pending admin approval</span>. It isn't visible to others and you can't post until it goes live.
+        </div>
+      )}
       <div className="card p-6 mb-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -96,16 +206,20 @@ function CommunityDetail({ slug }) {
             </div>
             <p className="text-sm text-mist-400 mt-1.5 max-w-lg">{c.description}</p>
             <div className="flex items-center gap-4 mt-3 text-xs text-mist-500">
-              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {c.members} members</span>
+              <button className="flex items-center gap-1 hover:text-mist-300" onClick={() => setShowMembers(s => !s)}><Users className="w-3.5 h-3.5" /> {c.members} members</button>
               <span className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> {c.posts} discussions</span>
             </div>
           </div>
-          <button className={c.joined ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'}
-            onClick={async () => { await api.post(`/api/communities/${slug}/join`); load(); }}>
-            {c.joined ? 'Leave' : 'Join community'}
-          </button>
+          {!isPending && (
+            <button className={c.joined ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'}
+              onClick={async () => { try { await api.post(`/api/communities/${slug}/join`); load(); } catch (e) { toast(e.message, 'error'); } }}>
+              {c.joined ? 'Leave' : 'Join community'}
+            </button>
+          )}
         </div>
       </div>
+
+      {showMembers && <MembersPanel slug={slug} />}
 
       {c.joined && (
         <div className="card p-4 mb-5">

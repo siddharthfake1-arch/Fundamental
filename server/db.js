@@ -293,6 +293,10 @@ for (const stmt of [
   "ALTER TABLE messages ADD COLUMN attachment_name TEXT DEFAULT ''",
   "ALTER TABLE startups ADD COLUMN hidden INTEGER DEFAULT 0",             // admin can hide a startup from the marketplace
   "ALTER TABLE users ADD COLUMN links TEXT DEFAULT '[]'",                 // up to 10 user-added profile links [{label,url}]
+  // Member-created communities: who created it + an approval gate. Default 'approved'
+  // so pre-existing/seeded communities stay live; user submissions are set 'pending'.
+  "ALTER TABLE communities ADD COLUMN created_by INTEGER",
+  "ALTER TABLE communities ADD COLUMN status TEXT DEFAULT 'approved'",
 ]) { try { db.exec(stmt); } catch { /* column exists */ } }
 
 // Demo accounts (dev only) are pre-approved and pre-consented so the seeded
