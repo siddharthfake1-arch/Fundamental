@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-do
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import Nav from './components/Nav';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Spinner } from './components/ui';
 import Auth from './pages/Auth';
 import Landing from './pages/Landing';
@@ -53,13 +54,17 @@ export default function App() {
   return (
     <div className="min-h-screen">
       {loc.pathname !== '/onboarding' && <Nav />}
-      <motion.main
-        key={loc.pathname}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-        className="max-w-7xl mx-auto px-4 py-6 pb-20">
-        <Routes>
+      {/* Route-scoped boundary: a page render crash is caught here and auto-clears
+          when the route changes (resetKey), so one bad page never traps the session.
+          Nav stays mounted above it, so the user can always navigate away. */}
+      <ErrorBoundary resetKey={loc.pathname + loc.search}>
+        <motion.main
+          key={loc.pathname}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="max-w-7xl mx-auto px-4 py-6 pb-20">
+          <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/discover" element={<Discover />} />
@@ -80,8 +85,9 @@ export default function App() {
           <Route path="/legal/:doc" element={<Legal />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<Navigate to="/discover" replace />} />
-        </Routes>
-      </motion.main>
+          </Routes>
+        </motion.main>
+      </ErrorBoundary>
     </div>
   );
 }

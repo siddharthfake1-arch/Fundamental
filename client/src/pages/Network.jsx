@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, asArray } from '../api';
 import { Avatar, Empty, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer'];
@@ -22,8 +22,8 @@ export default function Network() {
   }, [filters]);
 
   const load = () => {
-    api.get('/api/users/network?' + qs).then(d => setUsers(d.users)).catch(e => toast(e.message, 'error'));
-    api.get('/api/users/connections').then(setConns).catch(() => {});
+    api.get('/api/users/network?' + qs).then(d => setUsers(asArray(d.users))).catch(e => toast(e.message, 'error'));
+    api.get('/api/users/connections').then(d => setConns({ pending: asArray(d.pending), accepted: asArray(d.accepted) })).catch(() => {});
   };
   useEffect(load, [qs]);
 

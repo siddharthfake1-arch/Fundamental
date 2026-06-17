@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Users, MessageSquare, ArrowLeft } from 'lucide-react';
-import { api, timeAgo } from '../api';
+import { api, asArray, asObject, timeAgo } from '../api';
 import { Avatar, Empty, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 const KIND_LABEL = { topic: 'Topics', city: 'Cities', role: 'Roles' };
@@ -16,7 +16,7 @@ function CommunityIndex() {
   const [list, setList] = useState(null);
   const [q, setQ] = useState('');
   const toast = useToast();
-  const load = () => api.get('/api/communities').then(d => setList(d.communities)).catch(e => toast(e.message, 'error'));
+  const load = () => api.get('/api/communities').then(d => setList(asArray(d.communities))).catch(e => toast(e.message, 'error'));
   useEffect(load, []);
   if (!list) return <Spinner />;
 
@@ -25,7 +25,7 @@ function CommunityIndex() {
     catch (e) { toast(e.message, 'error'); }
   };
 
-  const filtered = list.filter(c => (c.name + ' ' + c.description).toLowerCase().includes(q.toLowerCase()));
+  const filtered = list.filter(c => String((c.name || '') + ' ' + (c.description || '')).toLowerCase().includes(q.toLowerCase()));
   const kinds = ['topic', 'city', 'role'].filter(kind => filtered.some(c => c.kind === kind));
 
   return (
@@ -79,7 +79,8 @@ function CommunityDetail({ slug }) {
   const load = () => api.get(`/api/communities/${slug}`).then(setD).catch(e => toast(e.message, 'error'));
   useEffect(() => { setD(null); load(); }, [slug]);
   if (!d) return <Spinner />;
-  const { community: c, posts } = d;
+  const c = asObject(d.community);
+  const posts = asArray(d.posts);
 
   return (
     <div className="max-w-3xl mx-auto fade-in">
@@ -145,7 +146,7 @@ function Thread({ p }) {
   const [replies, setReplies] = useState(null);
   const [reply, setReply] = useState('');
   const toast = useToast();
-  const loadReplies = () => api.get(`/api/communities/posts/${p.id}/replies`).then(d => setReplies(d.replies)).catch(() => {});
+  const loadReplies = () => api.get(`/api/communities/posts/${p.id}/replies`).then(d => setReplies(asArray(d.replies))).catch(() => {});
 
   return (
     <motion.article initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="card p-5">

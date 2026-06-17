@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, timeAgo } from '../api';
+import { api, asArray, asObject, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, BarBreakdown, CoverHero, Empty, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
@@ -21,6 +21,13 @@ export default function Profile() {
   if (!d) return <Spinner />;
   const u = d.user;
   const self = u.id === me.id;
+  const investor = d.investor ? { ...asObject(d.investor), stage_focus: asArray(d.investor.stage_focus), sector_focus: asArray(d.investor.sector_focus) } : null;
+  const userLinks = asArray(u.links);
+  const userBadges = asArray(u.badges);
+  const posts = asArray(d.posts);
+  const activity = asArray(d.activity);
+  const startups = asArray(d.startups);
+  const portfolioStartups = asArray(d.portfolio_startups);
 
   const act = async (fn, ok) => { try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } };
 
@@ -44,10 +51,10 @@ export default function Profile() {
               )}
             </div>
             {u.headline && <div className="text-sm text-gold-300/90 font-medium mt-1">{u.headline}</div>}
-            <div className="text-xs text-mist-400 mt-1">{u.city}{d.investor?.fund_name && ` · ${d.investor.fund_name}`}</div>
-            {u.badges?.length > 0 && (
+            <div className="text-xs text-mist-400 mt-1">{u.city}{investor?.fund_name && ` · ${investor.fund_name}`}</div>
+            {userBadges.length > 0 && (
               <div className="flex gap-2 flex-wrap mt-3">
-                {u.badges.map(b => <span key={b} className={BADGE_STYLES[b] || 'chip'}>★ {b}</span>)}
+                {userBadges.map(b => <span key={b} className={BADGE_STYLES[b] || 'chip'}>★ {b}</span>)}
               </div>
             )}
             <div className="flex items-center gap-4 mt-3 text-sm">
@@ -85,24 +92,24 @@ export default function Profile() {
       </CoverHero>
 
       {/* Investor: fund header + thesis */}
-      {u.role === 'investor' && d.investor && (
+      {u.role === 'investor' && investor && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[['Fund', d.investor.fund_name || '—'], ['Fund Size', d.investor.fund_size || '—'], ['Check Size', d.investor.check_size || '—'],
-              ['Focus', [...d.investor.stage_focus, ...d.investor.sector_focus].slice(0, 3).join(', ') || '—']].map(([k, v]) => (
+            {[['Fund', investor.fund_name || '—'], ['Fund Size', investor.fund_size || '—'], ['Check Size', investor.check_size || '—'],
+              ['Focus', [...investor.stage_focus, ...investor.sector_focus].slice(0, 3).join(', ') || '—']].map(([k, v]) => (
               <div key={k} className="card p-4">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">{k}</div>
                 <div className="text-sm font-semibold text-mist-100 mt-1 leading-snug">{v}</div>
               </div>
             ))}
           </div>
-          {d.investor.thesis && (
+          {investor.thesis && (
             <div className="card p-6">
               <h2 className="section-title mb-3">Investment thesis</h2>
-              <p className="text-[15px] text-mist-200 leading-relaxed">“{d.investor.thesis}”</p>
+              <p className="text-[15px] text-mist-200 leading-relaxed">“{investor.thesis}”</p>
               <div className="flex gap-2 flex-wrap mt-4">
-                {d.investor.sector_focus.map(s => <span key={s} className="chip-gold">{s}</span>)}
-                {d.investor.stage_focus.map(s => <span key={s} className="chip">{s}</span>)}
+                {investor.sector_focus.map(s => <span key={s} className="chip-gold">{s}</span>)}
+                {investor.stage_focus.map(s => <span key={s} className="chip">{s}</span>)}
               </div>
             </div>
           )}
@@ -151,11 +158,11 @@ export default function Profile() {
       )}
 
       {/* Links */}
-      {u.links?.length > 0 && (
+      {userLinks.length > 0 && (
         <div className="card p-6">
           <h2 className="section-title mb-4">Links</h2>
           <div className="flex flex-wrap gap-2">
-            {u.links.map((l, i) => (
+            {userLinks.map((l, i) => (
               <a key={i} href={l.url} target="_blank" rel="noreferrer noopener"
                 className="btn-ghost btn-sm max-w-full truncate">
                 {(l.label || l.url.replace(/^https?:\/\/(www\.)?/, '')).slice(0, 60)} ↗
@@ -166,11 +173,11 @@ export default function Profile() {
       )}
 
       {/* Startups / Portfolio */}
-      {(d.startups?.length > 0 || d.portfolio_startups?.length > 0) && (
+      {(startups.length > 0 || portfolioStartups.length > 0) && (
         <div className="card p-6">
           <h2 className="section-title mb-4">{u.role === 'founder' ? 'Startups' : 'Portfolio'}</h2>
           <div className="grid sm:grid-cols-2 gap-3">
-            {(d.startups || d.portfolio_startups).map(s => (
+            {(startups.length > 0 ? startups : portfolioStartups).map(s => (
               <Link key={s.id} to={`/startup/${s.id}`} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl p-3.5 hover:border-ink-500 transition-colors">
                 <Avatar src={s.logo} name={s.name} size={11} square />
                 <div className="min-w-0">
@@ -187,17 +194,17 @@ export default function Profile() {
       {/* Activity */}
       <div className="card p-6">
         <h2 className="section-title mb-4">Activity</h2>
-        {(d.activity?.length || 0) === 0 && d.posts.length === 0 ? (
+        {activity.length === 0 && posts.length === 0 ? (
           <div className="text-sm text-mist-500">No activity yet.</div>
         ) : (
           <div className="space-y-4">
-            {(d.activity || []).map(a => (
+            {activity.map(a => (
               <div key={'a' + a.id} className="flex gap-3 items-start">
                 <span className="chip-gold shrink-0 mt-0.5">{a.type}</span>
                 <div><div className="text-sm text-mist-200">{a.text}</div><div className="text-[11px] text-mist-500">{a.startup_name} · {timeAgo(a.created_at)}</div></div>
               </div>
             ))}
-            {d.posts.map(p => (
+            {posts.map(p => (
               <div key={'p' + p.id} className="flex gap-3 items-start">
                 <span className="chip-blue shrink-0 mt-0.5">{p.type}</span>
                 <div><div className="text-sm text-mist-200 line-clamp-2">{p.text}</div><div className="text-[11px] text-mist-500">{p.likes} likes · {p.comments} comments · {timeAgo(p.created_at)}</div></div>

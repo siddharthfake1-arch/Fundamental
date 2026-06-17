@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
-import { api } from '../api';
+import { api, asArray } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { FileUpload, Avatar, Spinner, useToast } from '../components/ui';
@@ -179,7 +179,7 @@ function ManageCollateral({ startupId }) {
   const [docs, setDocs] = useState([]);
   const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Request Access', file_key: '' });
   const toast = useToast();
-  const load = () => api.get(`/api/startups/${startupId}`).then(r => setDocs(r.collateral)).catch(() => {});
+  const load = () => api.get(`/api/startups/${startupId}`).then(r => setDocs(asArray(r.collateral))).catch(() => {});
   useEffect(load, [startupId]);
   return (
     <div className="card p-6 space-y-4">
@@ -221,7 +221,7 @@ function ManageCollateral({ startupId }) {
 
 function InvestorSettings({ user, refresh }) {
   const inv = user.investor || {};
-  const [f, setF] = useState({ fund_name: inv.fund_name || '', fund_size: inv.fund_size || '', check_size: inv.check_size || '', thesis: inv.thesis || '', stage_focus: inv.stage_focus || [], sector_focus: inv.sector_focus || [] });
+  const [f, setF] = useState({ fund_name: inv.fund_name || '', fund_size: inv.fund_size || '', check_size: inv.check_size || '', thesis: inv.thesis || '', stage_focus: asArray(inv.stage_focus), sector_focus: asArray(inv.sector_focus) });
   const toast = useToast();
   const toggle = (k, v) => setF(x => ({ ...x, [k]: x[k].includes(v) ? x[k].filter(i => i !== v) : [...x[k], v] }));
   return (

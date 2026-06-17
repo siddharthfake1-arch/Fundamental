@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, timeAgo } from '../api';
+import { api, timeAgo, asArray } from '../api';
 import { Empty, Spinner, useToast } from '../components/ui';
 
 const TYPES = ['Profile Viewed', 'Upvote Received', 'Connection Request', 'Connection Accepted', 'Collateral Request', 'Access Approved', 'New Message', 'Deal Alert'];
@@ -18,14 +18,14 @@ export default function Notifications() {
   useEffect(load, [filter]);
 
   if (!data) return <Spinner />;
-  const shown = data.notifications.filter(n => !q || n.text.toLowerCase().includes(q.toLowerCase()));
+  const shown = asArray(data.notifications).filter(n => !q || String(n.text || '').toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="max-w-2xl mx-auto fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-5">
         <div>
           <h1 className="h-display text-2xl">Notifications</h1>
-          <p className="text-sm text-mist-400 mt-1">{data.unread} unread</p>
+          <p className="text-sm text-mist-400 mt-1">{data.unread ?? 0} unread</p>
         </div>
         <div className="flex gap-2">
           <input className="input !w-40 !py-2 !text-xs" aria-label="Search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, StickyNote, Tag } from 'lucide-react';
-import { api, timeAgo } from '../api';
+import { api, timeAgo, asArray } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
@@ -23,8 +23,8 @@ export default function Watchlist() {
   const toast = useToast();
   const isInvestor = user.role === 'investor';
 
-  const load = () => api.get('/api/watchlist').then(d => setList(d.watchlist)).catch(e => toast(e.message, 'error'));
-  const loadShared = () => api.get('/api/startups/shared-with-me').then(d => setShared(d.shared)).catch(() => {});
+  const load = () => api.get('/api/watchlist').then(d => setList(asArray(d.watchlist))).catch(e => toast(e.message, 'error'));
+  const loadShared = () => api.get('/api/startups/shared-with-me').then(d => setShared(asArray(d.shared))).catch(() => {});
   useEffect(() => { if (isInvestor) { load(); loadShared(); } }, [isInvestor]);
 
   if (!isInvestor) return <Navigate to="/dashboard" replace />;
@@ -80,7 +80,7 @@ export default function Watchlist() {
         <div className="grid grid-flow-col auto-cols-[270px] lg:auto-cols-fr gap-4 overflow-x-auto pb-4">
           {STAGES.map(stage => {
             const items = list.filter(s => s.status === stage)
-              .filter(s => !q || (s.name + ' ' + s.sector + ' ' + (s.tags || []).join(' ')).toLowerCase().includes(q.toLowerCase()));
+              .filter(s => !q || String(s.name + ' ' + s.sector + ' ' + asArray(s.tags).join(' ')).toLowerCase().includes(q.toLowerCase()));
             return (
               <div key={stage} className={`card !rounded-xl border-t-2 ${STAGE_TINT[stage]} p-3 min-h-[200px]`}>
                 <div className="flex items-center justify-between px-1 mb-3">
@@ -100,21 +100,21 @@ export default function Watchlist() {
                           <div className="text-[11px] text-mist-500 truncate">{s.sector} · {s.stage}</div>
                         </div>
                       </Link>
-                      {s.recent_activity[0] && (
-                        <div className="text-[11px] text-mist-500 mt-2 line-clamp-1" title={s.recent_activity[0].text}>
-                          ⚡ {s.recent_activity[0].text}
+                      {asArray(s.recent_activity)[0] && (
+                        <div className="text-[11px] text-mist-500 mt-2 line-clamp-1" title={asArray(s.recent_activity)[0].text}>
+                          ⚡ {asArray(s.recent_activity)[0].text}
                         </div>
                       )}
-                      {s.tags && s.tags.length > 0 && (
+                      {asArray(s.tags).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {s.tags.map(t => <span key={t} className="chip-gold !py-0 !px-2 !text-[10px]">{t}</span>)}
+                          {asArray(s.tags).map(t => <span key={t} className="chip-gold !py-0 !px-2 !text-[10px]">{t}</span>)}
                         </div>
                       )}
                       <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-ink-700/40">
                         <div className="flex items-center gap-2">
                           <button onClick={() => setNotesFor(s)}
                             className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors">
-                            <StickyNote className="w-3 h-3" /> {s.notes.length} note{s.notes.length !== 1 ? 's' : ''}
+                            <StickyNote className="w-3 h-3" /> {asArray(s.notes).length} note{asArray(s.notes).length !== 1 ? 's' : ''}
                           </button>
                           <button onClick={() => setTagsFor(s)}
                             className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors">
@@ -191,7 +191,7 @@ function NotesModal({ s, onClose, onChange }) {
     <Modal open={!!s} onClose={onClose} title={`Private notes — ${s.name}`}>
       <div className="space-y-3">
         <div className="text-xs text-mist-500">Saved {timeAgo(s.saved_at)} · private to you</div>
-        {s.notes.map(n => (
+        {asArray(s.notes).map(n => (
           <div key={n.id} className="flex gap-3 bg-gold-500/5 border border-gold-500/20 rounded-xl px-3.5 py-2.5">
             <div className="flex-1">
               <p className="text-sm text-mist-200">{n.text}</p>

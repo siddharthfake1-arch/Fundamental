@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
-import { api, timeAgo } from '../api';
+import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, FileUpload, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
@@ -24,13 +24,13 @@ export default function Social() {
   const toast = useToast();
 
   const load = () => api.get('/api/social' + (filter ? `?type=${encodeURIComponent(filter)}` : ''))
-    .then(d => setPosts(d.posts)).catch(e => toast(e.message, 'error'));
+    .then(d => setPosts(asArray(d.posts))).catch(e => toast(e.message, 'error'));
   useEffect(load, [filter]);
-  useEffect(() => { api.get('/api/social/types').then(setTypes).catch(() => {}); }, []);
+  useEffect(() => { api.get('/api/social/types').then(d => setTypes({ types: asArray(d?.types), allowed_for_me: asArray(d?.allowed_for_me) })).catch(() => {}); }, []);
 
   const visible = posts && posts
     .filter(p => format === 'all' || mediaKind(p.media) === format)
-    .filter(p => !q || (p.text + ' ' + (p.author?.name || '') + ' ' + (p.startup?.name || '')).toLowerCase().includes(q.toLowerCase()));
+    .filter(p => !q || String((p.text || '') + ' ' + (p.author?.name || '') + ' ' + (p.startup?.name || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="max-w-2xl mx-auto fade-in">
@@ -88,7 +88,7 @@ function Composer({ allowed, onDone, onCancel }) {
   const toast = useToast();
 
   useEffect(() => {
-    api.get('/api/startups?sort=recent').then(d => setStartups(d.startups)).catch(() => {});
+    api.get('/api/startups?sort=recent').then(d => setStartups(asArray(d.startups))).catch(() => {});
     if (user.role === 'founder' && user.startup) setStartupId(String(user.startup.id));
   }, []);
 
@@ -144,6 +144,7 @@ function Post({ p, onChange }) {
   const [showComments, setShowComments] = useState(false);
   const toast = useToast();
 
+  const comments = asArray(p.comments);
   const like = async () => { try { await api.post(`/api/social/${p.id}/like`); onChange(); } catch (e) { toast(e.message, 'error'); } };
   const share = async () => {
     try { await navigator.clipboard.writeText(`${window.location.origin}/social`); toast('Link copied', 'success'); } catch { toast('Could not copy link', 'error'); }
@@ -187,13 +188,13 @@ function Post({ p, onChange }) {
         <button onClick={like} className={`btn-ghost btn-sm !border-0 ${p.liked ? '!text-gold-300' : ''}`}>
           {p.liked ? '♥' : '♡'} {p.likes}
         </button>
-        <button onClick={() => setShowComments(s => !s)} className="btn-ghost btn-sm !border-0">💬 {p.comments.length}</button>
+        <button onClick={() => setShowComments(s => !s)} className="btn-ghost btn-sm !border-0">💬 {comments.length}</button>
         <button onClick={share} className="btn-ghost btn-sm !border-0">↗ Share</button>
       </div>
 
       {showComments && (
         <div className="mt-3 space-y-3">
-          {p.comments.map(c => (
+          {comments.map(c => (
             <div key={c.id} className="flex gap-2.5">
               <Avatar src={c.photo} name={c.name} size={7} />
               <div className="bg-ink-850 border border-ink-700/60 rounded-xl px-3.5 py-2 flex-1">

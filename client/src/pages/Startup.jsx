@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { api, fmtMoney, timeAgo } from '../api';
+import { api, asArray, asObject, fmtMoney, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
 import { Avatar, BarBreakdown, CoverHero, Empty, LineChart, Modal, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
@@ -35,7 +35,7 @@ export default function Startup() {
 
   // Warm intro path — who in your network can introduce you to this founder
   useEffect(() => {
-    if (d && !d.is_owner && !d.connected) {
+    if (d && !d.is_owner && !d.connected && d.founder?.id) {
       api.get(`/api/users/intro-path/${d.founder.id}`).then(setIntro).catch(() => {});
     }
   }, [d?.founder?.id, d?.connected]);
@@ -50,7 +50,17 @@ export default function Startup() {
 
   if (err) return <Empty title={err} />;
   if (!d) return <Spinner />;
-  const { startup: s, founder, collateral, activity, notes, is_owner } = d;
+  const s = asObject(d.startup);
+  const founder = asObject(d.founder);
+  const collateral = asArray(d.collateral);
+  const activity = asArray(d.activity);
+  const notes = asArray(d.notes);
+  const is_owner = d.is_owner;
+  const upvoteTrend = asArray(d.upvote_trend);
+  const updates = asArray(d.updates);
+  const useOfFunds = asArray(s.use_of_funds);
+  const score = asObject(d.score);
+  const scoreBreakdown = asObject(score.breakdown);
 
   const act = async (fn, ok) => {
     try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); }
@@ -121,12 +131,12 @@ export default function Startup() {
                   ? <span className="chip-gold">◐ Round Closing{s.raising_amount && ` — ${s.raising_amount}`}</span>
                   : <span className="chip">Not Raising</span>}
               {d.fit != null && <span className="chip-blue" title="Match against your declared thesis">◎ {d.fit}% thesis fit</span>}
-              <span className="text-xs text-mist-500">{s.views.toLocaleString()} profile views</span>
+              <span className="text-xs text-mist-500">{(s.views ?? 0).toLocaleString()} profile views</span>
             </div>
           </div>
           {d.score && (
-            <div className="shrink-0 self-start sm:pt-14" title={`Completeness ${d.score.breakdown.completeness}/40 · Traction ${d.score.breakdown.traction}/30 · Engagement ${d.score.breakdown.engagement}/20 · Trust ${d.score.breakdown.trust}/10`}>
-              <ScoreRing score={d.score.total} size={72} label="Fundamental Score" />
+            <div className="shrink-0 self-start sm:pt-14" title={`Completeness ${scoreBreakdown.completeness}/40 · Traction ${scoreBreakdown.traction}/30 · Engagement ${scoreBreakdown.engagement}/20 · Trust ${scoreBreakdown.trust}/10`}>
+              <ScoreRing score={score.total} size={72} label="Fundamental Score" />
             </div>
           )}
         </div>
@@ -181,19 +191,19 @@ export default function Startup() {
           {!is_owner && !s.public_share && user.role === 'investor' && null}
           {is_owner && <Link to="/settings?tab=startup" className="btn-ghost btn-sm ml-auto">Edit startup</Link>}
         </div>
-        {intro && !intro.direct && intro.connectors?.length > 0 && (
+        {intro && !intro.direct && asArray(intro.connectors).length > 0 && (
           <div className="flex items-center gap-3 flex-wrap mt-4 bg-gold-500/5 border border-gold-500/20 rounded-xl px-4 py-3">
             <div className="flex -space-x-2">
-              {intro.connectors.map(c => <Avatar key={c.id} src={c.photo} name={c.name} size={7} />)}
+              {asArray(intro.connectors).map(c => <Avatar key={c.id} src={c.photo} name={c.name} size={7} />)}
             </div>
             <div className="text-sm text-mist-200">
               <span className="font-semibold text-gold-300">Warm introduction available</span> — you're connected to{' '}
-              {intro.connectors.map((c, i) => (
+              {asArray(intro.connectors).map((c, i) => (
                 <span key={c.id}>
                   <Link to={`/profile/${c.id}`} className="font-semibold text-mist-100 hover:text-gold-300">{c.name}</Link>
-                  {i < intro.connectors.length - 1 ? ', ' : ''}
+                  {i < asArray(intro.connectors).length - 1 ? ', ' : ''}
                 </span>
-              ))}, who {intro.connectors.length > 1 ? 'are' : 'is'} connected to {founder.name}.
+              ))}, who {asArray(intro.connectors).length > 1 ? 'are' : 'is'} connected to {founder.name}.
             </div>
           </div>
         )}
@@ -202,7 +212,7 @@ export default function Startup() {
       {/* ---- Section 1: 12-Minute Pitch ---- */}
       <Section id="pitch" title="Section 1 — The 12-minute pitch">
         {s.video_url ? (
-          <VideoPlayer src={s.video_url} chapters={s.video_chapters} views={s.video_views}
+          <VideoPlayer src={s.video_url} chapters={asArray(s.video_chapters)} views={s.video_views}
             onFirstPlay={() => api.post(`/api/startups/${s.id}/video-view`).catch(() => {})} />
         ) : (
           <Empty title="Pitch not published yet" sub="This startup hasn't published its 12-minute pitch." />
@@ -234,7 +244,7 @@ export default function Startup() {
           ))}
         </div>
         <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Revenue trend</div>
-        <LineChart data={s.revenue_series} xKey="month" yKey="revenue" format={fmtMoney} />
+        <LineChart data={asArray(s.revenue_series)} xKey="month" yKey="revenue" format={fmtMoney} />
       </Section>
 
       {/* ---- Section 4: Collateral / Data Room ---- */}
@@ -333,10 +343,10 @@ export default function Startup() {
             ))}
           </ol>
         )}
-        {d.upvote_trend.length > 1 && (
+        {upvoteTrend.length > 1 && (
           <div className="mt-6">
             <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Upvote trend</div>
-            <LineChart data={d.upvote_trend} xKey="d" yKey="c" height={100} format={(v) => v + ' ▲'} />
+            <LineChart data={upvoteTrend} xKey="d" yKey="c" height={100} format={(v) => v + ' ▲'} />
           </div>
         )}
         {is_owner && <PostSignal startupId={s.id} onPosted={load} />}
@@ -344,11 +354,11 @@ export default function Startup() {
 
       {/* ---- Founder Updates (investor updates feed) ---- */}
       <Section id="updates" title="Founder updates">
-        {d.updates.length === 0 ? (
+        {updates.length === 0 ? (
           <div className="text-sm text-mist-500">No investor updates yet.{is_owner && ' Post your first below — founders who update monthly hold investor attention.'}</div>
         ) : (
           <div className="space-y-4">
-            {d.updates.map(u => (
+            {updates.map(u => (
               <div key={u.id} className="bg-ink-850 border border-ink-700/50 rounded-xl p-4">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="font-semibold text-mist-100 text-sm">{u.headline}</span>
@@ -362,7 +372,7 @@ export default function Startup() {
                     {u.growth != null && u.growth > 0 && <span className="chip-green">+{u.growth}% MoM</span>}
                   </div>
                 )}
-                <ReactionBar update={u} onReact={(updated) => setD(prev => ({ ...prev, updates: prev.updates.map(x => x.id === updated.id ? updated : x) }))} />
+                <ReactionBar update={u} onReact={(updated) => setD(prev => ({ ...prev, updates: asArray(prev.updates).map(x => x.id === updated.id ? updated : x) }))} />
               </div>
             ))}
           </div>
@@ -372,14 +382,14 @@ export default function Startup() {
 
       {/* ---- Section 7: Use of Funds ---- */}
       <Section id="funds" title="Section 7 — Use of funds">
-        {(!s.use_of_funds || s.use_of_funds.length === 0) && !s.deployment_timeline ? (
+        {useOfFunds.length === 0 && !s.deployment_timeline ? (
           <div className="text-sm text-mist-500">Not provided yet.</div>
         ) : (
           <div className="space-y-6">
-            {s.use_of_funds?.length > 0 && (
+            {useOfFunds.length > 0 && (
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-3">Capital allocation</div>
-                <BarBreakdown items={s.use_of_funds} />
+                <BarBreakdown items={useOfFunds} />
               </div>
             )}
             {s.deployment_timeline && s.deployment_timeline !== '—' && (
@@ -401,25 +411,25 @@ export default function Startup() {
               <span className="text-[11px] text-mist-500">{memo.disclaimer}</span>
               <div className="flex gap-2">
                 <button className="btn-ghost btn-sm" onClick={async () => {
-                  const md = `# ${memo.title}\n\n${memo.sections.map(sec => `## ${sec.h}\n${sec.body.map(b => `- ${b}`).join('\n')}`).join('\n\n')}`;
+                  const md = `# ${memo.title}\n\n${asArray(memo.sections).map(sec => `## ${sec.h}\n${asArray(sec.body).map(b => `- ${b}`).join('\n')}`).join('\n\n')}`;
                   try { await navigator.clipboard.writeText(md); toast('Memo copied as Markdown', 'success'); } catch { toast('Copy failed', 'error'); }
                 }}>Copy</button>
                 <button className="btn-primary btn-sm" onClick={() => {
-                  const md = `# ${memo.title}\n\n${memo.sections.map(sec => `## ${sec.h}\n${sec.body.map(b => `- ${b}`).join('\n')}`).join('\n\n')}`;
+                  const md = `# ${memo.title}\n\n${asArray(memo.sections).map(sec => `## ${sec.h}\n${asArray(sec.body).map(b => `- ${b}`).join('\n')}`).join('\n\n')}`;
                   const a = document.createElement('a');
                   const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown' }));
                   a.href = url;
-                  a.download = `${s.name.replace(/\s+/g, '_')}_memo.md`;
+                  a.download = `${String(s.name || 'startup').replace(/\s+/g, '_')}_memo.md`;
                   a.click();
                   URL.revokeObjectURL(url); // avoid leaking the blob URL
                 }}>Download .md</button>
               </div>
             </div>
-            {memo.sections.map(sec => (
+            {asArray(memo.sections).map(sec => (
               <div key={sec.h}>
                 <div className="section-title mb-2">{sec.h}</div>
                 <ul className="space-y-1.5">
-                  {sec.body.map((b, i) => (
+                  {asArray(sec.body).map((b, i) => (
                     <li key={i} className="text-sm text-mist-200 leading-relaxed flex gap-2">
                       <span className="text-gold-400/70 shrink-0 mt-0.5">·</span>{b}
                     </li>
@@ -452,7 +462,7 @@ export default function Startup() {
 function AccessManager({ startupId, onChange }) {
   const [reqs, setReqs] = useState([]);
   const toast = useToast();
-  const load = () => api.get(`/api/startups/${startupId}/access-requests`).then(d => setReqs(d.requests)).catch(() => {});
+  const load = () => api.get(`/api/startups/${startupId}/access-requests`).then(d => setReqs(asArray(d.requests))).catch(() => {});
   useEffect(() => { load(); }, [startupId]);
   if (reqs.length === 0) return null;
   const act = async (id, action) => {
@@ -556,7 +566,7 @@ function ShareDealModal({ startup, onClose }) {
   const toast = useToast();
   useEffect(() => {
     api.get('/api/users/connections')
-      .then(d => setConns(d.accepted.filter(c => c.role === 'investor')))
+      .then(d => setConns(asArray(d.accepted).filter(c => c.role === 'investor')))
       .catch(() => setConns([]));
   }, []);
   return (

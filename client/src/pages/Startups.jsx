@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, fmtMoney } from '../api';
+import { api, asArray, fmtMoney } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, Spinner, VerifiedBadge } from '../components/ui';
 
@@ -18,7 +18,7 @@ export default function Startups() {
   }, []);
 
   if (!data) return <Spinner />;
-  const list = data.startups.filter(s => (s.name + s.sector + s.city).toLowerCase().includes(q.toLowerCase()));
+  const list = asArray(data.startups).filter(s => String((s.name || '') + (s.sector || '') + (s.city || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="fade-in">

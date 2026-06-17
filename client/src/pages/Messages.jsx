@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api, timeAgo } from '../api';
+import { api, timeAgo, asArray, asObject } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, FileUpload, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
@@ -21,7 +21,7 @@ export default function Messages() {
   const endRef = useRef();
   const toast = useToast();
 
-  const loadList = () => api.get('/api/messages').then(d => setConvos(d.conversations)).catch(() => setConvos([]));
+  const loadList = () => api.get('/api/messages').then(d => setConvos(asArray(d.conversations))).catch(() => setConvos([]));
   const loadThread = () => active && api.get(`/api/messages/${active}`).then(setThread).catch(e => toast(e.message, 'error'));
 
   useEffect(() => { loadList(); }, []);
@@ -48,11 +48,11 @@ export default function Messages() {
 
   const openRef = async () => {
     const d = await api.get('/api/startups?sort=recent');
-    setRefList(d.startups); setRefOpen(true);
+    setRefList(asArray(d.startups)); setRefOpen(true);
   };
 
   if (!convos) return <Spinner />;
-  const filtered = convos.filter(c => c.other.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = convos.filter(c => String(c.other?.name || '').toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="fade-in">
@@ -71,10 +71,10 @@ export default function Messages() {
             ) : filtered.map(c => (
               <button key={c.id} onClick={() => setParams({ c: c.id })}
                 className={`w-full flex items-center gap-3 px-4 py-3.5 text-left border-b border-ink-700/40 transition-colors ${String(c.id) === active ? 'bg-ink-800' : 'hover:bg-ink-850'}`}>
-                <Avatar src={c.other.photo} name={c.other.name} size={11} />
+                <Avatar src={c.other?.photo} name={c.other?.name} size={11} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-sm font-semibold text-mist-100 truncate">{c.other.name}{!!c.other.verified && <VerifiedBadge small />}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-mist-100 truncate">{c.other?.name}{!!c.other?.verified && <VerifiedBadge small />}</span>
                     {c.last_message && <span className="text-[10px] text-mist-500 shrink-0">{timeAgo(c.last_message.created_at)}</span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -98,17 +98,21 @@ export default function Messages() {
                 <div className="text-sm text-mist-400 mt-1">Track each deal by stage as it progresses.</div>
               </div>
             )
-          ) : (
+          ) : (() => {
+            const tOther = asObject(thread.other);
+            const tConversation = asObject(thread.conversation);
+            const tMessages = asArray(thread.messages);
+            return (
             <>
               <div className="flex items-center gap-3 px-4 py-3 border-b border-ink-700/60">
                 <button className="md:hidden btn-ghost btn-sm !px-2" onClick={() => setParams({})}>←</button>
-                <Avatar src={thread.other.photo} name={thread.other.name} size={9} />
-                <Link to={`/profile/${thread.other.id}`} className="flex items-center gap-1.5 font-semibold text-mist-100 text-sm hover:text-gold-300">
-                  {thread.other.name}{!!thread.other.verified && <VerifiedBadge small />}
+                <Avatar src={tOther.photo} name={tOther.name} size={9} />
+                <Link to={`/profile/${tOther.id}`} className="flex items-center gap-1.5 font-semibold text-mist-100 text-sm hover:text-gold-300">
+                  {tOther.name}{!!tOther.verified && <VerifiedBadge small />}
                 </Link>
                 <div className="ml-auto flex items-center gap-1.5">
                   <span className="text-[10px] uppercase tracking-wider text-mist-500 hidden sm:block">Deal stage</span>
-                  <select className="input !w-auto !py-1.5 !text-xs" value={thread.conversation.deal_stage} onChange={(e) => setStage(e.target.value)}>
+                  <select className="input !w-auto !py-1.5 !text-xs" value={tConversation.deal_stage || ''} onChange={(e) => setStage(e.target.value)}>
                     <option value="">—</option>
                     {STAGES.map(s => <option key={s}>{s}</option>)}
                   </select>
@@ -116,7 +120,7 @@ export default function Messages() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {thread.messages.map(m => {
+                {tMessages.map(m => {
                   const mine = m.sender_id === user.id;
                   return (
                     <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
@@ -158,7 +162,8 @@ export default function Messages() {
                 </div>
               </div>
             </>
-          )}
+            );
+          })()}
         </div>
       </div>
 

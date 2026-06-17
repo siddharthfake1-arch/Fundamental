@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Flame, TrendingUp, Activity, Building2 } from 'lucide-react';
-import { api } from '../api';
+import { api, asArray, asObject } from '../api';
 import { Spinner, Stat, useToast } from '../components/ui';
 
 const Bar = ({ pct, color = 'rgb(var(--acc-500))' }) => (
@@ -19,12 +19,18 @@ export default function Pulse() {
   const toast = useToast();
   useEffect(() => { api.get('/api/pulse').then(setD).catch(e => toast(e.message, 'error')); }, []);
   if (!d) return <Spinner />;
-  const match = (name) => !q || name.toLowerCase().includes(q.toLowerCase());
+  const match = (name) => !q || String(name || '').toLowerCase().includes(q.toLowerCase());
 
-  const maxHeat = Math.max(...d.sectors.map(s => s.heat), 1);
-  const maxStage = Math.max(...d.stages.map(s => s.c), 1);
-  const maxCity = Math.max(...d.cities.map(c => c.c), 1);
-  const maxInterest = Math.max(...d.sectors.map(s => s.pipeline_adds_30d + s.upvotes_30d), 1);
+  const sectors = asArray(d.sectors);
+  const stages = asArray(d.stages);
+  const cities = asArray(d.cities);
+  const emerging = asArray(d.emerging);
+  const totals = asObject(d.totals);
+
+  const maxHeat = Math.max(...sectors.map(s => s.heat), 1);
+  const maxStage = Math.max(...stages.map(s => s.c), 1);
+  const maxCity = Math.max(...cities.map(c => c.c), 1);
+  const maxInterest = Math.max(...sectors.map(s => s.pipeline_adds_30d + s.upvotes_30d), 1);
 
   return (
     <div className="fade-in space-y-6">
@@ -37,11 +43,11 @@ export default function Pulse() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat label="Listed Startups" value={d.totals.startups} />
-        <Stat label="Open Rounds" value={d.totals.open_rounds} sub="Actively raising" />
-        <Stat label="Active Investors" value={d.totals.investors} />
-        <Stat label="Connections · 30d" value={d.totals.connections_30d} />
-        <Stat label="Founder Updates · 30d" value={d.totals.updates_30d} />
+        <Stat label="Listed Startups" value={totals.startups} />
+        <Stat label="Open Rounds" value={totals.open_rounds} sub="Actively raising" />
+        <Stat label="Active Investors" value={totals.investors} />
+        <Stat label="Connections · 30d" value={totals.connections_30d} />
+        <Stat label="Founder Updates · 30d" value={totals.updates_30d} />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-5">
@@ -53,7 +59,7 @@ export default function Pulse() {
           </div>
           <p className="text-xs text-mist-500 mb-4">A composite of investor conviction, pipeline adds, views, and open rounds.</p>
           <div className="space-y-3.5">
-            {d.sectors.filter(s => match(s.sector)).map((s, i) => (
+            {sectors.filter(s => match(s.sector)).map((s, i) => (
               <div key={s.sector} className="flex items-center gap-3">
                 <span className="w-6 text-xs font-bold text-mist-500 tabular-nums">{i + 1}</span>
                 <Link to={`/discover?sector=${encodeURIComponent(s.sector)}`} className="w-28 text-sm font-semibold text-mist-100 hover:text-gold-300 truncate">{s.sector}</Link>
@@ -74,7 +80,7 @@ export default function Pulse() {
           </div>
           <p className="text-xs text-mist-500 mb-4">Sectors with the fastest-growing startups right now.</p>
           <div className="space-y-3">
-            {d.emerging.filter(s => match(s.sector)).map(s => (
+            {emerging.filter(s => match(s.sector)).map(s => (
               <div key={s.sector} className="flex items-center justify-between bg-ink-850 border border-ink-700/50 rounded-xl px-4 py-3">
                 <span className="text-sm font-semibold text-mist-100">{s.sector}</span>
                 <span className="text-sm font-bold text-emerald-400 tabular-nums">+{s.avg_growth}% avg MoM</span>
@@ -90,7 +96,7 @@ export default function Pulse() {
           <span className="section-title">Investor Interest · 30d</span>
           <p className="text-xs text-mist-500 mt-1 mb-4">Conviction votes and pipeline adds by sector.</p>
           <div className="space-y-3">
-            {[...d.sectors].filter(s => match(s.sector)).sort((a, b) => (b.pipeline_adds_30d + b.upvotes_30d) - (a.pipeline_adds_30d + a.upvotes_30d)).slice(0, 6).map(s => (
+            {[...sectors].filter(s => match(s.sector)).sort((a, b) => (b.pipeline_adds_30d + b.upvotes_30d) - (a.pipeline_adds_30d + a.upvotes_30d)).slice(0, 6).map(s => (
               <div key={s.sector} className="flex items-center gap-3">
                 <span className="w-24 text-xs font-medium text-mist-300 truncate">{s.sector}</span>
                 <Bar pct={((s.pipeline_adds_30d + s.upvotes_30d) / maxInterest) * 100} color="rgb(var(--acc2-500))" />
@@ -105,7 +111,7 @@ export default function Pulse() {
           <span className="section-title">Stage Composition</span>
           <p className="text-xs text-mist-500 mt-1 mb-4">Where the ecosystem sits across the funding lifecycle.</p>
           <div className="space-y-3">
-            {d.stages.map(s => (
+            {stages.map(s => (
               <div key={s.stage} className="flex items-center gap-3">
                 <span className="w-24 text-xs font-medium text-mist-300">{s.stage}</span>
                 <Bar pct={(s.c / maxStage) * 100} color="#34d399" />
@@ -123,7 +129,7 @@ export default function Pulse() {
           </div>
           <p className="text-xs text-mist-500 mt-1 mb-4">Where listed startups are based.</p>
           <div className="space-y-3">
-            {d.cities.map(c => (
+            {cities.map(c => (
               <div key={c.city} className="flex items-center gap-3">
                 <Link to={`/discover?geography=${encodeURIComponent(c.city)}`} className="w-24 text-xs font-medium text-mist-300 hover:text-gold-300 truncate">{c.city}</Link>
                 <Bar pct={(c.c / maxCity) * 100} color="#a78bfa" />

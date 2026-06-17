@@ -37,6 +37,12 @@ export const api = {
   uploadPrivate: (file, onProgress) => uploadTo('/api/upload/private', file, onProgress),
 };
 
+// Defensive normalizers for API payloads. A missing/null field, or an unexpected
+// shape (e.g. an object where an array was expected), must never crash a render —
+// these coerce to a safe empty value so `.map`/`.length`/`.filter` are always valid.
+export const asArray = (v) => (Array.isArray(v) ? v : []);
+export const asObject = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+
 function uploadTo(endpoint, file, onProgress) {
   const fd = new FormData();
   fd.append('file', file);

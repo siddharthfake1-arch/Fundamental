@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Flame } from 'lucide-react';
-import { api } from '../api';
+import { api, asArray, asObject } from '../api';
 import StartupCard from '../components/StartupCard';
 import Constellation from '../components/Constellation';
 import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 function TrendingStrip({ startups }) {
-  const trending = [...startups].sort((a, b) => b.momentum - a.momentum).slice(0, 5).filter(s => s.momentum > 0);
+  const trending = [...asArray(startups)].sort((a, b) => b.momentum - a.momentum).slice(0, 5).filter(s => s.momentum > 0);
   if (trending.length < 2) return null;
   return (
     <div className="mb-6">
@@ -79,7 +79,7 @@ export default function Discover() {
   useEffect(() => {
     let alive = true;
     setData(null);
-    api.get(`/api/startups?${qs}&limit=${PAGE}&offset=0`).then(d => { if (alive) { setData(d); setItems(d.startups); } }).catch(e => toast(e.message, 'error'));
+    api.get(`/api/startups?${qs}&limit=${PAGE}&offset=0`).then(d => { if (alive) { setData(d); setItems(asArray(d.startups)); } }).catch(e => toast(e.message, 'error'));
     return () => { alive = false; };
   }, [qs]);
 
@@ -87,11 +87,11 @@ export default function Discover() {
     setLoadingMore(true);
     try {
       const d = await api.get(`/api/startups?${qs}&limit=${PAGE}&offset=${items.length}`);
-      setItems(prev => [...prev, ...d.startups]);
+      setItems(prev => [...prev, ...asArray(d.startups)]);
     } catch (e) { toast(e.message, 'error'); } finally { setLoadingMore(false); }
   };
 
-  const loadSaved = () => api.get('/api/startups/saved-searches').then(d => setSaved(d.searches)).catch(() => {});
+  const loadSaved = () => api.get('/api/startups/saved-searches').then(d => setSaved(asArray(d.searches))).catch(() => {});
 
   const set = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const active = Object.entries(filters).filter(([, v]) => v).length;
@@ -99,7 +99,7 @@ export default function Discover() {
   const Select = ({ k, options, placeholder, label }) => (
     <select className="input" id={`f-${k}`} aria-label={label || placeholder} value={filters[k]} onChange={set(k)}>
       <option value="">{placeholder}</option>
-      {options.map(o => <option key={o}>{o}</option>)}
+      {asArray(options).map(o => <option key={o}>{o}</option>)}
     </select>
   );
 
@@ -136,7 +136,7 @@ export default function Discover() {
             {saved.map(s => (
               <div key={s.id} className="flex items-center gap-2 card !rounded-lg px-3 py-2">
                 <button className="text-sm text-mist-200 hover:text-gold-300 flex-1 text-left truncate"
-                  onClick={() => { setFilters({ ...EMPTY_FILTERS, ...s.params.filters }); setSort(s.params.sort || 'recent'); setFiltersOpen(false); }}>
+                  onClick={() => { setFilters({ ...EMPTY_FILTERS, ...asObject(asObject(s.params).filters) }); setSort(asObject(s.params).sort || 'recent'); setFiltersOpen(false); }}>
                   {s.name}
                 </button>
                 <button className="text-mist-500 hover:text-red-400 text-xs" onClick={async () => { await api.del(`/api/startups/saved-searches/${s.id}`); loadSaved(); }}>✕</button>

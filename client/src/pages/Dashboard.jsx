@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, timeAgo } from '../api';
+import { api, asArray, asObject, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, LineChart, Spinner, Stat, VerifiedBadge, useToast } from '../components/ui';
 
@@ -29,6 +29,14 @@ function FounderDash() {
 
   const act = async (fn) => { try { await fn(); load(); } catch (e) { toast(e.message, 'error'); } };
 
+  const connectionRequests = asArray(d.connection_requests);
+  const pendingAccess = asArray(d.pending_access);
+  const interestedInvestors = asArray(d.interested_investors);
+  const viewsTrend = asArray(d.views_trend);
+  const raise = asObject(d.raise);
+  const viewers = asArray(an?.viewers);
+  const docs = asArray(an?.docs);
+
   return (
     <div className="fade-in space-y-5">
       <div className="flex items-end justify-between flex-wrap gap-3">
@@ -54,21 +62,21 @@ function FounderDash() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-            <Stat label="Startup views" value={d.views.toLocaleString()} />
-            <Stat label="Video views" value={d.video_views.toLocaleString()} sub="Pitch plays" />
+            <Stat label="Startup views" value={(d.views ?? 0).toLocaleString()} />
+            <Stat label="Video views" value={(d.video_views ?? 0).toLocaleString()} sub="Pitch plays" />
             <Stat label="Followers" value={d.followers ?? 0} sub="Tracking your startup" />
             <Stat label="Interest" value={d.interest_count ?? 0} sub="Interested investors" />
             <Stat label="Collateral requests" value={d.collateral_requests} />
             <Stat label="Upvotes" value={d.upvotes} sub="One per investor" />
-            <Stat label="Connection requests" value={d.connection_requests.length} />
+            <Stat label="Connection requests" value={connectionRequests.length} />
           </div>
 
-          {d.interested_investors?.length > 0 && (
+          {interestedInvestors.length > 0 && (
             <div className="card p-5">
               <span className="section-title">Investors interested in you</span>
               <div className="text-xs text-mist-500 mt-1">These investors signaled interest — reach out while it's fresh.</div>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
-                {d.interested_investors.map(v => (
+                {interestedInvestors.map(v => (
                   <div key={v.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
                     <Avatar src={v.photo} name={v.name} size={9} />
                     <div className="flex-1 min-w-0">
@@ -84,10 +92,10 @@ function FounderDash() {
             </div>
           )}
 
-          {d.views_trend?.length > 1 && (
+          {viewsTrend.length > 1 && (
             <div className="card p-5">
               <span className="section-title">Views — last 14 days</span>
-              <div className="mt-3"><LineChart data={d.views_trend} xKey="d" yKey="c" height={120} format={(v) => v} /></div>
+              <div className="mt-3"><LineChart data={viewsTrend} xKey="d" yKey="c" height={120} format={(v) => v} /></div>
             </div>
           )}
 
@@ -96,12 +104,12 @@ function FounderDash() {
             <div className="card p-5">
               <span className="section-title">Raise progress</span>
               <div className="mt-4 flex items-center gap-3">
-                <span className={d.raise.status === 'Actively Raising' ? 'chip-green' : d.raise.status === 'Round Closing' ? 'chip-gold' : 'chip'}>{d.raise.status}</span>
-                {d.raise.amount && <span className="font-display font-bold text-mist-100">{d.raise.amount}</span>}
+                <span className={raise.status === 'Actively Raising' ? 'chip-green' : raise.status === 'Round Closing' ? 'chip-gold' : 'chip'}>{raise.status}</span>
+                {raise.amount && <span className="font-display font-bold text-mist-100">{raise.amount}</span>}
               </div>
               <div className="mt-4 flex items-center">
                 {['Open', 'Conversations', 'Diligence', 'Closing'].map((step, i) => {
-                  const idx = d.raise.status === 'Not Raising' ? -1 : d.raise.status === 'Round Closing' ? 3 : Math.min(1 + Math.floor(d.collateral_requests > 0 ? 2 : d.upvotes > 0 ? 1 : 0), 3);
+                  const idx = raise.status === 'Not Raising' ? -1 : raise.status === 'Round Closing' ? 3 : Math.min(1 + Math.floor(d.collateral_requests > 0 ? 2 : d.upvotes > 0 ? 1 : 0), 3);
                   return (
                     <div key={step} className="flex-1 flex flex-col items-center gap-1.5 relative">
                       {i > 0 && <div className={`absolute top-[7px] right-1/2 w-full h-0.5 ${i <= idx ? 'bg-gold-400' : 'bg-ink-600'}`} style={{ zIndex: 0 }} />}
@@ -117,9 +125,9 @@ function FounderDash() {
             {/* Pending access requests */}
             <div className="card p-5">
               <span className="section-title">Pending data room requests</span>
-              {d.pending_access.length === 0 ? <div className="text-sm text-mist-500 mt-3">No pending requests.</div> : (
+              {pendingAccess.length === 0 ? <div className="text-sm text-mist-500 mt-3">No pending requests.</div> : (
                 <div className="space-y-2 mt-3">
-                  {d.pending_access.map(r => (
+                  {pendingAccess.map(r => (
                     <div key={r.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl px-3.5 py-2.5">
                       <Link to={`/profile/${r.investor_id}`} className="text-sm font-medium text-mist-100 hover:text-gold-300 truncate">{r.investor_name}</Link>
                       <span className="text-xs text-mist-500 flex-1 truncate">→ {r.title}</span>
@@ -133,14 +141,14 @@ function FounderDash() {
           </div>
 
           {/* Founder analytics: who's looking + data room engagement */}
-          {an && (an.viewers.length > 0 || an.docs.length > 0) && (
+          {an && (viewers.length > 0 || docs.length > 0) && (
             <div className="grid lg:grid-cols-2 gap-5">
               <div className="card p-5">
                 <span className="section-title">Investors looking at you</span>
                 <div className="text-xs text-mist-500 mt-1">Investors who recently viewed your profile.</div>
-                {an.viewers.length === 0 ? <div className="text-sm text-mist-500 mt-3">No investor views yet.</div> : (
+                {viewers.length === 0 ? <div className="text-sm text-mist-500 mt-3">No investor views yet.</div> : (
                   <div className="space-y-2 mt-3">
-                    {an.viewers.slice(0, 6).map(v => (
+                    {viewers.slice(0, 6).map(v => (
                       <div key={v.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
                         <Avatar src={v.photo} name={v.name} size={9} />
                         <div className="flex-1 min-w-0">
@@ -158,9 +166,9 @@ function FounderDash() {
               <div className="card p-5">
                 <span className="section-title">Data room engagement</span>
                 <div className="text-xs text-mist-500 mt-1">Which documents investors are opening.</div>
-                {an.docs.length === 0 ? <div className="text-sm text-mist-500 mt-3">No documents yet.</div> : (
+                {docs.length === 0 ? <div className="text-sm text-mist-500 mt-3">No documents yet.</div> : (
                   <div className="space-y-2 mt-3">
-                    {an.docs.map(doc => (
+                    {docs.map(doc => (
                       <div key={doc.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
                         <span className="chip-blue shrink-0">{doc.type}</span>
                         <span className="text-sm text-mist-100 flex-1 truncate">{doc.title}</span>
@@ -174,11 +182,11 @@ function FounderDash() {
           )}
 
           {/* Connection requests */}
-          {d.connection_requests.length > 0 && (
+          {connectionRequests.length > 0 && (
             <div className="card p-5">
               <span className="section-title">Connection requests</span>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
-                {d.connection_requests.map(p => (
+                {connectionRequests.map(p => (
                   <div key={p.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl p-3">
                     <Avatar src={p.photo} name={p.name} size={10} />
                     <div className="flex-1 min-w-0">
@@ -203,6 +211,10 @@ function InvestorDash() {
   useEffect(() => { api.get('/api/dashboard/investor').then(setD).catch(e => toast(e.message, 'error')); }, []);
   if (!d) return <Spinner />;
 
+  const watchlist = asArray(d.watchlist);
+  const requested = asArray(d.requested);
+  const suggested = asArray(d.suggested);
+
   return (
     <div className="fade-in space-y-5">
       <div>
@@ -211,9 +223,9 @@ function InvestorDash() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        <Stat label="Saved startups" value={d.watchlist.length} sub="In your pipeline" />
-        <Stat label="Requested access" value={d.requested.length} sub="Data room requests" />
-        <Stat label="Approved" value={d.requested.filter(r => r.status === 'approved').length} sub="Data rooms unlocked" />
+        <Stat label="Saved startups" value={watchlist.length} sub="In your pipeline" />
+        <Stat label="Requested access" value={requested.length} sub="Data room requests" />
+        <Stat label="Approved" value={requested.filter(r => r.status === 'approved').length} sub="Data rooms unlocked" />
         <Stat label="Active conversations" value={d.active_conversations} />
         <Stat label="Interests sent" value={d.interests_count ?? 0} sub="Founders notified" />
         <Stat label="Shared with you" value={d.shared_count ?? 0} sub="By co-investors" />
@@ -228,9 +240,9 @@ function InvestorDash() {
             <span className="section-title">Watchlist</span>
             <Link to="/watchlist" className="text-xs text-gold-300 hover:text-gold-200">Open pipeline →</Link>
           </div>
-          {d.watchlist.length === 0 ? <div className="text-sm text-mist-500 mt-3">Save startups from Discover to track them here.</div> : (
+          {watchlist.length === 0 ? <div className="text-sm text-mist-500 mt-3">Save startups from Discover to track them here.</div> : (
             <div className="space-y-2 mt-3">
-              {d.watchlist.slice(0, 6).map(s => (
+              {watchlist.slice(0, 6).map(s => (
                 <Link key={s.id} to={`/startup/${s.id}`} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl p-3 hover:border-ink-500 transition-colors">
                   <Avatar src={s.logo} name={s.name} size={9} square />
                   <div className="flex-1 min-w-0">
@@ -246,9 +258,9 @@ function InvestorDash() {
 
         <div className="card p-5">
           <span className="section-title">Requested access</span>
-          {d.requested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No data room requests yet.</div> : (
+          {requested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No data room requests yet.</div> : (
             <div className="space-y-2 mt-3">
-              {d.requested.slice(0, 6).map((r, i) => (
+              {requested.slice(0, 6).map((r, i) => (
                 <Link key={i} to={`/startup/${r.startup_id}`} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl p-3 hover:border-ink-500 transition-colors">
                   <Avatar src={r.logo} name={r.startup_name} size={9} square />
                   <div className="flex-1 min-w-0">
@@ -266,9 +278,9 @@ function InvestorDash() {
       <div className="card p-5">
         <span className="section-title">Suggested startups</span>
         <div className="text-xs text-mist-500 mt-1">Matched to your sector and stage focus.</div>
-        {d.suggested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No new suggestions right now.</div> : (
+        {suggested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No new suggestions right now.</div> : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
-            {d.suggested.map(s => (
+            {suggested.map(s => (
               <Link key={s.id} to={`/startup/${s.id}`} className="bg-ink-850 border border-ink-700/60 rounded-xl p-4 hover:border-gold-500/40 transition-colors">
                 <div className="flex items-center gap-3">
                   <Avatar src={s.logo} name={s.name} size={10} square />
