@@ -180,12 +180,23 @@ function CommunityDetail({ slug }) {
   const toast = useToast();
   const nav = useNavigate();
   const [showMembers, setShowMembers] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [ef, setEf] = useState({ name: '', description: '', kind: 'topic' });
   const load = () => api.get(`/api/communities/${slug}`).then(setD).catch(e => toast(e.message, 'error'));
   useEffect(() => { setD(null); load(); }, [slug]);
   if (!d) return <Spinner />;
   const c = asObject(d.community);
   const posts = asArray(d.posts);
   const isPending = c.status && c.status !== 'approved';
+  const canEditName = c.status === 'pending';
+
+  const startEdit = () => { setEf({ name: c.name || '', description: c.description || '', kind: c.kind || 'topic' }); setEditing(true); };
+  const saveEdit = async () => {
+    try {
+      await api.put(`/api/communities/${slug}`, { name: ef.name, description: ef.description, kind: ef.kind });
+      setEditing(false); load(); toast('Community updated', 'success');
+    } catch (e) { toast(e.message, 'error'); }
+  };
 
   return (
     <div className="max-w-3xl mx-auto fade-in">
@@ -198,25 +209,64 @@ function CommunityDetail({ slug }) {
         </div>
       )}
       <div className="card p-6 mb-5">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="h-display text-2xl">{c.name}</h1>
-              <span className="chip capitalize">{c.kind}</span>
-            </div>
-            <p className="text-sm text-mist-400 mt-1.5 max-w-lg">{c.description}</p>
-            <div className="flex items-center gap-4 mt-3 text-xs text-mist-500">
-              <button className="flex items-center gap-1 hover:text-mist-300" onClick={() => setShowMembers(s => !s)}><Users className="w-3.5 h-3.5" /> {c.members} members</button>
-              <span className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> {c.posts} discussions</span>
+        {editing ? (
+          <div className="space-y-3">
+            <div className="section-title">Edit community</div>
+            {canEditName ? (
+              <label className="block"><span className="label">Name</span>
+                <input className="input" maxLength={60} value={ef.name} onChange={(e) => setEf(x => ({ ...x, name: e.target.value }))} /></label>
+            ) : (
+              <div>
+                <span className="label">Name</span>
+                <div className="text-sm text-mist-100 font-display font-bold">{c.name}</div>
+                <p className="text-[11px] text-mist-500 mt-1">An approved community's name can't be changed.</p>
+              </div>
+            )}
+            {canEditName && (
+              <div>
+                <span className="label">Type</span>
+                <div className="grid sm:grid-cols-3 gap-2">
+                  {KIND_OPTIONS.map(([v, t, hint]) => (
+                    <button type="button" key={v} onClick={() => setEf(x => ({ ...x, kind: v }))}
+                      className={`rounded-xl border p-3 text-left transition-all ${ef.kind === v ? 'border-gold-500/70 bg-gold-500/10' : 'border-ink-600/70 bg-ink-850 hover:border-ink-500'}`}>
+                      <div className={`font-display font-bold text-sm ${ef.kind === v ? 'text-gold-300' : 'text-mist-100'}`}>{t}</div>
+                      <div className="text-[11px] text-mist-400 mt-1 leading-snug">{hint}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <label className="block"><span className="label">Description</span>
+              <textarea className="input min-h-[80px]" maxLength={300} value={ef.description} onChange={(e) => setEf(x => ({ ...x, description: e.target.value }))} /></label>
+            <div className="flex justify-end gap-2">
+              <button className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+              <button className="btn-primary btn-sm" onClick={saveEdit}>Save changes</button>
             </div>
           </div>
-          {!isPending && (
-            <button className={c.joined ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'}
-              onClick={async () => { try { await api.post(`/api/communities/${slug}/join`); load(); } catch (e) { toast(e.message, 'error'); } }}>
-              {c.joined ? 'Leave' : 'Join community'}
-            </button>
-          )}
-        </div>
+        ) : (
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="h-display text-2xl">{c.name}</h1>
+                <span className="chip capitalize">{c.kind}</span>
+              </div>
+              <p className="text-sm text-mist-400 mt-1.5 max-w-lg">{c.description}</p>
+              <div className="flex items-center gap-4 mt-3 text-xs text-mist-500">
+                <button className="flex items-center gap-1 hover:text-mist-300" onClick={() => setShowMembers(s => !s)}><Users className="w-3.5 h-3.5" /> {c.members} members</button>
+                <span className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> {c.posts} discussions</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {c.is_owner && <button className="btn-ghost btn-sm" onClick={startEdit}>Edit community</button>}
+              {!isPending && (
+                <button className={c.joined ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'}
+                  onClick={async () => { try { await api.post(`/api/communities/${slug}/join`); load(); } catch (e) { toast(e.message, 'error'); } }}>
+                  {c.joined ? 'Leave' : 'Join community'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {showMembers && <MembersPanel slug={slug} />}
@@ -248,19 +298,44 @@ function CommunityDetail({ slug }) {
         <Empty title="No discussions yet" sub={c.joined ? 'Start the first one.' : 'Join to start the first discussion.'} />
       ) : (
         <div className="space-y-4">
-          {posts.map(p => <Thread key={p.id} p={p} />)}
+          {posts.map(p => <Thread key={p.id} p={p} onChanged={load} />)}
         </div>
       )}
     </div>
   );
 }
 
-function Thread({ p }) {
+function Thread({ p, onChanged }) {
   const [open, setOpen] = useState(false);
   const [replies, setReplies] = useState(null);
   const [reply, setReply] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [ef, setEf] = useState({ title: '', body: '' });
+  const [editReply, setEditReply] = useState(null);
+  const [erBody, setErBody] = useState('');
   const toast = useToast();
   const loadReplies = () => api.get(`/api/communities/posts/${p.id}/replies`).then(d => setReplies(asArray(d.replies))).catch(() => {});
+
+  const startEdit = () => { setEf({ title: p.title || '', body: p.body || '' }); setEditing(true); };
+  const saveEdit = async () => {
+    try { await api.put(`/api/communities/posts/${p.id}`, { title: ef.title, body: ef.body }); setEditing(false); onChanged(); toast('Discussion updated', 'success'); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  const removePost = async () => {
+    if (!window.confirm('Delete this discussion? This cannot be undone.')) return;
+    try { await api.del(`/api/communities/posts/${p.id}`); onChanged(); toast('Discussion deleted', 'success'); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  const startEditReply = (r) => { setEditReply(r.id); setErBody(r.body || ''); };
+  const saveEditReply = async (r) => {
+    try { await api.put(`/api/communities/replies/${r.id}`, { body: erBody }); setEditReply(null); loadReplies(); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  const removeReply = async (r) => {
+    if (!window.confirm('Delete this reply?')) return;
+    try { await api.del(`/api/communities/replies/${r.id}`); loadReplies(); }
+    catch (e) { toast(e.message, 'error'); }
+  };
 
   return (
     <motion.article initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="card p-5">
@@ -272,9 +347,26 @@ function Thread({ p }) {
           </Link>
           <div className="text-[11px] text-mist-500">{p.author.headline} · {timeAgo(p.created_at)}</div>
         </div>
+        {p.can_edit && !editing && (
+          <div className="ml-auto flex items-center gap-2">
+            <button className="text-xs font-semibold text-mist-400 hover:text-mist-100" onClick={startEdit}>Edit</button>
+            <button className="text-xs font-semibold text-mist-400 hover:text-red-300" onClick={removePost}>Delete</button>
+          </div>
+        )}
       </div>
+      {editing ? (
+        <div className="space-y-3">
+          <input className="input" maxLength={140} placeholder="Title — be specific" value={ef.title} onChange={(e) => setEf(x => ({ ...x, title: e.target.value }))} />
+          <textarea className="input min-h-[110px]" maxLength={2000} value={ef.body} onChange={(e) => setEf(x => ({ ...x, body: e.target.value }))} />
+          <div className="flex justify-end gap-2">
+            <button className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+            <button className="btn-primary btn-sm" disabled={!ef.title.trim() || !ef.body.trim()} onClick={saveEdit}>Save changes</button>
+          </div>
+        </div>
+      ) : (<>
       <h3 className="font-display font-bold text-mist-100">{p.title}</h3>
       <p className="text-sm text-mist-300 leading-relaxed mt-1.5 whitespace-pre-wrap">{p.body}</p>
+      </>)}
       <button className="text-xs font-semibold text-gold-300 hover:text-gold-200 mt-3"
         onClick={() => { setOpen(o => !o); if (!replies) loadReplies(); }}>
         {open ? 'Hide replies' : `${p.replies} repl${p.replies === 1 ? 'y' : 'ies'} — view & respond`}
@@ -288,8 +380,24 @@ function Thread({ p }) {
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-mist-100">
                   {r.author.name}{!!r.author.verified && <VerifiedBadge small tier={r.author.verified} />}
                   <span className="font-normal text-mist-500">· {timeAgo(r.created_at)}</span>
+                  {r.can_edit && editReply !== r.id && (
+                    <span className="ml-auto flex items-center gap-2">
+                      <button className="text-[11px] font-semibold text-mist-400 hover:text-mist-100" onClick={() => startEditReply(r)}>Edit</button>
+                      <button className="text-[11px] font-semibold text-mist-400 hover:text-red-300" onClick={() => removeReply(r)}>Delete</button>
+                    </span>
+                  )}
                 </div>
-                <p className="text-sm text-mist-200 mt-1 leading-relaxed">{r.body}</p>
+                {editReply === r.id ? (
+                  <div className="mt-2 space-y-2">
+                    <input className="input !py-2" value={erBody} onChange={(e) => setErBody(e.target.value)} />
+                    <div className="flex justify-end gap-2">
+                      <button className="btn-ghost btn-sm" onClick={() => setEditReply(null)}>Cancel</button>
+                      <button className="btn-primary btn-sm" disabled={!erBody.trim()} onClick={() => saveEditReply(r)}>Save</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-mist-200 mt-1 leading-relaxed">{r.body}</p>
+                )}
               </div>
             </div>
           ))}

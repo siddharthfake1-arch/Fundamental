@@ -15,11 +15,12 @@ function shapePost(p, userId) {
   const author = db.prepare('SELECT id, name, role, photo, headline, verified FROM users WHERE id=?').get(p.user_id);
   return {
     ...p, author,
+    can_edit: p.user_id === userId,
     startup: p.startup_id ? db.prepare('SELECT id, name, logo, sector FROM startups WHERE id=?').get(p.startup_id) : null,
     likes: db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id=?').get(p.id).c,
     liked: !!db.prepare('SELECT 1 FROM post_likes WHERE user_id=? AND post_id=?').get(userId, p.id),
     comments: db.prepare(`SELECT pc.*, u.name, u.photo, u.role FROM post_comments pc JOIN users u ON u.id=pc.user_id
-      WHERE pc.post_id=? ORDER BY pc.id ASC`).all(p.id),
+      WHERE pc.post_id=? ORDER BY pc.id ASC`).all(p.id).map(pc => ({ ...pc, can_edit: pc.user_id === userId })),
   };
 }
 
@@ -113,6 +114,63 @@ router.post('/:id/comment', livePost, (req, res) => {
       .run(post.user_id, 'New Message', `${req.user.name} commented on your post. Open it to see what they said.`, '/social');
   }
   res.json({ post: shapePost(post, req.user.id) });
+});
+
+// Comment edit/delete — owner or admin only (re-verified server-side).
+router.put('/comments/:id', (req, res) => {
+  const comment = db.prepare('SELECT * FROM post_comments WHERE id=?').get(req.params.id);
+  if (!comment) return res.status(404).json({ error: 'This comment is no longer available.' });
+  if (comment.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'You can only edit your own comment.' });
+  const { text } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Please write a comment before saving.' });
+  db.prepare('UPDATE post_comments SET text=? WHERE id=?').run(text.trim().slice(0, 1000), req.params.id);
+  res.json({ ok: true });
+});
+
+router.delete('/comments/:id', (req, res) => {
+  const comment = db.prepare('SELECT * FROM post_comments WHERE id=?').get(req.params.id);
+  if (!comment) return res.status(404).json({ error: 'This comment is no longer available.' });
+  if (comment.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'You can only delete your own comment.' });
+  db.prepare('DELETE FROM post_comments WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+// Post edit/delete — owner or admin only (re-verified server-side).
+router.put('/:id', (req, res) => {
+  const post = db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id);
+  if (!post || post.removed) return res.status(404).json({ error: 'This post is no longer available.' });
+  if (post.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'You can only edit your own post.' });
+  // Post media renders as <img>/<video>/<a href> for every feed viewer (stored XSS)
+  const urlErr = validateUrlFields(req.body, ['media']);
+  if (urlErr) return res.status(400).json({ error: urlErr });
+  const { type, text, startup_id, media } = req.body;
+  if (!POST_TYPES.includes(type)) return res.status(400).json({ error: 'Please choose one of the supported professional post categories.' });
+  if (!text || text.trim().length < 10) return res.status(400).json({ error: 'Share a substantive update of at least 10 characters.' });
+  if (text.trim().length > 400) return res.status(400).json({ error: 'Posts are limited to 400 characters. Please keep it sharp.' });
+  const founderTypes = ['Fundraising Announcement', 'Round Closed', 'Milestone', 'Hiring', 'Product Launch'];
+  const investorTypes = ['Investment Made', 'Investor Insight'];
+  if (req.user.role === 'founder' && !founderTypes.includes(type)) return res.status(403).json({ error: 'This post type is available to investors only.' });
+  if (req.user.role === 'investor' && !investorTypes.includes(type)) return res.status(403).json({ error: 'This post type is available to founders only.' });
+  // A founder may only tag their own startup; investors cannot tag a startup as
+  // the official author (prevents misleading associations, P1-9).
+  let taggedId = null;
+  if (startup_id) {
+    if (req.user.role !== 'founder') return res.status(403).json({ error: 'Only a startup\'s founder can tag it in a post.' });
+    const own = db.prepare('SELECT 1 FROM startups WHERE id=? AND founder_id=?').get(startup_id, req.user.id);
+    if (!own) return res.status(403).json({ error: 'You can only tag your own startup.' });
+    taggedId = Number(startup_id);
+  }
+  db.prepare('UPDATE posts SET type=?, text=?, startup_id=?, media=? WHERE id=?')
+    .run(type, text.trim(), taggedId, media || '', req.params.id);
+  res.json({ post: shapePost(db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id), req.user.id) });
+});
+
+router.delete('/:id', (req, res) => {
+  const post = db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id);
+  if (!post || post.removed) return res.status(404).json({ error: 'This post is no longer available.' });
+  if (post.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'You can only delete your own post.' });
+  db.prepare('UPDATE posts SET removed=1 WHERE id=?').run(req.params.id);
+  res.json({ ok: true });
 });
 
 module.exports = router;

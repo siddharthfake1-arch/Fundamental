@@ -310,6 +310,82 @@ async function run() {
     assert.ok(d.cities.every(x => /, /.test(x)), 'all results normalized to City, Country');
   });
 
+  await test('owner can edit/delete their social post; non-owner is blocked (403)', async () => {
+    const a = makeClient();
+    await getOtpAndSignup(a, `op_${Date.now()}@example.com`, 'founder');
+    const created = await (await a('POST', '/api/social', { type: 'Milestone', text: 'We shipped a big new feature today.' })).json();
+    const pid = created.post.id;
+    assert.ok(created.post.can_edit, 'owner sees can_edit');
+    // Owner edits.
+    const ed = await a('PUT', `/api/social/${pid}`, { type: 'Milestone', text: 'Edited: we shipped an even bigger feature.' });
+    assert.strictEqual(ed.status, 200, 'owner edit ok');
+    // Another user cannot edit or delete it.
+    const b = makeClient();
+    await getOtpAndSignup(b, `op2_${Date.now()}@example.com`, 'founder');
+    assert.strictEqual((await b('PUT', `/api/social/${pid}`, { type: 'Milestone', text: 'malicious edit attempt here now' })).status, 403, 'non-owner edit blocked');
+    assert.strictEqual((await b('DELETE', `/api/social/${pid}`)).status, 403, 'non-owner delete blocked');
+    // Owner deletes.
+    assert.strictEqual((await a('DELETE', `/api/social/${pid}`)).status, 200, 'owner delete ok');
+  });
+
+  await test('founder can edit/delete own update & activity; others blocked (403)', async () => {
+    const a = makeClient();
+    await a('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' });
+    const sid = (await (await a('GET', '/api/startups/mine')).json()).startup.id;
+    await a('POST', `/api/startups/${sid}/updates`, { headline: 'Q3 progress', body: 'Solid quarter across the board.' });
+    await a('POST', `/api/startups/${sid}/activity`, { type: 'Milestone Achieved', text: 'Crossed 1,000 customers.' });
+    const detail = await (await a('GET', `/api/startups/${sid}`)).json();
+    const uid = detail.updates[0].id, aid = detail.activity[0].id;
+    assert.strictEqual((await a('PUT', `/api/startups/updates/${uid}`, { headline: 'Q3 progress (edited)', body: 'Even better than reported.' })).status, 200, 'owner edits update');
+    assert.strictEqual((await a('PUT', `/api/startups/activity/${aid}`, { type: 'Milestone Achieved', text: 'Crossed 1,200 customers.' })).status, 200, 'owner edits activity');
+    // A different founder cannot touch them.
+    const b = makeClient();
+    await b('POST', '/api/auth/login', { email: 'founder2@demo.app', password: 'demo1234' });
+    assert.strictEqual((await b('PUT', `/api/startups/updates/${uid}`, { headline: 'x', body: 'hijack attempt on update' })).status, 403, 'non-owner update edit blocked');
+    assert.strictEqual((await b('DELETE', `/api/startups/activity/${aid}`)).status, 403, 'non-owner activity delete blocked');
+    // Owner deletes.
+    assert.strictEqual((await a('DELETE', `/api/startups/updates/${uid}`)).status, 200, 'owner deletes update');
+  });
+
+  await test('community discussion edit/delete is owner/admin only (403 otherwise)', async () => {
+    // founder1 creates a community; admin approves it.
+    const owner = makeClient();
+    await owner('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' });
+    const slug = (await (await owner('POST', '/api/communities', { name: `Edit Test ${Date.now()}`, kind: 'topic', description: 'x' })).json()).slug;
+    const admin = makeClient();
+    await admin('POST', '/api/auth/login', { email: 'admin@fundamental.app', password: 'demo1234' });
+    const list = await (await admin('GET', '/api/admin/communities')).json();
+    const cid = list.communities.find(c => c.slug === slug).id;
+    await admin('POST', `/api/admin/communities/${cid}/approve`);
+    // Owner (a member) posts a discussion.
+    await owner('POST', `/api/communities/${slug}/posts`, { title: 'Hello', body: 'First discussion here.' });
+    const detail = await (await owner('GET', `/api/communities/${slug}`)).json();
+    const postId = detail.posts[0].id;
+    assert.ok(detail.posts[0].can_edit, 'author sees can_edit');
+    assert.strictEqual((await owner('PUT', `/api/communities/posts/${postId}`, { title: 'Hello (edited)', body: 'Edited body content.' })).status, 200, 'author edits');
+    // A different approved investor cannot edit/delete it.
+    const other = makeClient();
+    await other('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    assert.strictEqual((await other('PUT', `/api/communities/posts/${postId}`, { title: 'x', body: 'hijack' })).status, 403, 'non-author edit blocked');
+    assert.strictEqual((await other('DELETE', `/api/communities/posts/${postId}`)).status, 403, 'non-author delete blocked');
+    // Admin can delete.
+    assert.strictEqual((await admin('DELETE', `/api/communities/posts/${postId}`)).status, 200, 'admin delete ok');
+  });
+
+  await test('investor can edit own private note; backend rejects others', async () => {
+    const inv = makeClient();
+    await inv('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    // Find a visible startup to note on.
+    const disc = await (await inv('GET', '/api/startups?limit=1')).json();
+    const sid = disc.startups[0].id;
+    const made = await (await inv('POST', `/api/startups/${sid}/notes`, { text: 'Strong founder; revisit next quarter.' })).json();
+    const noteId = made.notes[0].id;
+    assert.strictEqual((await inv('PUT', `/api/startups/notes/${noteId}`, { text: 'Updated thesis on this deal.' })).status, 200, 'owner edits note');
+    const other = makeClient();
+    await other('POST', '/api/auth/login', { email: 'investor2@demo.app', password: 'demo1234' });
+    assert.strictEqual((await other('PUT', `/api/startups/notes/${noteId}`, { text: 'not mine' })).status, 403, 'non-owner note edit blocked');
+  });
+
   console.log(results.join('\n'));
   console.log(`\n${passed} route tests passed.`);
 }

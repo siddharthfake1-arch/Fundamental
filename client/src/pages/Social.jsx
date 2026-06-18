@@ -142,12 +142,40 @@ function Composer({ allowed, onDone, onCancel }) {
 function Post({ p, onChange }) {
   const [comment, setComment] = useState('');
   const [showComments, setShowComments] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(p.text || '');
+  const [editType, setEditType] = useState(p.type);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editComment, setEditComment] = useState(null);
+  const [editCommentText, setEditCommentText] = useState('');
   const toast = useToast();
 
   const comments = asArray(p.comments);
   const like = async () => { try { await api.post(`/api/social/${p.id}/like`); onChange(); } catch (e) { toast(e.message, 'error'); } };
   const share = async () => {
     try { await navigator.clipboard.writeText(`${window.location.origin}/social`); toast('Link copied', 'success'); } catch { toast('Could not copy link', 'error'); }
+  };
+
+  const savePost = async () => {
+    setSavingEdit(true);
+    try {
+      await api.put(`/api/social/${p.id}`, { text: editText, type: editType, media: p.media, startup_id: p.startup_id || null });
+      setEditing(false); onChange(); toast('Post updated', 'success');
+    } catch (e) { toast(e.message, 'error'); } finally { setSavingEdit(false); }
+  };
+  const deletePost = async () => {
+    if (!window.confirm('Delete this post? This cannot be undone.')) return;
+    try { await api.del(`/api/social/${p.id}`); onChange(); toast('Post deleted', 'success'); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  const saveComment = async (c) => {
+    try { await api.put(`/api/social/comments/${c.id}`, { text: editCommentText }); setEditComment(null); onChange(); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  const deleteComment = async (c) => {
+    if (!window.confirm('Delete this comment?')) return;
+    try { await api.del(`/api/social/comments/${c.id}`); onChange(); }
+    catch (e) { toast(e.message, 'error'); }
   };
 
   return (
@@ -163,10 +191,35 @@ function Post({ p, onChange }) {
           <div className="text-xs text-mist-400 truncate">{p.author.headline}</div>
           <div className="text-[11px] text-mist-500 mt-0.5">{timeAgo(p.created_at)}</div>
         </div>
-        <span className={TYPE_STYLE[p.type] || 'chip'}>{p.type}</span>
+        <div className="flex flex-col items-end gap-1.5">
+          <span className={TYPE_STYLE[p.type] || 'chip'}>{p.type}</span>
+          {p.can_edit && !editing && (
+            <div className="flex gap-1">
+              <button className="text-[11px] text-mist-500 hover:text-mist-200" onClick={() => { setEditText(p.text || ''); setEditType(p.type); setEditing(true); }}>Edit</button>
+              <span className="text-[11px] text-mist-600">·</span>
+              <button className="text-[11px] text-mist-500 hover:text-red-400" onClick={deletePost}>Delete</button>
+            </div>
+          )}
+        </div>
       </div>
 
-      <p className="text-[15px] text-mist-200 leading-relaxed mt-4 whitespace-pre-wrap">{p.text}</p>
+      {p.can_edit && editing ? (
+        <div className="space-y-3 mt-4">
+          <select className="input !w-auto !py-2 !text-xs" value={editType} onChange={(e) => setEditType(e.target.value)}>
+            {Object.keys(TYPE_STYLE).map(t => <option key={t}>{t}</option>)}
+          </select>
+          <div>
+            <textarea className="input min-h-[110px]" maxLength={400} value={editText} onChange={(e) => setEditText(e.target.value)} />
+            <div className={`text-right text-[11px] mt-1 tabular-nums ${editText.length > 360 ? 'text-amber-400' : 'text-mist-500'}`}>{editText.length}/400</div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+            <button className="btn-primary btn-sm" disabled={editText.trim().length < 10 || savingEdit} onClick={savePost}>Save changes</button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-[15px] text-mist-200 leading-relaxed mt-4 whitespace-pre-wrap">{p.text}</p>
+      )}
 
       {p.media && (
         /\.(mp4|webm|mov)/i.test(p.media)
@@ -198,8 +251,26 @@ function Post({ p, onChange }) {
             <div key={c.id} className="flex gap-2.5">
               <Avatar src={c.photo} name={c.name} size={7} />
               <div className="bg-ink-850 border border-ink-700/60 rounded-xl px-3.5 py-2 flex-1">
-                <div className="text-xs font-semibold text-mist-100">{c.name} <span className="font-normal text-mist-500 capitalize">· {c.role}</span></div>
-                <div className="text-sm text-mist-200 mt-0.5">{c.text}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-semibold text-mist-100">{c.name} <span className="font-normal text-mist-500 capitalize">· {c.role}</span></div>
+                  {c.can_edit && editComment !== c.id && (
+                    <div className="flex gap-1 shrink-0">
+                      <button className="text-[11px] text-mist-500 hover:text-mist-200" onClick={() => { setEditComment(c.id); setEditCommentText(c.text || ''); }}>Edit</button>
+                      <span className="text-[11px] text-mist-600">·</span>
+                      <button className="text-[11px] text-mist-500 hover:text-red-400" onClick={() => deleteComment(c)}>Delete</button>
+                    </div>
+                  )}
+                </div>
+                {c.can_edit && editComment === c.id ? (
+                  <div className="flex gap-2 mt-1.5">
+                    <input className="input !py-1.5 !text-sm" value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && editCommentText.trim()) saveComment(c); }} />
+                    <button className="btn-primary btn-sm" disabled={!editCommentText.trim()} onClick={() => saveComment(c)}>Save</button>
+                    <button className="btn-ghost btn-sm" onClick={() => setEditComment(null)}>Cancel</button>
+                  </div>
+                ) : (
+                  <div className="text-sm text-mist-200 mt-0.5">{c.text}</div>
+                )}
               </div>
             </div>
           ))}

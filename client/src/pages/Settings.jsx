@@ -187,21 +187,7 @@ function ManageCollateral({ startupId }) {
   return (
     <div className="card p-6 space-y-4">
       <h2 className="section-title">Data room collateral</h2>
-      {docs.map(c => (
-        <div key={c.id} className="flex items-center gap-3 flex-wrap bg-ink-850 border border-ink-700/60 rounded-xl px-4 py-2.5">
-          <span className="chip-blue">{c.type}</span>
-          <span className="text-sm text-mist-100 flex-1 min-w-[120px] truncate">{c.title}</span>
-          <span className="text-[11px] text-mist-500">{c.downloads} downloads</span>
-          <select className="input !w-auto !py-1.5 !text-xs" value={c.access_level} onChange={async (e) => {
-            await api.put(`/api/startups/collateral/${c.id}`, { access_level: e.target.value }); load(); toast('Access level updated', 'success');
-          }}>
-            {['Public', 'Request Access', 'Connected Only'].map(a => <option key={a}>{a}</option>)}
-          </select>
-          <button className="text-red-400 hover:text-red-300 text-xs" onClick={async () => {
-            await api.del(`/api/startups/collateral/${c.id}`); load(); toast('Document removed', 'success');
-          }}>Remove</button>
-        </div>
-      ))}
+      {docs.map(c => <CollateralRow key={c.id} c={c} onChanged={load} />)}
       <div className="grid sm:grid-cols-3 gap-3">
         <input className="input" placeholder="Document title" value={d.title} onChange={(e) => setD(x => ({ ...x, title: e.target.value }))} />
         <select className="input" value={d.type} onChange={(e) => setD(x => ({ ...x, type: e.target.value }))}>
@@ -218,6 +204,56 @@ function ManageCollateral({ startupId }) {
           setD({ title: '', type: 'Deck', access_level: 'Request Access', file_key: '' }); load(); toast('Document added', 'success');
         } catch (e) { toast(e.message, 'error'); }
       }}>+ Add document</button>
+    </div>
+  );
+}
+
+// A data-room document row: inline title edit, access-level change, file replace,
+// and remove. Edits go through PUT /collateral/:cid (ownership re-checked server-side).
+function CollateralRow({ c, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(c.title);
+  const toast = useToast();
+  return (
+    <div className="bg-ink-850 border border-ink-700/60 rounded-xl px-4 py-2.5 space-y-2">
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="chip-blue">{c.type}</span>
+        {editing
+          ? <input className="input flex-1 min-w-[140px] !py-1.5" value={title} onChange={(e) => setTitle(e.target.value)} />
+          : <span className="text-sm text-mist-100 flex-1 min-w-[120px] truncate">{c.title}</span>}
+        <span className="text-[11px] text-mist-500">{c.downloads} downloads</span>
+        <select className="input !w-auto !py-1.5 !text-xs" value={c.access_level} onChange={async (e) => {
+          try { await api.put(`/api/startups/collateral/${c.id}`, { access_level: e.target.value }); onChanged(); toast('Access level updated', 'success'); }
+          catch (err) { toast(err.message, 'error'); }
+        }}>
+          {['Public', 'Request Access', 'Connected Only'].map(a => <option key={a}>{a}</option>)}
+        </select>
+        {editing ? (
+          <>
+            <button className="btn-primary btn-sm" disabled={!title.trim()} onClick={async () => {
+              try { await api.put(`/api/startups/collateral/${c.id}`, { title }); setEditing(false); onChanged(); toast('Title updated', 'success'); }
+              catch (err) { toast(err.message, 'error'); }
+            }}>Save</button>
+            <button className="btn-ghost btn-sm" onClick={() => { setTitle(c.title); setEditing(false); }}>Cancel</button>
+          </>
+        ) : (
+          <>
+            <button className="text-mist-400 hover:text-gold-300 text-xs" onClick={() => setEditing(true)}>Edit</button>
+            <button className="text-red-400 hover:text-red-300 text-xs" onClick={async () => {
+              if (!window.confirm(`Remove "${c.title}" from your data room?`)) return;
+              try { await api.del(`/api/startups/collateral/${c.id}`); onChanged(); toast('Document removed', 'success'); }
+              catch (err) { toast(err.message, 'error'); }
+            }}>Remove</button>
+          </>
+        )}
+      </div>
+      {editing && (
+        <FileUpload accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,image/*" hint="Replace file (optional · max 25 MB)" maxBytes={25 * 1024 * 1024} private
+          onUploaded={async (u) => {
+            try { await api.put(`/api/startups/collateral/${c.id}`, { file_key: u.key }); onChanged(); toast('File replaced', 'success'); }
+            catch (err) { toast(err.message, 'error'); }
+          }} />
+      )}
     </div>
   );
 }

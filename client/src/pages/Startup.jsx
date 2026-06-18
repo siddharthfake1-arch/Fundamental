@@ -6,14 +6,21 @@ import { useAuth } from '../AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
 import { Avatar, BarBreakdown, CoverHero, Empty, LineChart, Modal, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
-const Section = ({ id, title, children }) => (
+const Section = ({ id, title, action, children }) => (
   <motion.section id={id} className="card p-5 sm:p-6"
     initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true, margin: '-80px' }} transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
-    <h2 className="section-title mb-4">{title}</h2>
+    <div className="flex items-center justify-between gap-3 mb-4">
+      <h2 className="section-title !mb-0">{title}</h2>
+      {action}
+    </div>
     {children}
   </motion.section>
 );
+
+// Owner-only "Edit" link to the relevant Settings tab. Renders nothing for others.
+const EditLink = ({ show, to = '/settings?tab=startup', label = 'Edit' }) =>
+  show ? <Link to={to} className="btn-ghost btn-sm shrink-0">{label}</Link> : null;
 
 export default function Startup() {
   const { id } = useParams();
@@ -212,7 +219,7 @@ export default function Startup() {
       </CoverHero>
 
       {/* ---- Section 1: 12-Minute Pitch ---- */}
-      <Section id="pitch" title="Section 1 — The 12-minute pitch">
+      <Section id="pitch" title="Section 1 — The 12-minute pitch" action={<EditLink show={is_owner} label="Edit pitch video" />}>
         {s.video_url ? (
           <VideoPlayer src={s.video_url} chapters={asArray(s.video_chapters)} views={s.video_views}
             onFirstPlay={() => api.post(`/api/startups/${s.id}/video-view`).catch(() => {})} />
@@ -231,7 +238,7 @@ export default function Startup() {
       </Section>
 
       {/* ---- Section 2: Executive Summary ---- */}
-      <Section id="summary" title="Section 2 — Executive summary">
+      <Section id="summary" title="Section 2 — Executive summary" action={<EditLink show={is_owner} label="Edit summary" />}>
         {summary.length === 0 ? <div className="text-sm text-mist-500">Not provided yet.</div> : (
           <div className="space-y-5">
             {summary.map(([k, v]) => (
@@ -245,7 +252,7 @@ export default function Startup() {
       </Section>
 
       {/* ---- Section 3: Metrics Dashboard ---- */}
-      <Section id="metrics" title="Section 3 — Metrics dashboard">
+      <Section id="metrics" title="Section 3 — Metrics dashboard" action={<EditLink show={is_owner} label="Edit metrics" />}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {metrics.map(([k, v]) => (
             <div key={k} className="bg-ink-850 border border-ink-700/60 rounded-xl p-3.5">
@@ -259,7 +266,7 @@ export default function Startup() {
       </Section>
 
       {/* ---- Section 4: Collateral / Data Room ---- */}
-      <Section id="collateral" title="Section 4 — Collateral · the data room">
+      <Section id="collateral" title="Section 4 — Collateral · the data room" action={<EditLink show={is_owner} label="Manage data room" />}>
         {collateral.length === 0 ? <div className="text-sm text-mist-500">No documents in the data room yet.</div> : (
           <div className="space-y-2.5">
             {collateral.map(c => (
@@ -301,24 +308,14 @@ export default function Startup() {
           <div className="mt-6">
             <div className="text-xs font-semibold uppercase tracking-wider text-mist-500 mb-2">Your private notes <span className="normal-case font-normal">(visible only to you)</span></div>
             <div className="space-y-2">
-              {notes.map(n => (
-                <div key={n.id} className="bg-gold-500/5 border border-gold-500/20 rounded-xl px-4 py-3 flex gap-3">
-                  <div className="flex-1">
-                    <p className="text-sm text-mist-200">{n.text}</p>
-                    <div className="text-[11px] text-mist-500 mt-1">
-                      {n.collateral_id && <span className="text-gold-400/80">On document · </span>}{timeAgo(n.created_at)}
-                    </div>
-                  </div>
-                  <button className="text-mist-500 hover:text-red-400 text-xs" onClick={() => act(() => api.del(`/api/startups/notes/${n.id}`))}>✕</button>
-                </div>
-              ))}
+              {notes.map(n => <NoteRow key={n.id} n={n} onChanged={load} />)}
             </div>
           </div>
         )}
       </Section>
 
       {/* ---- Section 5: Team ---- */}
-      <Section id="team" title="Section 5 — Team">
+      <Section id="team" title="Section 5 — Team" action={<EditLink show={is_owner} label="Edit team" />}>
         <div className="flex flex-col sm:flex-row gap-5 items-start">
           <Avatar src={founder.photo} name={founder.name} size={18} />
           <div className="flex-1">
@@ -356,7 +353,7 @@ export default function Startup() {
       </Section>
 
       {links.length > 0 && (
-        <Section id="links" title="Links">
+        <Section id="links" title="Links" action={<EditLink show={is_owner} label="Edit links" />}>
           <div className="flex flex-wrap gap-2">
             {links.map((l, i) => (
               <a key={i} href={l.url} target="_blank" rel="noreferrer noopener" className="btn-ghost btn-sm max-w-full truncate">
@@ -371,14 +368,7 @@ export default function Startup() {
       <Section id="activity" title="Section 6 — Activity & signals">
         {activity.length === 0 ? <div className="text-sm text-mist-500">No signals yet.</div> : (
           <ol className="relative border-l border-ink-600/70 ml-2 space-y-5">
-            {activity.map(a => (
-              <li key={a.id} className="ml-5">
-                <span className="absolute -left-[5px] mt-1.5 w-2.5 h-2.5 rounded-full bg-gold-400 border-2 border-ink-900" />
-                <div className="text-xs font-semibold text-gold-300/90 uppercase tracking-wider">{a.type}</div>
-                <div className="text-sm text-mist-200 mt-0.5">{a.text}</div>
-                <div className="text-[11px] text-mist-500 mt-0.5">{timeAgo(a.created_at)}</div>
-              </li>
-            ))}
+            {activity.map(a => <ActivityRow key={a.id} a={a} isOwner={is_owner} onChanged={load} />)}
           </ol>
         )}
         {upvoteTrend.length > 1 && (
@@ -397,21 +387,8 @@ export default function Startup() {
         ) : (
           <div className="space-y-4">
             {updates.map(u => (
-              <div key={u.id} className="bg-ink-850 border border-ink-700/50 rounded-xl p-4">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className="font-semibold text-mist-100 text-sm">{u.headline}</span>
-                  <span className="text-[11px] text-mist-500">{timeAgo(u.created_at)}</span>
-                </div>
-                <p className="text-sm text-mist-300 leading-relaxed mt-1.5">{u.body}</p>
-                {(u.arr || u.mrr || u.growth) && (
-                  <div className="flex gap-2 flex-wrap mt-3">
-                    {u.arr != null && u.arr > 0 && <span className="chip-gold">ARR {fmtMoney(u.arr)}</span>}
-                    {u.mrr != null && u.mrr > 0 && <span className="chip-gold">MRR {fmtMoney(u.mrr)}</span>}
-                    {u.growth != null && u.growth > 0 && <span className="chip-green">+{u.growth}% MoM</span>}
-                  </div>
-                )}
-                <ReactionBar update={u} onReact={(updated) => setD(prev => ({ ...prev, updates: asArray(prev.updates).map(x => x.id === updated.id ? updated : x) }))} />
-              </div>
+              <UpdateRow key={u.id} u={u} isOwner={is_owner} onChanged={load}
+                onReact={(updated) => setD(prev => ({ ...prev, updates: asArray(prev.updates).map(x => x.id === updated.id ? updated : x) }))} />
             ))}
           </div>
         )}
@@ -529,6 +506,149 @@ function AccessManager({ startupId, onChange }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// An investor's private note with inline edit + delete (own note only).
+function NoteRow({ n, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(n.text);
+  const toast = useToast();
+  return (
+    <div className="bg-gold-500/5 border border-gold-500/20 rounded-xl px-4 py-3 flex gap-3">
+      <div className="flex-1">
+        {editing ? (
+          <div className="space-y-2">
+            <textarea className="input min-h-[60px]" value={text} onChange={(e) => setText(e.target.value)} />
+            <div className="flex gap-2">
+              <button className="btn-primary btn-sm" disabled={!text.trim()} onClick={async () => {
+                try { await api.put(`/api/startups/notes/${n.id}`, { text }); setEditing(false); onChanged(); toast('Note updated', 'success'); }
+                catch (e) { toast(e.message, 'error'); }
+              }}>Save</button>
+              <button className="btn-ghost btn-sm" onClick={() => { setText(n.text); setEditing(false); }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-mist-200">{n.text}</p>
+            <div className="text-[11px] text-mist-500 mt-1">
+              {n.collateral_id && <span className="text-gold-400/80">On document · </span>}{timeAgo(n.created_at)}
+            </div>
+          </>
+        )}
+      </div>
+      {!editing && (
+        <div className="flex flex-col items-end gap-1.5">
+          <button className="text-mist-500 hover:text-gold-300 text-xs" onClick={() => setEditing(true)}>Edit</button>
+          <button className="text-mist-500 hover:text-red-400 text-xs" onClick={async () => {
+            if (!window.confirm('Delete this note?')) return;
+            try { await api.del(`/api/startups/notes/${n.id}`); onChanged(); } catch (e) { toast(e.message, 'error'); }
+          }}>Delete</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SIGNAL_TYPES = ['Round Opened', 'Round Closed', 'Milestone Achieved', 'Hiring Announcement'];
+
+// One activity/signal row with owner-only inline edit + delete.
+function ActivityRow({ a, isOwner, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({ type: a.type, text: a.text });
+  const toast = useToast();
+  if (editing) {
+    return (
+      <li className="ml-5 space-y-2">
+        <select className="input !py-1.5 !text-xs" value={f.type} onChange={(e) => setF(x => ({ ...x, type: e.target.value }))}>
+          {SIGNAL_TYPES.map(t => <option key={t}>{t}</option>)}
+        </select>
+        <textarea className="input min-h-[52px]" value={f.text} onChange={(e) => setF(x => ({ ...x, text: e.target.value }))} />
+        <div className="flex gap-2">
+          <button className="btn-primary btn-sm" disabled={!f.text.trim()} onClick={async () => {
+            try { await api.put(`/api/startups/activity/${a.id}`, f); setEditing(false); onChanged(); toast('Signal updated', 'success'); }
+            catch (e) { toast(e.message, 'error'); }
+          }}>Save</button>
+          <button className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+      </li>
+    );
+  }
+  return (
+    <li className="ml-5">
+      <span className="absolute -left-[5px] mt-1.5 w-2.5 h-2.5 rounded-full bg-gold-400 border-2 border-ink-900" />
+      <div className="text-xs font-semibold text-gold-300/90 uppercase tracking-wider">{a.type}</div>
+      <div className="text-sm text-mist-200 mt-0.5">{a.text}</div>
+      <div className="flex items-center gap-3 mt-0.5">
+        <span className="text-[11px] text-mist-500">{timeAgo(a.created_at)}</span>
+        {isOwner && (
+          <>
+            <button className="text-[11px] text-mist-400 hover:text-gold-300" onClick={() => { setF({ type: a.type, text: a.text }); setEditing(true); }}>Edit</button>
+            <button className="text-[11px] text-mist-400 hover:text-red-300" onClick={async () => {
+              if (!window.confirm('Delete this signal?')) return;
+              try { await api.del(`/api/startups/activity/${a.id}`); onChanged(); } catch (e) { toast(e.message, 'error'); }
+            }}>Delete</button>
+          </>
+        )}
+      </div>
+    </li>
+  );
+}
+
+// One founder-update row with owner-only inline edit + delete.
+function UpdateRow({ u, isOwner, onChanged, onReact }) {
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({ headline: u.headline, body: u.body, arr: u.arr ?? '', mrr: u.mrr ?? '', growth: u.growth ?? '' });
+  const toast = useToast();
+  if (editing) {
+    return (
+      <div className="bg-ink-850 border border-ink-700/50 rounded-xl p-4 space-y-3">
+        <input className="input" maxLength={120} value={f.headline} onChange={(e) => setF(x => ({ ...x, headline: e.target.value }))} />
+        <textarea className="input min-h-[80px]" maxLength={400} value={f.body} onChange={(e) => setF(x => ({ ...x, body: e.target.value }))} />
+        <div className="grid grid-cols-3 gap-3">
+          <input type="number" className="input" placeholder="ARR (USD)" value={f.arr} onChange={(e) => setF(x => ({ ...x, arr: e.target.value }))} />
+          <input type="number" className="input" placeholder="MRR (USD)" value={f.mrr} onChange={(e) => setF(x => ({ ...x, mrr: e.target.value }))} />
+          <input type="number" className="input" placeholder="Growth %" value={f.growth} onChange={(e) => setF(x => ({ ...x, growth: e.target.value }))} />
+        </div>
+        <div className="flex gap-2">
+          <button className="btn-primary btn-sm" disabled={!f.headline.trim() || !f.body.trim()} onClick={async () => {
+            try {
+              await api.put(`/api/startups/updates/${u.id}`, { headline: f.headline, body: f.body, arr: f.arr !== '' ? Number(f.arr) : null, mrr: f.mrr !== '' ? Number(f.mrr) : null, growth: f.growth !== '' ? Number(f.growth) : null });
+              setEditing(false); onChanged(); toast('Update saved', 'success');
+            } catch (e) { toast(e.message, 'error'); }
+          }}>Save</button>
+          <button className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-ink-850 border border-ink-700/50 rounded-xl p-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <span className="font-semibold text-mist-100 text-sm">{u.headline}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] text-mist-500">{timeAgo(u.created_at)}</span>
+          {isOwner && (
+            <>
+              <button className="text-[11px] text-mist-400 hover:text-gold-300" onClick={() => { setF({ headline: u.headline, body: u.body, arr: u.arr ?? '', mrr: u.mrr ?? '', growth: u.growth ?? '' }); setEditing(true); }}>Edit</button>
+              <button className="text-[11px] text-mist-400 hover:text-red-300" onClick={async () => {
+                if (!window.confirm('Delete this update?')) return;
+                try { await api.del(`/api/startups/updates/${u.id}`); onChanged(); } catch (e) { toast(e.message, 'error'); }
+              }}>Delete</button>
+            </>
+          )}
+        </div>
+      </div>
+      <p className="text-sm text-mist-300 leading-relaxed mt-1.5">{u.body}</p>
+      {(u.arr || u.mrr || u.growth) && (
+        <div className="flex gap-2 flex-wrap mt-3">
+          {u.arr != null && u.arr > 0 && <span className="chip-gold">ARR {fmtMoney(u.arr)}</span>}
+          {u.mrr != null && u.mrr > 0 && <span className="chip-gold">MRR {fmtMoney(u.mrr)}</span>}
+          {u.growth != null && u.growth > 0 && <span className="chip-green">+{u.growth}% MoM</span>}
+        </div>
+      )}
+      <ReactionBar update={u} onReact={onReact} />
     </div>
   );
 }

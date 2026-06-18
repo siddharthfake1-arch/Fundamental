@@ -89,6 +89,13 @@ export default function Profile() {
             }}>Report</button>
           </div>
         )}
+        {self && (
+          <div className="flex gap-2 flex-wrap mt-5 pt-5 border-t border-ink-700/60">
+            <Link to="/settings?tab=account" className="btn-primary btn-sm">Edit profile</Link>
+            {u.role === 'investor' && <Link to="/settings?tab=investor" className="btn-ghost btn-sm">Edit investor profile</Link>}
+            {u.role === 'founder' && <Link to="/settings?tab=startup" className="btn-ghost btn-sm">Edit startup</Link>}
+          </div>
+        )}
       </CoverHero>
 
       {/* Investor: fund header + thesis */}
@@ -148,7 +155,10 @@ export default function Profile() {
       {/* About */}
       {(u.bio || u.experience || u.education) && (
         <div className="card p-6">
-          <h2 className="section-title mb-4">About</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title !mb-0">About</h2>
+            {self && <Link to="/settings?tab=account" className="btn-ghost btn-sm">Edit</Link>}
+          </div>
           {u.bio && <p className="text-sm text-mist-200 leading-relaxed">{u.bio}</p>}
           <div className="grid sm:grid-cols-2 gap-4 mt-4">
             {u.experience && <div><div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">Experience</div><div className="text-sm text-mist-300 mt-1">{u.experience}</div></div>}
@@ -158,24 +168,32 @@ export default function Profile() {
       )}
 
       {/* Links */}
-      {userLinks.length > 0 && (
+      {(userLinks.length > 0 || self) && (
         <div className="card p-6">
-          <h2 className="section-title mb-4">Links</h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title !mb-0">Links</h2>
+            {self && <Link to="/settings?tab=account" className="btn-ghost btn-sm">Edit links</Link>}
+          </div>
+          {userLinks.length === 0
+            ? <p className="text-sm text-mist-500">No links yet. Add your website, socials, deck, or press.</p>
+            : <div className="flex flex-wrap gap-2">
             {userLinks.map((l, i) => (
               <a key={i} href={l.url} target="_blank" rel="noreferrer noopener"
                 className="btn-ghost btn-sm max-w-full truncate">
                 {(l.label || l.url.replace(/^https?:\/\/(www\.)?/, '')).slice(0, 60)} ↗
               </a>
             ))}
-          </div>
+          </div>}
         </div>
       )}
 
       {/* Startups / Portfolio */}
       {(startups.length > 0 || portfolioStartups.length > 0) && (
         <div className="card p-6">
-          <h2 className="section-title mb-4">{u.role === 'founder' ? 'Startups' : 'Portfolio'}</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title !mb-0">{u.role === 'founder' ? 'Startups' : 'Portfolio'}</h2>
+            {self && u.role === 'founder' && <Link to="/settings?tab=startup" className="btn-ghost btn-sm">Edit startup</Link>}
+          </div>
           <div className="grid sm:grid-cols-2 gap-3">
             {(startups.length > 0 ? startups : portfolioStartups).map(s => (
               <Link key={s.id} to={`/startup/${s.id}`} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl p-3.5 hover:border-ink-500 transition-colors">

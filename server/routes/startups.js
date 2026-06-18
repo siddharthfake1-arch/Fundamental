@@ -392,6 +392,15 @@ router.delete('/notes/:noteId', requireRole('investor'), (req, res) => {
   db.prepare('DELETE FROM notes WHERE id=? AND investor_id=?').run(req.params.noteId, req.user.id);
   res.json({ ok: true });
 });
+// Edit a private note — only the investor who wrote it.
+router.put('/notes/:noteId', requireRole('investor'), (req, res) => {
+  const note = db.prepare('SELECT * FROM notes WHERE id=? AND investor_id=?').get(req.params.noteId, req.user.id);
+  if (!note) return res.status(403).json({ error: 'You can only edit your own notes.' });
+  const { text } = req.body;
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Write a note before saving.' });
+  db.prepare('UPDATE notes SET text=? WHERE id=?').run(text.trim().slice(0, 5000), note.id);
+  res.json({ notes: db.prepare('SELECT * FROM notes WHERE investor_id=? AND startup_id=? ORDER BY id DESC').all(req.user.id, note.startup_id) });
+});
 
 // ---- AI Investment Memo (structured-data synthesis engine) ----
 router.get('/:id/memo', requireApprovedInvestor, (req, res) => {
@@ -482,12 +491,20 @@ router.post('/:id/collateral', requireRole('founder'), (req, res) => {
 router.put('/collateral/:cid', requireRole('founder'), (req, res) => {
   const c = db.prepare('SELECT c.*, s.founder_id FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
   if (!c || c.founder_id !== req.user.id) return res.status(403).json({ error: 'You can only manage documents in your own data room.' });
-  const { title, access_level } = req.body;
+  const { title, access_level, file_key } = req.body;
   if (access_level && !['Public', 'Request Access', 'Connected Only'].includes(access_level)) {
     return res.status(400).json({ error: 'Choose a valid access level.' });
   }
-  db.prepare('UPDATE collateral SET title=COALESCE(?,title), access_level=COALESCE(?,access_level) WHERE id=?')
-    .run(title ? String(title).slice(0, 200) : null, access_level || null, c.id);
+  // Optional file replacement: validate the new private key, swap it in, and delete
+  // the old underlying file so no orphaned private document remains.
+  let newKey;
+  if (file_key !== undefined && file_key !== '') {
+    newKey = require('path').basename(String(file_key));
+    if (!privateExists(newKey)) return res.status(400).json({ error: 'Re-upload the document and try again.' });
+  }
+  db.prepare('UPDATE collateral SET title=COALESCE(?,title), access_level=COALESCE(?,access_level), file_key=COALESCE(?,file_key) WHERE id=?')
+    .run(title ? String(title).slice(0, 200) : null, access_level || null, newKey ?? null, c.id);
+  if (newKey && c.file_key && c.file_key !== newKey) deletePrivate(c.file_key); // remove the replaced file
   res.json({ ok: true });
 });
 router.delete('/collateral/:cid', requireRole('founder'), (req, res) => {
@@ -600,6 +617,30 @@ router.post('/:id/updates', requireRole('founder'), (req, res) => {
   res.json({ ok: true });
 });
 
+// Edit / delete a founder update — only the founder who owns the startup (admins
+// may delete). Editing an OLD update never silently rewrites the startup's current
+// headline metrics; current metrics are managed in Settings and on new updates.
+router.put('/updates/:uid', requireRole('founder'), (req, res) => {
+  const u = db.prepare('SELECT fu.*, s.founder_id FROM founder_updates fu JOIN startups s ON s.id=fu.startup_id WHERE fu.id=?').get(req.params.uid);
+  if (!u || u.founder_id !== req.user.id) return res.status(403).json({ error: 'You can only edit your own updates.' });
+  const numErr = validateNumericFields(req.body, ['arr', 'mrr', 'growth']);
+  if (numErr) return res.status(400).json({ error: numErr });
+  const { headline, body, arr, mrr, growth } = req.body;
+  if (!headline || !headline.trim()) return res.status(400).json({ error: 'Add a headline for your update.' });
+  if (!body || !body.trim()) return res.status(400).json({ error: 'Write the body of your update.' });
+  if (body.trim().length > 400) return res.status(400).json({ error: 'Updates are limited to 400 characters. Keep it concise.' });
+  db.prepare('UPDATE founder_updates SET headline=?, body=?, arr=?, mrr=?, growth=? WHERE id=?')
+    .run(headline.trim().slice(0, 120), body.trim(), arr ?? null, mrr ?? null, growth ?? null, u.id);
+  res.json({ ok: true });
+});
+router.delete('/updates/:uid', (req, res) => {
+  const u = db.prepare('SELECT fu.*, s.founder_id FROM founder_updates fu JOIN startups s ON s.id=fu.startup_id WHERE fu.id=?').get(req.params.uid);
+  if (!u) return res.status(404).json({ error: 'We could not find this update.' });
+  if (u.founder_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'You can only delete your own updates.' });
+  db.prepare('DELETE FROM founder_updates WHERE id=?').run(u.id); // reactions cascade
+  res.json({ ok: true });
+});
+
 // React to a founder update (one quick reaction per user; tap again to remove,
 // tap a different emoji to switch).
 router.post('/updates/:uid/react', dealFlowGate, (req, res) => {
@@ -705,6 +746,24 @@ router.post('/:id/activity', requireRole('founder'), (req, res) => {
   const { type, text } = req.body;
   if (!TYPES.includes(type) || !text) return res.status(400).json({ error: 'Valid signal type and text required' });
   addActivity(s.id, type, text);
+  res.json({ ok: true });
+});
+// Edit / delete an activity signal — only the founder who owns the startup (admins
+// may delete).
+const ACTIVITY_TYPES = ['Round Opened', 'Round Closed', 'Milestone Achieved', 'Hiring Announcement'];
+router.put('/activity/:activityId', requireRole('founder'), (req, res) => {
+  const a = db.prepare('SELECT a.*, s.founder_id FROM activities a JOIN startups s ON s.id=a.startup_id WHERE a.id=?').get(req.params.activityId);
+  if (!a || a.founder_id !== req.user.id) return res.status(403).json({ error: 'You can only edit signals for your own startup.' });
+  const { type, text } = req.body;
+  if (!ACTIVITY_TYPES.includes(type) || !text || !String(text).trim()) return res.status(400).json({ error: 'Valid signal type and text required.' });
+  db.prepare('UPDATE activities SET type=?, text=? WHERE id=?').run(type, String(text).trim().slice(0, 500), a.id);
+  res.json({ ok: true });
+});
+router.delete('/activity/:activityId', (req, res) => {
+  const a = db.prepare('SELECT a.*, s.founder_id FROM activities a JOIN startups s ON s.id=a.startup_id WHERE a.id=?').get(req.params.activityId);
+  if (!a) return res.status(404).json({ error: 'We could not find this signal.' });
+  if (a.founder_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'You can only delete signals for your own startup.' });
+  db.prepare('DELETE FROM activities WHERE id=?').run(a.id);
   res.json({ ok: true });
 });
 

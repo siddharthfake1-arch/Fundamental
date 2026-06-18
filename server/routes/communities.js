@@ -82,8 +82,34 @@ router.get('/:slug', (req, res) => {
     ...p,
     author: publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(p.user_id)),
     replies: db.prepare('SELECT COUNT(*) c FROM community_replies WHERE post_id=?').get(p.id).c,
+    can_edit: p.user_id === req.user.id || req.user.role === 'admin',
   }));
   res.json({ community: shape(c, req.user.id), posts });
+});
+
+// Edit a community. Only the creator or an admin may edit. The description can
+// always be changed; the name and kind can only change while still pending (or
+// by an admin). The slug never changes once created.
+router.put('/:slug', (req, res) => {
+  const { c, error } = getVisible(req, req.params.slug);
+  if (error) return res.status(404).json({ error: 'We could not find that community. It may have been removed.' });
+  if (c.created_by !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Only the community owner can edit it.' });
+
+  const description = String(req.body.description || '').trim();
+  if (description.length > 300) return res.status(400).json({ error: 'Keep the description under 300 characters.' });
+
+  const canEditNameKind = c.status === 'pending' || req.user.role === 'admin';
+  if (canEditNameKind) {
+    const name = String(req.body.name || '').trim();
+    const kind = String(req.body.kind || '').trim();
+    if (name.length < 3 || name.length > 60) return res.status(400).json({ error: 'Give your community a name between 3 and 60 characters.' });
+    if (!KINDS.includes(kind)) return res.status(400).json({ error: 'Choose a community type: topic, city, or role.' });
+    db.prepare('UPDATE communities SET name=?, kind=?, description=? WHERE id=?').run(name, kind, description, c.id);
+  } else {
+    db.prepare('UPDATE communities SET description=? WHERE id=?').run(description, c.id);
+  }
+  const updated = db.prepare('SELECT * FROM communities WHERE id=?').get(c.id);
+  res.json({ community: shape(updated, req.user.id) });
 });
 
 router.post('/:slug/posts', (req, res) => {
@@ -104,6 +130,7 @@ router.post('/:slug/posts', (req, res) => {
 router.get('/posts/:id/replies', (req, res) => {
   const replies = db.prepare('SELECT * FROM community_replies WHERE post_id=? ORDER BY id ASC').all(req.params.id).map(r => ({
     ...r, author: publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(r.user_id)),
+    can_edit: r.user_id === req.user.id || req.user.role === 'admin',
   }));
   res.json({ replies });
 });
@@ -121,6 +148,51 @@ router.post('/posts/:id/replies', (req, res) => {
   if (!body || !body.trim()) return res.status(400).json({ error: 'Please write a reply before posting.' });
   db.prepare('INSERT INTO community_replies (post_id, user_id, body) VALUES (?,?,?)')
     .run(post.id, req.user.id, body.trim().slice(0, 1200));
+  res.json({ ok: true });
+});
+
+// Edit a discussion. Only the author or an admin may edit, and only while the
+// community is still live (approved).
+router.put('/posts/:id', (req, res) => {
+  const post = db.prepare('SELECT * FROM community_posts WHERE id=?').get(req.params.id);
+  if (!post) return res.status(404).json({ error: 'We could not find that discussion. It may have been removed.' });
+  if (post.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Only the author can edit this discussion.' });
+  const community = db.prepare('SELECT * FROM communities WHERE id=?').get(post.community_id);
+  if (!community || community.status !== 'approved') return res.status(403).json({ error: 'This community is awaiting approval.' });
+  const { title, body } = req.body;
+  if (!title || !title.trim() || !body || !body.trim()) return res.status(400).json({ error: 'Please add both a title and a body to start the discussion.' });
+  if (body.length > 2000) return res.status(400).json({ error: 'Please keep discussions under 2,000 characters.' });
+  db.prepare('UPDATE community_posts SET title=?, body=? WHERE id=?').run(title.trim().slice(0, 140), body.trim(), post.id);
+  res.json({ ok: true });
+});
+
+// Delete a discussion. Only the author or an admin may delete; replies cascade.
+router.delete('/posts/:id', (req, res) => {
+  const post = db.prepare('SELECT * FROM community_posts WHERE id=?').get(req.params.id);
+  if (!post) return res.status(404).json({ error: 'We could not find that discussion. It may have been removed.' });
+  if (post.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Only the author can delete this discussion.' });
+  db.prepare('DELETE FROM community_replies WHERE post_id=?').run(post.id);
+  db.prepare('DELETE FROM community_posts WHERE id=?').run(post.id);
+  res.json({ ok: true });
+});
+
+// Edit a reply. Only the author or an admin may edit.
+router.put('/replies/:id', (req, res) => {
+  const reply = db.prepare('SELECT * FROM community_replies WHERE id=?').get(req.params.id);
+  if (!reply) return res.status(404).json({ error: 'We could not find that reply. It may have been removed.' });
+  if (reply.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Only the author can edit this reply.' });
+  const { body } = req.body;
+  if (!body || !body.trim()) return res.status(400).json({ error: 'Please write a reply before posting.' });
+  db.prepare('UPDATE community_replies SET body=? WHERE id=?').run(body.trim().slice(0, 1200), reply.id);
+  res.json({ ok: true });
+});
+
+// Delete a reply. Only the author or an admin may delete.
+router.delete('/replies/:id', (req, res) => {
+  const reply = db.prepare('SELECT * FROM community_replies WHERE id=?').get(req.params.id);
+  if (!reply) return res.status(404).json({ error: 'We could not find that reply. It may have been removed.' });
+  if (reply.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Only the author can delete this reply.' });
+  db.prepare('DELETE FROM community_replies WHERE id=?').run(reply.id);
   res.json({ ok: true });
 });
 
