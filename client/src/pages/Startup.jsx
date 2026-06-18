@@ -217,7 +217,16 @@ export default function Startup() {
           <VideoPlayer src={s.video_url} chapters={asArray(s.video_chapters)} views={s.video_views}
             onFirstPlay={() => api.post(`/api/startups/${s.id}/video-view`).catch(() => {})} />
         ) : (
-          <Empty title="Pitch not published yet" sub="This startup hasn't published its 12-minute pitch." />
+          <div className="rounded-xl border border-gold-500/30 bg-gold-500/[0.06] p-6 text-center">
+            <div className="text-2xl mb-2">◇</div>
+            <div className="h-display text-lg text-mist-100">Pitch not published yet</div>
+            <p className="text-sm text-mist-300 mt-1.5 max-w-md mx-auto">
+              This profile will go live and become visible to investors once the 12-minute pitch video is added.
+            </p>
+            {is_owner && (
+              <Link to="/settings?tab=startup" className="btn-primary btn-sm mt-4 inline-flex">Add your pitch video</Link>
+            )}
+          </div>
         )}
       </Section>
 
