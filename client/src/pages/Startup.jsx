@@ -221,7 +221,7 @@ export default function Startup() {
             <div className="text-2xl mb-2">◇</div>
             <div className="h-display text-lg text-mist-100">Pitch not published yet</div>
             <p className="text-sm text-mist-300 mt-1.5 max-w-md mx-auto">
-              This profile will go live and become visible to investors once the 12-minute pitch video is added.
+              This profile will go live on Fundamental once a pitch video is added.
             </p>
             {is_owner && (
               <Link to="/settings?tab=startup" className="btn-primary btn-sm mt-4 inline-flex">Add your pitch video</Link>
