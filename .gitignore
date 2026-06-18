@@ -8,3 +8,4 @@ server/uploads/*
 *.log
 
 server/uploads-private/
+backups/

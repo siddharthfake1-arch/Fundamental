@@ -16,11 +16,12 @@ function shapePost(p, userId) {
   return {
     ...p, author,
     can_edit: p.user_id === userId,
+    edited: !!p.updated_at,
     startup: p.startup_id ? db.prepare('SELECT id, name, logo, sector FROM startups WHERE id=?').get(p.startup_id) : null,
     likes: db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id=?').get(p.id).c,
     liked: !!db.prepare('SELECT 1 FROM post_likes WHERE user_id=? AND post_id=?').get(userId, p.id),
     comments: db.prepare(`SELECT pc.*, u.name, u.photo, u.role FROM post_comments pc JOIN users u ON u.id=pc.user_id
-      WHERE pc.post_id=? ORDER BY pc.id ASC`).all(p.id).map(pc => ({ ...pc, can_edit: pc.user_id === userId })),
+      WHERE pc.post_id=? ORDER BY pc.id ASC`).all(p.id).map(pc => ({ ...pc, can_edit: pc.user_id === userId, edited: !!pc.updated_at })),
   };
 }
 
@@ -123,7 +124,7 @@ router.put('/comments/:id', (req, res) => {
   if (comment.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'You can only edit your own comment.' });
   const { text } = req.body;
   if (!text || !text.trim()) return res.status(400).json({ error: 'Please write a comment before saving.' });
-  db.prepare('UPDATE post_comments SET text=? WHERE id=?').run(text.trim().slice(0, 1000), req.params.id);
+  db.prepare("UPDATE post_comments SET text=?, updated_at=datetime('now') WHERE id=?").run(text.trim().slice(0, 1000), req.params.id);
   res.json({ ok: true });
 });
 
@@ -160,7 +161,7 @@ router.put('/:id', (req, res) => {
     if (!own) return res.status(403).json({ error: 'You can only tag your own startup.' });
     taggedId = Number(startup_id);
   }
-  db.prepare('UPDATE posts SET type=?, text=?, startup_id=?, media=? WHERE id=?')
+  db.prepare("UPDATE posts SET type=?, text=?, startup_id=?, media=?, updated_at=datetime('now') WHERE id=?")
     .run(type, text.trim(), taggedId, media || '', req.params.id);
   res.json({ post: shapePost(db.prepare('SELECT * FROM posts WHERE id=?').get(req.params.id), req.user.id) });
 });

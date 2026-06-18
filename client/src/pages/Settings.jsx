@@ -162,7 +162,7 @@ function StartupSettings() {
           You can save your profile without a video, but it will not go live until a video is added.
         </div>
         {s.video_url && <video src={s.video_url} controls className="w-full rounded-xl aspect-video bg-black border border-ink-600/60" />}
-        <FileUpload label="Pitch video" accept="video/*" currentUrl={s.video_url} hint="12 minutes · max 50 MB" maxBytes={50 * 1024 * 1024}
+        <FileUpload label="Pitch video" accept="video/*" currentUrl={s.video_url} hint="MP4 / WebM / MOV · up to 12 minutes · max 100 MB" maxBytes={100 * 1024 * 1024}
           onUploaded={(d) => {
             if (d.duration && d.duration > 12 * 60) { toast(`That video is ${Math.round(d.duration / 60)} minutes. The pitch must be 12 minutes or less.`, 'error'); return; }
             setS(x => ({ ...x, video_url: d.url, video_duration: d.duration || x.video_duration || 0 }));

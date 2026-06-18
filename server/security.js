@@ -60,6 +60,29 @@ function validateUrlFields(body, fields) {
   return null;
 }
 
+// ---- Password policy ----
+// A small, high-signal blocklist of the most-guessed passwords. Kept short on
+// purpose: bcrypt + rate limiting carry the real load — this just stops the
+// laziest choices that would otherwise pass a pure length check.
+const COMMON_PASSWORDS = new Set([
+  'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
+  'qwerty123', 'iloveyou', 'admin123', 'letmein1', 'welcome1', 'changeme1',
+  'passw0rd', 'football1', 'baseball1', 'sunshine1', 'princess1', 'fundamental',
+]);
+
+// Validate a password against the production policy. Returns an error string for
+// the caller to surface, or null when the password is acceptable. Rules: 8–200
+// chars, contains at least one letter AND one number, not a single repeated
+// character, and not on the common-password blocklist.
+function validatePassword(pw) {
+  if (typeof pw !== 'string' || pw.length < 8) return 'Use a password of at least 8 characters.';
+  if (pw.length > 200) return 'That password is too long (200 characters max).';
+  if (!/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) return 'Use a mix of letters and numbers in your password.';
+  if (/^(.)\1+$/.test(pw)) return 'That password is too simple. Mix in more characters.';
+  if (COMMON_PASSWORDS.has(pw.toLowerCase())) return 'That password is too common. Choose something harder to guess.';
+  return null;
+}
+
 // Coerce numeric fields; reject non-numeric garbage instead of storing it.
 function validateNumericFields(body, fields) {
   for (const f of fields) {
@@ -161,4 +184,4 @@ function sniffFileType(buf, name = '') {
   return null;
 }
 
-module.exports = { rateLimit, safeUrl, validateUrlFields, validateNumericFields, clampStrings, sanitizeLinks, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType };
+module.exports = { rateLimit, safeUrl, validateUrlFields, validateNumericFields, clampStrings, sanitizeLinks, validatePassword, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType };

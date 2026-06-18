@@ -1,10 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { db, publicUser } = require('../db');
+const { db, publicUser, audit } = require('../db');
 const { sign, auth, JWT_SECRET } = require('../authmw');
-const { rateLimit } = require('../security');
-const { sendOtp, verifyOtp, normalizePhone } = require('../otp');
+const { rateLimit, validatePassword } = require('../security');
+const { sendOtp, verifyOtp, normalizePhone, isEmail } = require('../otp');
 
 const router = express.Router();
 // Brute-force protection: credential endpoints get a tight per-IP budget.
@@ -72,7 +72,8 @@ router.post('/signup', authLimiter, async (req, res) => {
   if (!['founder', 'investor'].includes(role)) return res.status(400).json({ error: 'Select your role: founder or investor.' });
   if (!name || !String(name).trim() || String(name).length > 120) return res.status(400).json({ error: 'Enter your full name (up to 120 characters).' });
   if (typeof email !== 'string' || email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
-  if (typeof password !== 'string' || password.length < 8 || password.length > 200) return res.status(400).json({ error: 'Use a password of at least 8 characters.' });
+  const pwErr = validatePassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
   if (!accept_terms) return res.status(400).json({ error: 'Please accept the Terms of Service and Privacy Policy to continue.' }); // P0-10
 
   // The account email is the login credential, so it MUST be the verified channel —
@@ -107,6 +108,45 @@ router.post('/login', authLimiter, loginIdLimiter, async (req, res) => {
   res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
 });
 
+// ---- Forgot password ----
+// Step 1: request a reset code. The response is ALWAYS neutral ({ ok: true }) so it
+// cannot be used to enumerate which emails have accounts. A code is only actually
+// sent when the email belongs to a real account. In development (no email provider)
+// the demo code is returned ONLY for real accounts so local testing still works.
+router.post('/forgot-password', otpLimiter, otpIdLimiter, async (req, res) => {
+  const email = lc(req.body && req.body.email);
+  if (!email || !isEmail(email)) return res.json({ ok: true }); // neutral, no error oracle
+  const user = db.prepare('SELECT id FROM users WHERE email=?').get(email);
+  let demo_code;
+  if (user) {
+    const out = await sendOtp('email', email);
+    if (out && out.demo_code) demo_code = out.demo_code; // dev/demo only
+  }
+  // Never reveal account existence in production responses.
+  if (process.env.NODE_ENV === 'production') return res.json({ ok: true });
+  res.json({ ok: true, demo_code });
+});
+
+// Step 2: verify the emailed code and set a new password. Reuses the OTP verifier
+// (single-use code, attempt caps, expiry). On success pwd_changed_at is bumped, which
+// invalidates every previously issued session token (kills stolen sessions). The
+// response stays neutral so a verified-but-unknown email can't confirm an account.
+router.post('/reset-password', authLimiter, otpIdLimiter, async (req, res) => {
+  const { email, code, password } = req.body;
+  const id = lc(email);
+  const pwErr = validatePassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+  const v = verifyOtp(id || '', code);
+  if (v.error) return res.status(400).json({ error: v.error });
+  const user = db.prepare('SELECT * FROM users WHERE email=?').get(id);
+  if (user) {
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    db.prepare("UPDATE users SET password_hash=?, pwd_changed_at=datetime('now') WHERE id=?").run(hash, user.id);
+    audit(user.id, 'password-reset', { targetType: 'user', targetId: user.id, ip: req.ip });
+  }
+  res.json({ ok: true });
+});
+
 // Google OAuth — wired when GOOGLE_CLIENT_ID is configured; clean 501 otherwise.
 router.post('/google', (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID) {
@@ -129,7 +169,8 @@ router.post('/change-password', auth, authLimiter, async (req, res) => {
   if (!await bcrypt.compare(String(current || ''), req.user.password_hash)) {
     return res.status(400).json({ error: 'Your current password is incorrect.' });
   }
-  if (typeof next !== 'string' || next.length < 8 || next.length > 200) return res.status(400).json({ error: 'Choose a new password of at least 8 characters.' });
+  const pwErr = validatePassword(next);
+  if (pwErr) return res.status(400).json({ error: pwErr });
   // pwd_changed_at invalidates every token issued before this moment (kills stolen
   // sessions). We set it first, then sign a fresh token so the current device stays
   // signed in — authmw uses a small grace window to avoid a same-second eviction race.

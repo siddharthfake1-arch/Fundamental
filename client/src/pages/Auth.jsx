@@ -54,6 +54,9 @@ export default function Auth() {
   const [role, setRole] = useState('founder');
   const [form, setForm] = useState({ name: '', email: '', password: '', city: '', phone: '' });
   const [otp, setOtp] = useState({ sent: false, sending: false, code: '', demo_code: '' });
+  // Forgot-password sub-flow (lives inside the login tab): request a code, then
+  // confirm it with a new password.
+  const [forgot, setForgot] = useState({ on: false, step: 'request', code: '', password: '', demo_code: '' });
   const [accepted, setAccepted] = useState(false);
   const [cfg, setCfg] = useState({ demo: false, google_enabled: false });
   const [busy, setBusy] = useState(false);
@@ -66,7 +69,32 @@ export default function Auth() {
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
   // Switch tabs and reset the signup flow back to its first step.
-  const switchMode = (m) => { setMode(m); setStep('form'); setOtp({ sent: false, sending: false, code: '', demo_code: '' }); };
+  const switchMode = (m) => { setMode(m); setStep('form'); setOtp({ sent: false, sending: false, code: '', demo_code: '' }); setForgot({ on: false, step: 'request', code: '', password: '', demo_code: '' }); };
+
+  // ---- Forgot password ----
+  // Request a reset code. The server responds neutrally (it won't confirm whether
+  // an account exists); in demo mode it returns the code so local testing works.
+  const requestReset = async () => {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) return toast('Enter the email on your account', 'error');
+    setBusy(true);
+    try {
+      const d = await api.post('/api/auth/forgot-password', { email: form.email });
+      setForgot(f => ({ ...f, step: 'confirm', demo_code: d.demo_code || '' }));
+      toast(d.demo_code ? 'Demo mode — your reset code is shown below' : 'If that email has an account, a reset code is on its way', 'success');
+    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+  };
+
+  const confirmReset = async () => {
+    if (!forgot.code || forgot.code.length < 6) return toast('Enter the 6-digit code we emailed you', 'error');
+    if (forgot.password.length < 8) return toast('Use a new password of at least 8 characters', 'error');
+    setBusy(true);
+    try {
+      await api.post('/api/auth/reset-password', { email: form.email, code: forgot.code, password: forgot.password });
+      toast('Password updated — please sign in with your new password', 'success');
+      setForgot({ on: false, step: 'request', code: '', password: '', demo_code: '' });
+      setForm(f => ({ ...f, password: '' }));
+    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+  };
 
   const goToDiscoverOrOnboarding = (user) => { setUser(user); nav(user.onboarded ? '/discover' : '/onboarding'); };
 
@@ -118,7 +146,10 @@ export default function Auth() {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (mode === 'login') return doLogin();
+    if (mode === 'login') {
+      if (forgot.on) return forgot.step === 'request' ? requestReset() : confirmReset();
+      return doLogin();
+    }
     if (step === 'form') return startVerification();
     return finishSignup();
   };
@@ -214,11 +245,46 @@ export default function Auth() {
 
           <form onSubmit={submit} className="space-y-4">
             {/* ---- Login ---- */}
-            {mode === 'login' && (
+            {mode === 'login' && !forgot.on && (
               <>
                 <div><span className="label">Email</span><input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
-                <div><span className="label">Password</span><input aria-label="Password" type="password" className="input" value={form.password} onChange={set('password')} placeholder="••••••••" required /></div>
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="label !mb-0">Password</span>
+                    <button type="button" className="text-xs text-gold-300 hover:text-gold-200 mb-1.5" onClick={() => setForgot(f => ({ ...f, on: true, step: 'request' }))}>Forgot password?</button>
+                  </div>
+                  <input aria-label="Password" type="password" className="input" value={form.password} onChange={set('password')} placeholder="••••••••" required />
+                </div>
               </>
+            )}
+
+            {/* ---- Forgot password (inside the login tab) ---- */}
+            {mode === 'login' && forgot.on && (
+              <div className="card p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-mist-100">Reset your password</span>
+                  <button type="button" className="text-xs text-mist-400 hover:text-mist-200" onClick={() => setForgot({ on: false, step: 'request', code: '', password: '', demo_code: '' })}>← Back to sign in</button>
+                </div>
+                {forgot.step === 'request' ? (
+                  <>
+                    <p className="text-xs text-mist-400 leading-relaxed">Enter your account email and we'll send a 6-digit reset code.</p>
+                    <input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required />
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-mist-400 leading-relaxed">Enter the code we sent to <span className="text-mist-200 font-medium">{form.email}</span> and choose a new password.</p>
+                    <input aria-label="Reset code" className="input text-center tracking-[0.5em] text-lg" inputMode="numeric" maxLength={6} value={forgot.code}
+                      onChange={(e) => setForgot(f => ({ ...f, code: e.target.value.replace(/\D/g, '') }))} placeholder="••••••" />
+                    <input aria-label="New password" type="password" className="input" value={forgot.password} onChange={(e) => setForgot(f => ({ ...f, password: e.target.value }))} placeholder="New password — letters and numbers, 8+ chars" />
+                    <button type="button" className="text-xs text-gold-300 hover:text-gold-200" onClick={requestReset} disabled={busy}>Resend code</button>
+                    {forgot.demo_code && (
+                      <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">
+                        Demo mode — your reset code is <code className="font-bold">{forgot.demo_code}</code>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
 
             {/* ---- Signup step 1: details ---- */}
@@ -274,9 +340,10 @@ export default function Auth() {
 
             <button disabled={busy} className="btn-primary w-full !py-3 group">
               {busy ? 'Please wait…'
-                : mode === 'login' ? 'Sign in'
-                : step === 'form' ? 'Continue'
-                : `Verify & create ${role === 'founder' ? 'founder' : 'investor'} account`}
+                : mode === 'login'
+                  ? (forgot.on ? (forgot.step === 'request' ? 'Send reset code' : 'Reset password') : 'Sign in')
+                  : step === 'form' ? 'Continue'
+                  : `Verify & create ${role === 'founder' ? 'founder' : 'investor'} account`}
               <MoveRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
           </form>

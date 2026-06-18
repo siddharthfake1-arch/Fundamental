@@ -144,8 +144,9 @@ export default function Startup() {
             </div>
           </div>
           {d.score && (
-            <div className="shrink-0 self-start sm:pt-14" title={`Completeness ${scoreBreakdown.completeness}/40 · Traction ${scoreBreakdown.traction}/30 · Engagement ${scoreBreakdown.engagement}/20 · Trust ${scoreBreakdown.trust}/10`}>
+            <div className="shrink-0 self-start sm:pt-14 text-center" title={`Completeness ${scoreBreakdown.completeness}/40 · Traction ${scoreBreakdown.traction}/30 · Engagement ${scoreBreakdown.engagement}/20 · Trust ${scoreBreakdown.trust}/10`}>
               <ScoreRing score={score.total} size={72} label="Fundamental Score" />
+              <div className="text-[10px] text-mist-500 mt-1.5 max-w-[120px] leading-tight">Informational only — not investment advice.</div>
             </div>
           )}
         </div>

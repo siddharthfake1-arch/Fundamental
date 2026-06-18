@@ -54,6 +54,12 @@ function CommunityIndex() {
                 <span className="chip capitalize">{c.kind}</span>
                 <span className="chip-gold">Pending review</span>
                 <span className="text-xs text-mist-500">An admin will review it shortly. You'll be notified when it goes live.</span>
+                <button className="text-xs font-semibold text-mist-400 hover:text-red-300 ml-auto"
+                  onClick={async () => {
+                    if (!window.confirm(`Withdraw "${c.name}"? This removes your pending submission.`)) return;
+                    try { await api.del(`/api/communities/${c.slug}`); toast('Submission withdrawn', 'success'); load(); }
+                    catch (e) { toast(e.message, 'error'); }
+                  }}>Withdraw</button>
               </div>
             ))}
           </div>
@@ -345,7 +351,7 @@ function Thread({ p, onChanged }) {
           <Link to={`/profile/${p.author.id}`} className="flex items-center gap-1.5 text-sm font-semibold text-mist-100 hover:text-gold-300">
             {p.author.name}{!!p.author.verified && <VerifiedBadge small tier={p.author.verified} />}
           </Link>
-          <div className="text-[11px] text-mist-500">{p.author.headline} · {timeAgo(p.created_at)}</div>
+          <div className="text-[11px] text-mist-500">{p.author.headline} · {timeAgo(p.created_at)}{p.edited && ' · edited'}</div>
         </div>
         {p.can_edit && !editing && (
           <div className="ml-auto flex items-center gap-2">
@@ -379,7 +385,7 @@ function Thread({ p, onChanged }) {
               <div className="bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5 flex-1">
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-mist-100">
                   {r.author.name}{!!r.author.verified && <VerifiedBadge small tier={r.author.verified} />}
-                  <span className="font-normal text-mist-500">· {timeAgo(r.created_at)}</span>
+                  <span className="font-normal text-mist-500">· {timeAgo(r.created_at)}{r.edited && ' · edited'}</span>
                   {r.can_edit && editReply !== r.id && (
                     <span className="ml-auto flex items-center gap-2">
                       <button className="text-[11px] font-semibold text-mist-400 hover:text-mist-100" onClick={() => startEditReply(r)}>Edit</button>

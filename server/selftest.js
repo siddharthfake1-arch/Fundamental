@@ -2,7 +2,7 @@
 // These are fast, dependency-free unit checks of the rules that protect the
 // platform; extend with HTTP-level route tests as the test suite grows.
 const assert = require('assert');
-const { safeUrl, sniffFileType, validateNumericFields, sanitizeLinks } = require('./security');
+const { safeUrl, sniffFileType, validateNumericFields, sanitizeLinks, validatePassword } = require('./security');
 // Pure module (no native sqlite dependency) so unit tests run even where the
 // better-sqlite3 binding can't build.
 const { canViewStartup, isListed } = require('./visibility');
@@ -70,6 +70,17 @@ ok('sanitizeLinks normalizes, validates, drops blanks, and caps count', () => {
   assert.ok(sanitizeLinks(tooMany, 10).error, 'caps at max');
   // Angle brackets stripped from labels (anti-injection).
   assert.strictEqual(sanitizeLinks([{ label: '<b>x', url: 'https://e.com' }]).links[0].label, 'bx');
+});
+
+ok('validatePassword enforces length, complexity, and blocklist', () => {
+  assert.strictEqual(validatePassword('Abcd1234'), null);        // valid: letters + numbers, 8 chars
+  assert.ok(validatePassword('short1'), 'rejects under 8 chars');
+  assert.ok(validatePassword('abcdefgh'), 'rejects letters-only');
+  assert.ok(validatePassword('12345678'), 'rejects digits-only (also common)');
+  assert.ok(validatePassword('aaaaaaaa'), 'rejects single repeated char');
+  assert.ok(validatePassword('password123'), 'rejects common password');
+  assert.ok(validatePassword('a'.repeat(201)), 'rejects over 200 chars');
+  assert.strictEqual(validatePassword(123456), 'Use a password of at least 8 characters.'); // non-string
 });
 
 ok('city search returns normalized "City, Country", deduped, ranked', () => {

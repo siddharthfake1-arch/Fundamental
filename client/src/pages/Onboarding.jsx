@@ -329,8 +329,8 @@ function FounderFlow({ user, refresh }) {
 function VideoStep({ s, setS, toast }) {
   return (
     <div className="space-y-4">
-      <FileUpload label="Pitch video (max 12 minutes)" accept="video/*" currentUrl={s.video_url} maxBytes={50 * 1024 * 1024}
-        hint="MP4 / WebM / MOV, up to 50 MB"
+      <FileUpload label="Pitch video (max 12 minutes)" accept="video/*" currentUrl={s.video_url} maxBytes={100 * 1024 * 1024}
+        hint="MP4 / WebM / MOV, up to 100 MB"
         onUploaded={async (d, file) => {
           // Prefer the server-verified duration; fall back to client measurement.
           const dur = d.duration || await videoDuration(file);

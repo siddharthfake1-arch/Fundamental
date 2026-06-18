@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { db, notify, audit, areConnected, publicUser, trustScore } = require('../db');
+const { db, notify, audit, areConnected, publicUser, trustScore, isVisibleUser, ACTIVE_USER_SQL } = require('../db');
 const { auth, requireRole } = require('../authmw');
 const { validateUrlFields, clampStrings, sanitizeLinks } = require('../security');
 const { deletePrivate } = require('../storage');
@@ -15,7 +15,9 @@ router.get('/network', (req, res) => {
   // All query params coerced to strings so array/object inputs cannot 500 the route.
   const role = qstr(req.query.role), sector = qstr(req.query.sector), stage = qstr(req.query.stage);
   const geography = qstr(req.query.geography).toLowerCase(), active = qstr(req.query.active), q = qstr(req.query.q).toLowerCase();
-  let users = db.prepare("SELECT * FROM users WHERE id != ? AND role != 'admin' AND onboarded=1").all(req.user.id);
+  // Only active, non-flagged, onboarded members appear in discovery (ACTIVE_USER_SQL
+  // already excludes admins). Suspended/flagged accounts are hidden platform-wide.
+  let users = db.prepare(`SELECT * FROM users WHERE id != ? AND onboarded=1 AND ${ACTIVE_USER_SQL}`).all(req.user.id);
   if (q) users = users.filter(u => (u.name + ' ' + u.headline).toLowerCase().includes(q));
   if (role) users = users.filter(u => u.role === role);
   if (geography) users = users.filter(u => (u.city || '').toLowerCase().includes(geography));
@@ -52,7 +54,7 @@ router.get('/network', (req, res) => {
 // ---- Connections ----
 router.post('/connect/:id', (req, res) => {
   const target = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!target || target.id === req.user.id) return res.status(400).json({ error: 'We could not find that person. Please try a different profile.' });
+  if (!target || target.id === req.user.id || !isVisibleUser(target, req.user)) return res.status(400).json({ error: 'We could not find that person. Please try a different profile.' });
   const existing = db.prepare(
     'SELECT * FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)'
   ).get(req.user.id, target.id, target.id, req.user.id);
@@ -88,7 +90,8 @@ router.get('/connections', (req, res) => {
 router.post('/follow/:id', (req, res) => {
   const targetId = Number(req.params.id);
   if (!targetId || targetId === req.user.id) return res.status(400).json({ error: 'You cannot follow yourself.' }); // (P2-5)
-  if (!db.prepare('SELECT 1 FROM users WHERE id=?').get(targetId)) return res.status(404).json({ error: 'We could not find that person.' });
+  const followTarget = db.prepare('SELECT * FROM users WHERE id=?').get(targetId);
+  if (!isVisibleUser(followTarget, req.user)) return res.status(404).json({ error: 'We could not find that person.' });
   const exists = db.prepare('SELECT 1 FROM follows WHERE follower_id=? AND followee_id=?').get(req.user.id, targetId);
   if (exists) db.prepare('DELETE FROM follows WHERE follower_id=? AND followee_id=?').run(req.user.id, targetId);
   else db.prepare('INSERT INTO follows (follower_id, followee_id) VALUES (?,?)').run(req.user.id, targetId);
@@ -98,7 +101,8 @@ router.post('/follow/:id', (req, res) => {
 // ---- Profile pages ----
 router.get('/profile/:id', (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!u) return res.status(404).json({ error: 'We could not find that profile. It may have been removed.' });
+  // Hide suspended/flagged/admin profiles from normal members (owner + admins exempt).
+  if (!u || !isVisibleUser(u, req.user)) return res.status(404).json({ error: 'We could not find that profile. It may have been removed.' });
   const out = { user: publicUser(u), trust: trustScore(u) };
 
   const myConns = db.prepare(
@@ -311,9 +315,11 @@ router.get('/intro-path/:id', (req, res) => {
   ).all(uid, uid, uid).map(r => r.pid);
   const mine = new Set(connsOf(req.user.id));
   const theirs = connsOf(targetId);
-  const connectors = theirs.filter(id => mine.has(id)).slice(0, 3)
-    .map(id => db.prepare('SELECT id, name, role, photo, headline, verified FROM users WHERE id=?').get(id))
-    .filter(Boolean);
+  const connectors = theirs.filter(id => mine.has(id))
+    .map(id => db.prepare('SELECT id, name, role, photo, headline, verified, status, flagged FROM users WHERE id=?').get(id))
+    .filter(c => isVisibleUser(c, req.user))
+    .slice(0, 3)
+    .map(({ status, flagged, ...c }) => c);
   res.json({ connectors, direct: false });
 });
 

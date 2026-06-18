@@ -83,6 +83,7 @@ router.get('/:slug', (req, res) => {
     author: publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(p.user_id)),
     replies: db.prepare('SELECT COUNT(*) c FROM community_replies WHERE post_id=?').get(p.id).c,
     can_edit: p.user_id === req.user.id || req.user.role === 'admin',
+    edited: !!p.updated_at,
   }));
   res.json({ community: shape(c, req.user.id), posts });
 });
@@ -112,6 +113,22 @@ router.put('/:slug', (req, res) => {
   res.json({ community: shape(updated, req.user.id) });
 });
 
+// Withdraw/delete a community. The creator can withdraw their own submission while
+// it is still pending review; an admin can remove any community. Posts, replies and
+// memberships cascade via foreign keys.
+router.delete('/:slug', (req, res) => {
+  const { c, error } = getVisible(req, req.params.slug);
+  if (error) return res.status(404).json({ error: 'We could not find that community. It may have been removed.' });
+  const isOwner = c.created_by === req.user.id;
+  const isAdmin = req.user.role === 'admin';
+  if (!isAdmin && !(isOwner && c.status === 'pending')) {
+    return res.status(403).json({ error: 'You can only withdraw your own community while it is still pending review.' });
+  }
+  db.prepare('DELETE FROM communities WHERE id=?').run(c.id);
+  audit(req.user.id, 'community-delete', { targetType: 'community', targetId: c.id, detail: c.name, ip: req.ip });
+  res.json({ ok: true });
+});
+
 router.post('/:slug/posts', (req, res) => {
   const { c, error } = getVisible(req, req.params.slug);
   if (error) return res.status(404).json({ error: 'We could not find that community. It may have been removed.' });
@@ -131,6 +148,7 @@ router.get('/posts/:id/replies', (req, res) => {
   const replies = db.prepare('SELECT * FROM community_replies WHERE post_id=? ORDER BY id ASC').all(req.params.id).map(r => ({
     ...r, author: publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(r.user_id)),
     can_edit: r.user_id === req.user.id || req.user.role === 'admin',
+    edited: !!r.updated_at,
   }));
   res.json({ replies });
 });
@@ -162,7 +180,7 @@ router.put('/posts/:id', (req, res) => {
   const { title, body } = req.body;
   if (!title || !title.trim() || !body || !body.trim()) return res.status(400).json({ error: 'Please add both a title and a body to start the discussion.' });
   if (body.length > 2000) return res.status(400).json({ error: 'Please keep discussions under 2,000 characters.' });
-  db.prepare('UPDATE community_posts SET title=?, body=? WHERE id=?').run(title.trim().slice(0, 140), body.trim(), post.id);
+  db.prepare("UPDATE community_posts SET title=?, body=?, updated_at=datetime('now') WHERE id=?").run(title.trim().slice(0, 140), body.trim(), post.id);
   res.json({ ok: true });
 });
 
@@ -183,7 +201,7 @@ router.put('/replies/:id', (req, res) => {
   if (reply.user_id !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ error: 'Only the author can edit this reply.' });
   const { body } = req.body;
   if (!body || !body.trim()) return res.status(400).json({ error: 'Please write a reply before posting.' });
-  db.prepare('UPDATE community_replies SET body=? WHERE id=?').run(body.trim().slice(0, 1200), reply.id);
+  db.prepare("UPDATE community_replies SET body=?, updated_at=datetime('now') WHERE id=?").run(body.trim().slice(0, 1200), reply.id);
   res.json({ ok: true });
 });
 

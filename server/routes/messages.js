@@ -1,6 +1,6 @@
 const express = require('express');
 const path = require('path');
-const { db, notify, areConnected, canViewStartup } = require('../db');
+const { db, notify, areConnected, canViewStartup, isVisibleUser } = require('../db');
 const { auth } = require('../authmw');
 const { validateUrlFields, clampStrings } = require('../security');
 const { streamPrivate, privateExists } = require('../storage');
@@ -9,6 +9,10 @@ const router = express.Router();
 router.use(auth);
 
 const DEAL_STAGES = ['Intro', 'Due Diligence', 'Closed', 'Passed'];
+// Anti-spam: until the recipient has replied at least once, the initiator can send
+// at most this many messages into a one-sided conversation. Once the other person
+// replies, the cap is lifted for that conversation. Env-tunable for tests.
+const ONE_SIDED_CAP = Number(process.env.MSG_ONE_SIDED_CAP) || 100;
 
 function getOrCreateConversation(u1, u2) {
   const [a, b] = u1 < u2 ? [u1, u2] : [u2, u1];
@@ -36,6 +40,8 @@ router.get('/', (req, res) => {
 // Messaging unlocks only when connection is Accepted.
 router.post('/start/:userId', (req, res) => {
   const otherId = Number(req.params.userId);
+  const other = db.prepare('SELECT * FROM users WHERE id=?').get(otherId);
+  if (!isVisibleUser(other, req.user)) return res.status(404).json({ error: 'We could not find that person.' });
   if (!areConnected(req.user.id, otherId)) {
     return res.status(403).json({ error: 'Messaging unlocks once your connection is accepted. Send a connection request to get started.' });
   }
@@ -85,6 +91,15 @@ router.post('/:id/send', (req, res) => {
   const otherId = c.a_id === req.user.id ? c.b_id : c.a_id;
   if (!areConnected(req.user.id, otherId)) {
     return res.status(403).json({ error: 'You can message this person once your connection is accepted.' });
+  }
+  // One-sided spam guard: cap messages into a conversation the recipient has never
+  // replied to. The cap lifts the moment they reply (so real back-and-forth is free).
+  const otherReplied = db.prepare('SELECT 1 FROM messages WHERE conversation_id=? AND sender_id=?').get(c.id, otherId);
+  if (!otherReplied) {
+    const mine = db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id=? AND sender_id=?').get(c.id, req.user.id).c;
+    if (mine >= ONE_SIDED_CAP) {
+      return res.status(429).json({ error: 'You have reached the limit for an unanswered conversation. Please wait for a reply before sending more.' });
+    }
   }
   // External attachment links must still be real http(s) links (stored XSS guard).
   const urlErr = validateUrlFields(req.body, ['attachment']);

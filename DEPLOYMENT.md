@@ -118,9 +118,13 @@ ADMIN_NAME="Your Name"
   `<DATA_DIR>/uploads-private`) survive restarts — or migrate to managed Postgres +
   S3/R2 before a large launch. Private documents (`uploads-private/`) are never served
   statically — they stream through access-checked endpoints.
-- **Upload size limits:** pitch videos cap at 50 MB, each data-room file at 25 MB,
+- **Upload size limits:** pitch videos cap at 100 MB, each data-room file at 25 MB,
   images at 10 MB (enforced server-side after a magic-byte content check).
-- **Backups & encryption at rest** for the database and private documents.
+- **Forgot password:** self-serve reset via email OTP is built in (`/api/auth/forgot-password`
+  + `/api/auth/reset-password`); a reset invalidates older sessions via `pwd_changed_at`.
+- **Backups & restore:** run `npm run backup` (consistent online snapshot + uploads) and
+  keep copies off-box. See `docs/BACKUP.md`, and `docs/STAGING.md` / `docs/MONITORING.md`
+  / `docs/MIGRATION.md` for staging, observability, and the Postgres/S3 scaling plan.
 - **Malware scanning** for uploaded documents (integrate a scanner in the
   `/api/upload/private` pipeline).
 - **Distributed rate limiting** (Redis) if running more than one instance — the

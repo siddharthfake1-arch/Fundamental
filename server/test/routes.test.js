@@ -53,13 +53,13 @@ async function test(name, fn) {
 async function getOtpAndSignup(c, email, role) {
   const s = await (await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: email })).json();
   const v = await (await c('POST', '/api/auth/verify-otp', { identifier: email, code: s.demo_code })).json();
-  return c('POST', '/api/auth/signup', { role, name: 'Test User', email, password: 'password123', otp_token: v.otp_token, accept_terms: true });
+  return c('POST', '/api/auth/signup', { role, name: 'Test User', email, password: 'Testpass123', otp_token: v.otp_token, accept_terms: true });
 }
 
 async function run() {
   cleanupDb();
   server = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
-    env: { ...process.env, NODE_ENV: 'test', PORT: String(PORT), DB_PATH, AUTO_SEED: 'true' },
+    env: { ...process.env, NODE_ENV: 'test', PORT: String(PORT), DB_PATH, AUTO_SEED: 'true', MSG_ONE_SIDED_CAP: '3' },
     stdio: ['ignore', 'ignore', 'inherit'],
   });
   await waitForHealth();
@@ -93,7 +93,7 @@ async function run() {
     await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: email });
     const r2 = await (await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: email })).json();
     const v = await (await c('POST', '/api/auth/verify-otp', { identifier: email, code: r2.demo_code })).json();
-    const r = await c('POST', '/api/auth/signup', { role: 'founder', name: 'X', email, password: 'password123', otp_token: v.otp_token });
+    const r = await c('POST', '/api/auth/signup', { role: 'founder', name: 'X', email, password: 'Testpass123', otp_token: v.otp_token });
     assert.strictEqual(r.status, 400, 'must reject without terms');
   });
 
@@ -104,7 +104,7 @@ async function run() {
     const r2 = await (await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: real })).json();
     const v = await (await c('POST', '/api/auth/verify-otp', { identifier: real, code: r2.demo_code })).json();
     // Try to claim a DIFFERENT email with this token.
-    const r = await c('POST', '/api/auth/signup', { role: 'founder', name: 'X', email: `other_${Date.now()}@example.com`, password: 'password123', otp_token: v.otp_token, accept_terms: true });
+    const r = await c('POST', '/api/auth/signup', { role: 'founder', name: 'X', email: `other_${Date.now()}@example.com`, password: 'Testpass123', otp_token: v.otp_token, accept_terms: true });
     assert.strictEqual(r.status, 400, 'must reject email that was not verified');
   });
 
@@ -384,6 +384,94 @@ async function run() {
     const other = makeClient();
     await other('POST', '/api/auth/login', { email: 'investor2@demo.app', password: 'demo1234' });
     assert.strictEqual((await other('PUT', `/api/startups/notes/${noteId}`, { text: 'not mine' })).status, 403, 'non-owner note edit blocked');
+  });
+
+  await test('signup rejects a weak/common password', async () => {
+    const c = makeClient();
+    const email = `weakpw_${Date.now()}@example.com`;
+    const s = await (await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: email })).json();
+    const v = await (await c('POST', '/api/auth/verify-otp', { identifier: email, code: s.demo_code })).json();
+    const r = await c('POST', '/api/auth/signup', { role: 'founder', name: 'X', email, password: 'password123', otp_token: v.otp_token, accept_terms: true });
+    assert.strictEqual(r.status, 400, 'common password rejected');
+  });
+
+  await test('forgot/reset password: neutral response, then OTP-verified reset works', async () => {
+    const c = makeClient();
+    const email = `reset_${Date.now()}@example.com`;
+    await getOtpAndSignup(c, email, 'investor');
+    // Unknown email -> still neutral { ok: true }, no enumeration.
+    const unknown = await (await c('POST', '/api/auth/forgot-password', { email: `nobody_${Date.now()}@example.com` })).json();
+    assert.ok(unknown.ok === true, 'neutral ok for unknown email');
+    assert.ok(unknown.demo_code === undefined, 'no code issued for non-account');
+    // Real account -> dev returns a demo code we can use to reset.
+    const fp = await (await c('POST', '/api/auth/forgot-password', { email })).json();
+    assert.ok(fp.demo_code, 'reset code issued for real account (dev)');
+    // Reset must enforce the password policy.
+    assert.strictEqual((await c('POST', '/api/auth/reset-password', { email, code: fp.demo_code, password: 'weak' })).status, 400, 'weak password rejected');
+    // Valid reset succeeds and the new password logs in.
+    const rr = await c('POST', '/api/auth/reset-password', { email, code: fp.demo_code, password: 'NewPass456' });
+    assert.strictEqual(rr.status, 200, 'reset ok');
+    const login = await c('POST', '/api/auth/login', { email, password: 'NewPass456' });
+    assert.strictEqual(login.status, 200, 'new password works');
+  });
+
+  await test('suspended/flagged users are hidden from discovery and profile', async () => {
+    // Create a normal user, then have an admin suspend them.
+    const victim = makeClient();
+    const vemail = `susp_${Date.now()}@example.com`;
+    const vme = await (await getOtpAndSignup(victim, vemail, 'founder')).json();
+    const vid = vme.user.id;
+    const admin = makeClient();
+    await admin('POST', '/api/auth/login', { email: 'admin@fundamental.app', password: 'demo1234' });
+    const sus = await (await admin('POST', `/api/admin/suspend-user/${vid}`, { reason: 'test' })).json();
+    assert.strictEqual(sus.status, 'suspended', 'admin suspended the user');
+    // A normal member can no longer see the suspended profile.
+    const viewer = makeClient();
+    await viewer('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    assert.strictEqual((await viewer('GET', `/api/users/profile/${vid}`)).status, 404, 'suspended profile hidden');
+    assert.strictEqual((await viewer('POST', `/api/users/connect/${vid}`)).status, 400, 'cannot connect to suspended user');
+    const net = await (await viewer('GET', '/api/users/network')).json();
+    assert.ok(!net.users.some(u => u.id === vid), 'suspended user absent from network directory');
+    // Admins can still see them (for moderation).
+    assert.strictEqual((await admin('GET', `/api/users/profile/${vid}`)).status, 200, 'admin still sees suspended profile');
+  });
+
+  await test('one-sided message cap blocks until the recipient replies', async () => {
+    // Two demo founders connect, then one floods the conversation.
+    const a = makeClient(); const b = makeClient();
+    const ame = await (await a('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' })).json();
+    const bme = await (await b('POST', '/api/auth/login', { email: 'founder2@demo.app', password: 'demo1234' })).json();
+    // Establish an accepted connection a<->b (robust to any pre-existing link).
+    const connRes = await a('POST', `/api/users/connect/${bme.user.id}`);
+    if (connRes.status === 200) {
+      const reqs = await (await b('GET', '/api/users/connections')).json();
+      const pending = reqs.pending.find(p => p.user_id === ame.user.id);
+      if (pending) await b('POST', `/api/users/connections/${pending.id}/accept`);
+    }
+    const conv = await (await a('POST', `/api/messages/start/${bme.user.id}`)).json();
+    const conversationId = conv.conversation_id;
+    assert.ok(conversationId, 'conversation established');
+    // Cap is 3 (set via MSG_ONE_SIDED_CAP for tests): first 3 send, 4th is blocked.
+    for (let i = 0; i < 3; i++) {
+      assert.strictEqual((await a('POST', `/api/messages/${conversationId}/send`, { text: `msg ${i}` })).status, 200, `message ${i} sent`);
+    }
+    assert.strictEqual((await a('POST', `/api/messages/${conversationId}/send`, { text: 'one too many' })).status, 429, 'one-sided cap reached');
+    // Once b replies, the cap lifts for a.
+    await b('POST', `/api/messages/${conversationId}/send`, { text: 'reply' });
+    assert.strictEqual((await a('POST', `/api/messages/${conversationId}/send`, { text: 'now allowed' })).status, 200, 'cap lifted after reply');
+  });
+
+  await test('creator can withdraw a pending community; non-pending withdraw blocked', async () => {
+    const owner = makeClient();
+    await owner('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' });
+    const slug = (await (await owner('POST', '/api/communities', { name: `Withdraw ${Date.now()}`, kind: 'topic', description: 'x' })).json()).slug;
+    // A different user cannot withdraw it.
+    const other = makeClient();
+    await other('POST', '/api/auth/login', { email: 'founder2@demo.app', password: 'demo1234' });
+    assert.strictEqual((await other('DELETE', `/api/communities/${slug}`)).status, 404, 'non-creator cannot see/withdraw pending');
+    // Creator withdraws while pending.
+    assert.strictEqual((await owner('DELETE', `/api/communities/${slug}`)).status, 200, 'creator withdraws pending community');
+    assert.strictEqual((await owner('GET', `/api/communities/${slug}`)).status, 404, 'community is gone');
   });
 
   console.log(results.join('\n'));

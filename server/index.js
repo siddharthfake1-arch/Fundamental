@@ -125,9 +125,9 @@ const { PRIVATE_DIR } = require('./storage');
 const { UPLOAD_DIR } = require('./paths');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// Per-kind upload ceilings (bytes). Pitch video caps at 50 MB; each data-room
+// Per-kind upload ceilings (bytes). Pitch video caps at 100 MB; each data-room
 // document caps at 25 MB; images stay lean at 10 MB.
-const SIZE_LIMITS = { image: 10 * 1024 * 1024, video: 50 * 1024 * 1024, document: 25 * 1024 * 1024 };
+const SIZE_LIMITS = { image: 10 * 1024 * 1024, video: 100 * 1024 * 1024, document: 25 * 1024 * 1024 };
 const MB = (n) => Math.round(n / (1024 * 1024));
 const uploadLimiter = rateLimit({ name: 'upload', windowMs: 60 * 60_000, max: 40 });
 

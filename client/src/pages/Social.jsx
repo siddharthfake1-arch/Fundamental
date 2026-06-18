@@ -189,7 +189,7 @@ function Post({ p, onChange }) {
             {p.author.name}{!!p.author.verified && <VerifiedBadge small />}
           </Link>
           <div className="text-xs text-mist-400 truncate">{p.author.headline}</div>
-          <div className="text-[11px] text-mist-500 mt-0.5">{timeAgo(p.created_at)}</div>
+          <div className="text-[11px] text-mist-500 mt-0.5">{timeAgo(p.created_at)}{p.edited && ' · edited'}</div>
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <span className={TYPE_STYLE[p.type] || 'chip'}>{p.type}</span>

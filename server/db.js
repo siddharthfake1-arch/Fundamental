@@ -298,6 +298,11 @@ for (const stmt of [
   "ALTER TABLE communities ADD COLUMN created_by INTEGER",
   "ALTER TABLE communities ADD COLUMN status TEXT DEFAULT 'approved'",
   "ALTER TABLE startups ADD COLUMN links TEXT DEFAULT '[]'",              // company profile links [{label,url}]
+  // Edit tracking: set when an item is edited so the UI can show an "edited" marker.
+  "ALTER TABLE posts ADD COLUMN updated_at TEXT DEFAULT NULL",
+  "ALTER TABLE post_comments ADD COLUMN updated_at TEXT DEFAULT NULL",
+  "ALTER TABLE community_posts ADD COLUMN updated_at TEXT DEFAULT NULL",
+  "ALTER TABLE community_replies ADD COLUMN updated_at TEXT DEFAULT NULL",
 ]) { try { db.exec(stmt); } catch { /* column exists */ } }
 
 // Startup team members (founder can list co-founders / key team on the company
@@ -516,6 +521,20 @@ function areConnected(u1, u2) {
   ).get(u1, u2, u2, u1);
 }
 
+// ---- Public user visibility ----
+// A single source of truth for "should this account be visible to a normal user?".
+// Suspended, flagged, and admin accounts are hidden from discovery/profile/connect/
+// follow/messaging surfaces. The viewer always sees themselves, and admins see
+// everyone (for moderation). `ACTIVE_USER_SQL` is the matching WHERE fragment for
+// bulk queries (e.g. the network directory) so the rule never drifts between the
+// row-level check and the list query.
+const ACTIVE_USER_SQL = "status='active' AND flagged=0 AND role!='admin'";
+function isVisibleUser(u, viewer) {
+  if (!u) return false;
+  if (viewer && (u.id === viewer.id || viewer.role === 'admin')) return true;
+  return u.status === 'active' && !u.flagged && u.role !== 'admin';
+}
+
 // Shape a user row for exposure to OTHER members. Strips credentials and PII:
 // email stays private (only the session owner and admins see it — harvesting defense).
 function publicUser(u) {
@@ -589,4 +608,4 @@ function trustScore(u) {
   return { total: verification + profile + network + contribution, breakdown: { verification, profile, network, contribution } };
 }
 
-module.exports = { db, notify, audit, logCollateralAccess, isListed, canViewStartup, addActivity, areConnected, publicUser, profileCompletion, fundamentalScore, thesisFit, trustScore, FUNDING_LADDER, startupSubscribers };
+module.exports = { db, notify, audit, logCollateralAccess, isListed, canViewStartup, addActivity, areConnected, publicUser, isVisibleUser, ACTIVE_USER_SQL, profileCompletion, fundamentalScore, thesisFit, trustScore, FUNDING_LADDER, startupSubscribers };
