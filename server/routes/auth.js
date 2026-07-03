@@ -28,8 +28,14 @@ const COOKIE = {
 
 function sessionPayload(user) {
   const me = publicUser(user);
-  me.email = user.email; // own session only — publicUser strips these for everyone else
+  // Own-session-only fields — publicUser's allowlist excludes these for everyone else.
+  me.email = user.email;
   me.phone = user.phone || '';
+  me.onboarded = user.onboarded;
+  me.investor_approved = user.investor_approved;
+  me.email_alerts = user.email_alerts;
+  me.inapp_alerts = user.inapp_alerts;
+  try { me.email_prefs = JSON.parse(user.email_prefs || '{}') || {}; } catch { me.email_prefs = {}; }
   if (user.role === 'investor') {
     const ip = db.prepare('SELECT * FROM investor_profiles WHERE user_id=?').get(user.id);
     if (ip) {
@@ -145,6 +151,29 @@ router.post('/reset-password', authLimiter, otpIdLimiter, async (req, res) => {
     audit(user.id, 'password-reset', { targetType: 'user', targetId: user.id, ip: req.ip });
   }
   res.json({ ok: true });
+});
+
+// ---- Change email ----
+// The account email is the login credential, so a change requires BOTH the
+// current password and an OTP verified on the NEW address (proves control of the
+// new mailbox; a hijacked session alone cannot re-point the account). The client
+// sends the code via the existing /send-otp endpoint first.
+router.post('/change-email', auth, authLimiter, async (req, res) => {
+  const { new_email, code, password } = req.body;
+  if (!isEmail(new_email || '')) return res.status(400).json({ error: 'Enter a valid new email address.' });
+  const email = new_email.toLowerCase();
+  if (email === req.user.email) return res.status(400).json({ error: 'That is already your account email.' });
+  if (!await bcrypt.compare(String(password || ''), req.user.password_hash)) {
+    return res.status(400).json({ error: 'Your current password is incorrect.' });
+  }
+  const v = verifyOtp(email, code);
+  if (v.error) return res.status(400).json({ error: v.error });
+  if (db.prepare('SELECT 1 FROM users WHERE email=?').get(email)) {
+    return res.status(409).json({ error: 'An account already uses this email address.' });
+  }
+  db.prepare('UPDATE users SET email=?, email_verified=1 WHERE id=?').run(email, req.user.id);
+  audit(req.user.id, 'change-email', { targetType: 'user', targetId: req.user.id, detail: `to=${email}`, ip: req.ip });
+  res.json({ ok: true, email });
 });
 
 // Google OAuth — wired when GOOGLE_CLIENT_ID is configured; clean 501 otherwise.

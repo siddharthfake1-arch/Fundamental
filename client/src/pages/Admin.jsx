@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
-import { Empty, LineChart, Spinner, Stat, useToast } from '../components/ui';
+import { Empty, LineChart, Spinner, Stat, useConfirm, useToast } from '../components/ui';
 
-const TAB_KEYS = ['analytics', 'users', 'startups', 'communities', 'content', 'reports', 'errors'];
+const TAB_KEYS = ['analytics', 'users', 'startups', 'communities', 'content', 'reports', 'audit', 'errors'];
 
 export default function Admin() {
   const { user } = useAuth();
@@ -14,7 +14,7 @@ export default function Admin() {
   const setTab = (t) => setParams({ tab: t });
   if (user.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
-  const tabs = [['analytics', 'Platform analytics'], ['users', 'Verify users'], ['startups', 'Verify startups'], ['communities', 'Communities'], ['content', 'Moderate content'], ['reports', 'Reports'], ['errors', 'Errors']];
+  const tabs = [['analytics', 'Platform analytics'], ['users', 'Verify users'], ['startups', 'Verify startups'], ['communities', 'Communities'], ['content', 'Moderate content'], ['reports', 'Reports'], ['audit', 'Audit log'], ['errors', 'Errors']];
   return (
     <div className="fade-in">
       <h1 className="h-display text-2xl mb-1">Admin</h1>
@@ -31,6 +31,7 @@ export default function Admin() {
       {tab === 'communities' && <CommunitiesAdmin />}
       {tab === 'content' && <Content />}
       {tab === 'reports' && <Reports />}
+      {tab === 'audit' && <AuditLog />}
       {tab === 'errors' && <ClientErrors />}
     </div>
   );
@@ -67,6 +68,7 @@ function Users() {
   const [users, setUsers] = useState(null);
   const [q, setQ] = useState('');
   const toast = useToast();
+  const confirm = useConfirm();
   const load = () => api.get('/api/admin/users').then(d => setUsers(asArray(d.users))).catch(() => {});
   useEffect(() => { load(); }, []);
   if (!users) return <Spinner />;
@@ -106,10 +108,10 @@ function Users() {
                       {u.investor_approved ? 'Revoke' : 'Approve'}
                     </button>
                   )}
-                  <button className="btn-ghost btn-sm" onClick={async () => { if (u.status !== 'suspended' && !window.confirm(`Suspend ${u.name}? They will be signed out and blocked until reinstated.`)) return; const r = await api.post(`/api/admin/suspend-user/${u.id}`); load(); toast(r.status === 'suspended' ? 'Account suspended' : 'Account reinstated', 'success'); }}>
+                  <button className="btn-ghost btn-sm" onClick={async () => { if (u.status !== 'suspended' && !await confirm({ title: `Suspend ${u.name}?`, body: 'They will be signed out immediately and blocked until reinstated. Their startup and content disappear from the platform.', danger: true, confirmLabel: 'Suspend' })) return; const r = await api.post(`/api/admin/suspend-user/${u.id}`); load(); toast(r.status === 'suspended' ? 'Account suspended' : 'Account reinstated', 'success'); }}>
                     {u.status === 'suspended' ? 'Reinstate' : 'Suspend'}
                   </button>
-                  <button className="btn-danger btn-sm" onClick={async () => { if (!u.flagged && !window.confirm(`Flag ${u.name} as fraudulent? They will be blocked from the platform.`)) return; await api.post(`/api/admin/flag-user/${u.id}`); load(); }}>
+                  <button className="btn-danger btn-sm" onClick={async () => { if (!u.flagged && !await confirm({ title: `Flag ${u.name} as fraudulent?`, body: 'They will be blocked from the platform until unflagged.', danger: true, confirmLabel: 'Flag' })) return; await api.post(`/api/admin/flag-user/${u.id}`); load(); }}>
                     {u.flagged ? 'Unflag' : 'Flag'}
                   </button>
                 </div>
@@ -127,6 +129,7 @@ function StartupsAdmin() {
   const [list, setList] = useState(null);
   const [q, setQ] = useState('');
   const toast = useToast();
+  const confirm = useConfirm();
   const load = () => api.get('/api/admin/startups').then(d => setList(asArray(d.startups))).catch(() => {});
   useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
@@ -160,7 +163,7 @@ function StartupsAdmin() {
                     onClick={async () => { await api.post(`/api/admin/verify-startup/${s.id}`); load(); toast('Tier updated', 'success'); }}>
                     Tier ↻
                   </button>
-                  <button className="btn-ghost btn-sm" onClick={async () => { if (!s.hidden && !window.confirm(`Hide ${s.name}? It and its documents will be removed from the marketplace.`)) return; const r = await api.post(`/api/admin/hide-startup/${s.id}`); load(); toast(r.hidden ? 'Startup hidden' : 'Startup restored', 'success'); }}>
+                  <button className="btn-ghost btn-sm" onClick={async () => { if (!s.hidden && !await confirm({ title: `Hide ${s.name}?`, body: 'It and its documents will be removed from the marketplace until restored.', danger: true, confirmLabel: 'Hide' })) return; const r = await api.post(`/api/admin/hide-startup/${s.id}`); load(); toast(r.hidden ? 'Startup hidden' : 'Startup restored', 'success'); }}>
                     {s.hidden ? 'Unhide' : 'Hide'}
                   </button>
                 </div>
@@ -177,6 +180,7 @@ function StartupsAdmin() {
 function Content() {
   const [posts, setPosts] = useState(null);
   const toast = useToast();
+  const confirm = useConfirm();
   const load = () => api.get('/api/admin/posts').then(d => setPosts(asArray(d.posts))).catch(() => {});
   useEffect(() => { load(); }, []);
   if (!posts) return <Spinner />;
@@ -194,7 +198,7 @@ function Content() {
             <p className="text-sm text-mist-300 mt-1.5 line-clamp-3">{p.text}</p>
           </div>
           <button className={p.removed ? 'btn-ghost btn-sm' : 'btn-danger btn-sm'}
-            onClick={async () => { if (!p.removed && !window.confirm('Remove this post from the feed?')) return; await api.post(`/api/admin/posts/${p.id}/remove`); load(); toast(p.removed ? 'Post restored' : 'Post removed', 'success'); }}>
+            onClick={async () => { if (!p.removed && !await confirm({ title: 'Remove this post from the feed?', danger: true, confirmLabel: 'Remove' })) return; await api.post(`/api/admin/posts/${p.id}/remove`); load(); toast(p.removed ? 'Post restored' : 'Post removed', 'success'); }}>
             {p.removed ? 'Restore' : 'Remove'}
           </button>
         </div>
@@ -236,6 +240,7 @@ function Reports() {
 function CommunitiesAdmin() {
   const [list, setList] = useState(null);
   const toast = useToast();
+  const confirm = useConfirm();
   const load = () => api.get('/api/admin/communities').then(d => setList(asArray(d.communities))).catch(() => {});
   useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
@@ -265,7 +270,7 @@ function CommunitiesAdmin() {
                     <button className="btn-primary btn-sm" onClick={async () => { await api.post(`/api/admin/communities/${c.id}/approve`); load(); toast('Community approved — now live', 'success'); }}>Approve</button>
                   )}
                   <button className="btn-danger btn-sm" onClick={async () => {
-                    if (!window.confirm(`${c.status === 'pending' ? 'Decline' : 'Delete'} "${c.name}"? ${c.status === 'pending' ? '' : 'This removes the community and all its discussions.'}`)) return;
+                    if (!await confirm({ title: `${c.status === 'pending' ? 'Decline' : 'Delete'} "${c.name}"?`, body: c.status === 'pending' ? 'The creator will be notified.' : 'This removes the community and all its discussions.', danger: true, confirmLabel: c.status === 'pending' ? 'Decline' : 'Delete' })) return;
                     await api.post(`/api/admin/communities/${c.id}/delete`); load(); toast(c.status === 'pending' ? 'Community declined' : 'Community deleted', 'success');
                   }}>{c.status === 'pending' ? 'Decline' : 'Delete'}</button>
                 </div>
@@ -313,6 +318,50 @@ function ClientErrors() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// Read-only browser for the append-only audit trail: admin actions, moderation,
+// verification, data-room access decisions, blocks, and password resets.
+function AuditLog() {
+  const [d, setD] = useState(null);
+  const [action, setAction] = useState('');
+  const load = (a = action) => api.get(`/api/admin/audit-logs${a ? `?action=${encodeURIComponent(a)}` : ''}`)
+    .then(setD).catch(() => setD({ logs: [], total: 0, actions: [] }));
+  useEffect(() => { load(); }, [action]);
+  if (!d) return <Spinner />;
+  const logs = asArray(d.logs);
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 flex-wrap">
+        <select className="input !w-auto !py-2 !text-xs" value={action} onChange={(e) => setAction(e.target.value)} aria-label="Filter by action">
+          <option value="">All actions</option>
+          {asArray(d.actions).map(a => <option key={a}>{a}</option>)}
+        </select>
+        <span className="text-xs text-mist-500">{d.total} entries · append-only, never edited by app code</span>
+      </div>
+      {logs.length === 0 ? <Empty title="No audit entries" sub="Sensitive actions are recorded here as they happen." /> : (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="text-left text-[11px] uppercase tracking-wider text-mist-500 border-b border-ink-700/60">
+              {['When', 'Actor', 'Action', 'Target', 'Detail', 'IP'].map(h => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {logs.map(l => (
+                <tr key={l.id} className="border-b border-ink-700/40 last:border-0 hover:bg-ink-850">
+                  <td className="px-4 py-2.5 text-mist-500 text-xs whitespace-nowrap">{timeAgo(l.created_at)}</td>
+                  <td className="px-4 py-2.5 text-mist-300">{l.actor_name || (l.actor_id ? `#${l.actor_id}` : 'system')}</td>
+                  <td className="px-4 py-2.5"><code className="text-xs text-gold-300">{l.action}</code></td>
+                  <td className="px-4 py-2.5 text-mist-400 text-xs">{l.target_type ? `${l.target_type} #${l.target_id ?? ''}` : '—'}</td>
+                  <td className="px-4 py-2.5 text-mist-400 text-xs max-w-[220px] truncate" title={l.detail}>{l.detail || '—'}</td>
+                  <td className="px-4 py-2.5 text-mist-500 text-xs">{l.ip || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

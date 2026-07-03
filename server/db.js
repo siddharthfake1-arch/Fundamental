@@ -6,6 +6,9 @@ const { DB_FILE } = require('./paths');
 const db = new Database(DB_FILE);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// Wait briefly on a locked database (WAL checkpoints, the boot-time seed
+// subprocess) instead of throwing SQLITE_BUSY immediately.
+db.pragma('busy_timeout = 5000');
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -298,6 +301,7 @@ for (const stmt of [
   "ALTER TABLE communities ADD COLUMN created_by INTEGER",
   "ALTER TABLE communities ADD COLUMN status TEXT DEFAULT 'approved'",
   "ALTER TABLE startups ADD COLUMN links TEXT DEFAULT '[]'",              // company profile links [{label,url}]
+  "ALTER TABLE users ADD COLUMN email_prefs TEXT DEFAULT '{}'",          // per-category email toggles {messages,connections,dealroom,activity}
   // Edit tracking: set when an item is edited so the UI can show an "edited" marker.
   "ALTER TABLE posts ADD COLUMN updated_at TEXT DEFAULT NULL",
   "ALTER TABLE post_comments ADD COLUMN updated_at TEXT DEFAULT NULL",
@@ -394,6 +398,19 @@ CREATE TABLE IF NOT EXISTS collateral_access_logs (
 );
 `);
 
+// User-to-user blocks. Blocking is mutual-invisibility: neither side can view,
+// connect with, follow, or message the other while the block stands. Managed
+// from the profile (block) and Settings (unblock).
+db.exec(`
+CREATE TABLE IF NOT EXISTS blocks (
+  blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+CREATE INDEX IF NOT EXISTS idx_blocks_blocked ON blocks(blocked_id);
+`);
+
 // One-time codes for signup verification (email or SMS). Only the hash is stored.
 db.exec(`
 CREATE TABLE IF NOT EXISTS otp_codes (
@@ -431,6 +448,10 @@ CREATE INDEX IF NOT EXISTS idx_client_errors_created ON client_errors(created_at
 db.exec(`
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read);
 CREATE INDEX IF NOT EXISTS idx_messages_convo ON messages(conversation_id, read);
+CREATE INDEX IF NOT EXISTS idx_messages_convo_id ON messages(conversation_id, id);
+CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_startups_sector ON startups(sector);
+CREATE INDEX IF NOT EXISTS idx_startups_stage ON startups(stage);
 CREATE INDEX IF NOT EXISTS idx_startup_views_startup ON startup_views(startup_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_upvotes_startup ON upvotes(startup_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_watchlist_startup ON watchlist(startup_id);
@@ -457,25 +478,41 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_target ON audit_logs(target_type, targ
 CREATE INDEX IF NOT EXISTS idx_collateral_access_logs ON collateral_access_logs(collateral_id, created_at);
 `);
 
-// ---- Data retention sweep (runs once at boot) ----
+// ---- Versioned migrations ----
+// The bootstrap above is the frozen baseline. All FUTURE schema changes are
+// numbered .sql files in server/migrations/, applied exactly once and recorded
+// in schema_migrations (see server/migrations.js).
+require('./migrations').runMigrations(db);
+
+// ---- Data retention sweep (at boot, then daily) ----
 // Bounds unbounded behavioural/security tables and clears expired one-time codes.
+// Runs periodically so long-lived processes keep pruning, not just at startup.
 // Document these windows in your privacy policy.
-try {
-  db.exec("DELETE FROM startup_views WHERE created_at < datetime('now','-180 days')");
-  db.exec("DELETE FROM otp_codes WHERE created_at < datetime('now','-1 day')");
-  db.exec("DELETE FROM collateral_access_logs WHERE created_at < datetime('now','-365 days')");
-  db.exec("DELETE FROM notifications WHERE read=1 AND created_at < datetime('now','-180 days')");
-  db.exec("DELETE FROM client_errors WHERE created_at < datetime('now','-30 days')");
-} catch { /* tables may not exist on a brand-new DB yet */ }
+function retentionSweep() {
+  try {
+    db.exec("DELETE FROM startup_views WHERE created_at < datetime('now','-180 days')");
+    db.exec("DELETE FROM otp_codes WHERE created_at < datetime('now','-1 day')");
+    db.exec("DELETE FROM collateral_access_logs WHERE created_at < datetime('now','-365 days')");
+    db.exec("DELETE FROM notifications WHERE read=1 AND created_at < datetime('now','-180 days')");
+    db.exec("DELETE FROM client_errors WHERE created_at < datetime('now','-30 days')");
+  } catch { /* tables may not exist on a brand-new DB yet */ }
+}
+retentionSweep();
+setInterval(retentionSweep, 24 * 3600 * 1000).unref();
 
 // ---- shared helpers ----
 // Respects the recipient's in-app notification preference (P1-11). Email delivery
 // is handled separately by the mailer when email_alerts is on.
 function notify(userId, type, text, link = '') {
-  const u = db.prepare('SELECT inapp_alerts FROM users WHERE id=?').get(userId);
-  if (u && u.inapp_alerts === 0) return;
-  db.prepare('INSERT INTO notifications (user_id, type, text, link) VALUES (?,?,?,?)')
-    .run(userId, type, text, link);
+  const u = db.prepare('SELECT id, name, email, email_alerts, inapp_alerts, email_prefs FROM users WHERE id=?').get(userId);
+  if (!u) return;
+  if (u.inapp_alerts !== 0) {
+    db.prepare('INSERT INTO notifications (user_id, type, text, link) VALUES (?,?,?,?)')
+      .run(userId, type, text, link);
+  }
+  // Email delivery honors email_alerts + per-category email_prefs, is throttled,
+  // and never blocks or fails the request (see server/mailer.js).
+  require('./mailer').maybeEmail(u, type, text, link);
 }
 
 // Append-only audit trail for sensitive/admin actions.
@@ -514,6 +551,13 @@ function startupSubscribers(startupId, excludeUserId = 0) {
   return rows.map(r => r.user_id).filter(id => id !== excludeUserId);
 }
 
+// True when EITHER side has blocked the other (mutual invisibility).
+function isBlocked(u1, u2) {
+  return !!db.prepare(
+    'SELECT 1 FROM blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)'
+  ).get(u1, u2, u2, u1);
+}
+
 function areConnected(u1, u2) {
   return !!db.prepare(
     `SELECT 1 FROM connections WHERE status='accepted' AND
@@ -535,11 +579,16 @@ function isVisibleUser(u, viewer) {
   return u.status === 'active' && !u.flagged && u.role !== 'admin';
 }
 
-// Shape a user row for exposure to OTHER members. Strips credentials and PII:
-// email stays private (only the session owner and admins see it — harvesting defense).
+// Shape a user row for exposure to OTHER members. Explicit ALLOWLIST — never a
+// strip-list — so newly added columns (moderation notes, account state, contact
+// info) are private by default. Session-only extras (email, phone, onboarded)
+// are added by sessionPayload in routes/auth.js, never here.
+const PUBLIC_USER_FIELDS = ['id', 'role', 'name', 'city', 'headline', 'bio', 'photo', 'cover',
+  'linkedin', 'education', 'experience', 'badges', 'verified', 'links', 'created_at'];
 function publicUser(u) {
   if (!u) return null;
-  const { password_hash, pwd_changed_at, email, phone, email_alerts, inapp_alerts, ...rest } = u;
+  const rest = {};
+  for (const k of PUBLIC_USER_FIELDS) if (u[k] !== undefined) rest[k] = u[k];
   rest.badges = JSON.parse(rest.badges || '[]');
   try { rest.links = JSON.parse(rest.links || '[]'); } catch { rest.links = []; }
   return rest;
@@ -608,4 +657,4 @@ function trustScore(u) {
   return { total: verification + profile + network + contribution, breakdown: { verification, profile, network, contribution } };
 }
 
-module.exports = { db, notify, audit, logCollateralAccess, isListed, canViewStartup, addActivity, areConnected, publicUser, isVisibleUser, ACTIVE_USER_SQL, profileCompletion, fundamentalScore, thesisFit, trustScore, FUNDING_LADDER, startupSubscribers };
+module.exports = { db, notify, audit, logCollateralAccess, isListed, canViewStartup, addActivity, areConnected, isBlocked, publicUser, isVisibleUser, ACTIVE_USER_SQL, profileCompletion, fundamentalScore, thesisFit, trustScore, FUNDING_LADDER, startupSubscribers };

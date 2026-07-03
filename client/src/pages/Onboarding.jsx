@@ -180,7 +180,13 @@ function FounderFlow({ user, refresh }) {
       await api.put('/api/users/me', normalizeMe(me));
       const { id } = await api.post('/api/startups/mine', startupPayload());
       await saveTeam();
-      for (const d of docs) await api.post(`/api/startups/${id}/collateral`, d);
+      // Mark each document as posted the moment it succeeds, so a retry after a
+      // mid-loop failure never re-creates duplicates of the ones that went through.
+      for (const d of docs) {
+        if (d._posted) continue;
+        await api.post(`/api/startups/${id}/collateral`, d);
+        d._posted = true;
+      }
       await api.post('/api/users/complete-onboarding'); // server validates required artifacts
       localStorage.removeItem(draftKey);
       await refresh();

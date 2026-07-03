@@ -169,7 +169,7 @@ function TagsModal({ s, onClose, onChange }) {
         <div className="flex flex-wrap gap-1.5 min-h-[28px]">
           {tags.map(t => (
             <span key={t} className="chip-gold !py-1 !px-2.5 !text-xs">
-              {t}<button className="ml-1.5 text-gold-400 hover:text-red-400" onClick={() => setTags(tags.filter(x => x !== t))}>✕</button>
+              {t}<button className="ml-1.5 text-gold-400 hover:text-red-400" aria-label={`Remove tag ${t}`} onClick={() => setTags(tags.filter(x => x !== t))}>✕</button>
             </span>
           ))}
           {tags.length === 0 && <span className="text-xs text-mist-500">No tags yet.</span>}

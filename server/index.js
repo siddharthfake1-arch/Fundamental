@@ -8,6 +8,7 @@ try { require.resolve('express'); } catch {
 }
 
 const express = require('express');
+const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
@@ -17,6 +18,19 @@ const { auth, validateProductionConfig, JWT_SECRET } = require('./authmw');
 const { rateLimit, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType } = require('./security');
 
 const IS_PROD = process.env.NODE_ENV === 'production';
+
+// Optional server-side error monitoring: set SENTRY_DSN and install @sentry/node
+// (npm install @sentry/node). Boots fine without either — this is a soft hook.
+let sentry = null;
+if (process.env.SENTRY_DSN) {
+  try {
+    sentry = require('@sentry/node');
+    sentry.init({ dsn: process.env.SENTRY_DSN, environment: process.env.NODE_ENV || 'development' });
+    console.log('Sentry error monitoring enabled.');
+  } catch {
+    console.warn('SENTRY_DSN is set but @sentry/node is not installed. Run: npm install @sentry/node');
+  }
+}
 
 // Fail closed: refuse to boot a production deployment that is missing required
 // security configuration (JWT secret, OTP provider, public URL) — P0-9.
@@ -29,6 +43,8 @@ const app = express();
 app.set('trust proxy', process.env.TRUST_PROXY_HOPS !== undefined ? Number(process.env.TRUST_PROXY_HOPS) : 0);
 app.disable('x-powered-by');
 app.use(securityHeaders);
+// gzip/brotli for JSON + built client (~620 KB of JS shrinks to ~170 KB).
+app.use(compression());
 app.use(express.json({ limit: '2mb' }));
 app.use(cookieParser());
 // F-035: per-request id for correlation in logs / error tracking.
@@ -193,6 +209,10 @@ app.post('/api/upload/private', auth, uploadLimiter, (req, res) => {
 });
 
 app.use('/uploads', express.static(UPLOAD_DIR, {
+  // Upload filenames are 16-byte CSPRNG-random and never reused, so aggressive
+  // immutable caching is safe — replacing a file always mints a new URL.
+  maxAge: '365d',
+  immutable: true,
   setHeaders: (res, filePath) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // User-uploaded SVG/HTML must never execute scripts in our origin
@@ -210,7 +230,8 @@ const { db: _db, fundamentalScore: _score } = require('./db');
 app.get('/api/public/startup/:id', (req, res) => {
   // Public sharing is founder opt-in (P1-12): only published startups whose
   // owner enabled public_share are exposed unauthenticated.
-  const s = _db.prepare("SELECT * FROM startups WHERE id=? AND video_url != '' AND public_share = 1").get(req.params.id);
+  const s = _db.prepare(`SELECT * FROM startups WHERE id=? AND video_url != '' AND public_share = 1
+    AND founder_id IN (SELECT id FROM users WHERE status='active' AND flagged=0)`).get(req.params.id);
   if (!s) return res.status(404).json({ error: 'This startup is not publicly shared.' });
   const founder = _db.prepare('SELECT name, headline, verified FROM users WHERE id=?').get(s.founder_id);
   res.json({
@@ -237,7 +258,8 @@ app.use('/api', require('./routes/misc'));
 app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found' }));
 app.use((err, req, res, next) => {
   // Structured JSON log with a request id for correlation. In production we never
-  // log the full error object/stack (may contain user data) — wire Sentry here.
+  // log the full error object/stack (may contain user data).
+  if (sentry) { try { sentry.captureException(err); } catch { /* monitoring must never break the response */ } }
   const entry = { level: 'error', ts: new Date().toISOString(), request_id: req.id, method: req.method, path: req.path, message: err && err.message };
   if (!IS_PROD && err && err.stack) entry.stack = err.stack;
   console.error(JSON.stringify(entry));
@@ -273,11 +295,18 @@ app.get('/sitemap.xml', (req, res) => {
 // ---- Serve built client (production) ----
 const DIST = path.join(__dirname, '..', 'client', 'dist');
 if (fs.existsSync(DIST)) {
-  app.use(express.static(DIST));
+  // Vite fingerprints everything under /assets — cache those forever. index.html
+  // is excluded from static serving (index:false) so every HTML navigation goes
+  // through the meta-injecting handlers below, which serve a boot-cached copy
+  // instead of re-reading the file from disk per request.
+  app.use('/assets', express.static(path.join(DIST, 'assets'), { maxAge: '1y', immutable: true }));
+  app.use(express.static(DIST, { index: false, maxAge: '1h' }));
+  const INDEX_HTML = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
   // Shareable startup pages with Open Graph tags for rich link previews
   app.get('/s/:id', (req, res) => {
-    const s = _db.prepare("SELECT * FROM startups WHERE id=? AND video_url != '' AND public_share = 1").get(req.params.id);
-    let html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+    const s = _db.prepare(`SELECT * FROM startups WHERE id=? AND video_url != '' AND public_share = 1
+      AND founder_id IN (SELECT id FROM users WHERE status='active' AND flagged=0)`).get(req.params.id);
+    let html = INDEX_HTML;
     if (s) {
       // Robust HTML-attribute escaping for all five sensitive characters (P3-4).
       const esc = (x) => String(x || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -309,7 +338,7 @@ if (fs.existsSync(DIST)) {
   };
   const PUBLIC = new Set(['/', '/login', '/legal/terms', '/legal/privacy', '/legal/disclosures']);
   app.get(/^(?!\/api|\/uploads).*/, (req, res) => {
-    let html = fs.readFileSync(path.join(DIST, 'index.html'), 'utf8');
+    let html = INDEX_HTML;
     const esc = (x) => String(x || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const base = siteBase(req);
     const m = PAGE_META[req.path];

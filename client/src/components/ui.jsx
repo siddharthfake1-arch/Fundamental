@@ -495,3 +495,88 @@ export const Logo = ({ className = 'h-[52px]', variant = 'auto' }) => {
     </span>
   );
 };
+
+// ---- Confirm dialog (branded replacement for window.confirm / window.prompt) ----
+// Usage: const confirm = useConfirm();
+//   if (!await confirm({ title: 'Delete post?', body: 'This cannot be undone.', danger: true })) return;
+// Pass `typed: 'DELETE'` to require the user to type a phrase before confirming.
+const ConfirmCtx = createContext(() => Promise.resolve(false));
+export function ConfirmProvider({ children }) {
+  const [state, setState] = useState(null);
+  const [typedVal, setTypedVal] = useState('');
+  const confirm = useCallback((opts) => new Promise((resolve) => {
+    setTypedVal('');
+    setState({ ...opts, resolve });
+  }), []);
+  const close = (val) => { const r = state?.resolve; setState(null); r && r(val); };
+  const needsTyped = state?.typed && typedVal !== state.typed;
+  return (
+    <ConfirmCtx.Provider value={confirm}>
+      {children}
+      <Modal open={!!state} onClose={() => close(false)} title={state?.title || 'Are you sure?'}>
+        {state && (
+          <div className="space-y-4">
+            {state.body && <p className="text-sm text-mist-300 leading-relaxed">{state.body}</p>}
+            {state.typed && (
+              <div>
+                <span className="label">Type <code className="text-gold-300">{state.typed}</code> to confirm</span>
+                <input className="input" value={typedVal} onChange={(e) => setTypedVal(e.target.value)} autoFocus />
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button className="btn-ghost btn-sm" onClick={() => close(false)}>Cancel</button>
+              <button className={`${state.danger ? 'btn-danger' : 'btn-primary'} btn-sm`} disabled={needsTyped}
+                onClick={() => close(true)}>
+                {state.confirmLabel || (state.danger ? 'Delete' : 'Confirm')}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </ConfirmCtx.Provider>
+  );
+}
+export const useConfirm = () => useContext(ConfirmCtx);
+
+// ---- Report modal (any user-generated content) ----
+// Structured category + optional detail, posted to the shared /report endpoint.
+const REPORT_CATEGORIES = ['Spam', 'Harassment or abuse', 'Misleading or fraudulent', 'Inappropriate content', 'Other'];
+export function ReportModal({ open, onClose, targetType, targetId, targetLabel }) {
+  const [category, setCategory] = useState(REPORT_CATEGORIES[0]);
+  const [detail, setDetail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await api.post('/api/users/report', {
+        target_type: targetType, target_id: targetId,
+        reason: detail.trim() ? `${category}: ${detail.trim()}` : category,
+      });
+      toast('Report sent to our moderation team', 'success');
+      setDetail(''); setCategory(REPORT_CATEGORIES[0]);
+      onClose();
+    } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <Modal open={open} onClose={onClose} title={`Report ${targetLabel || targetType}`}>
+      <div className="space-y-4">
+        <div>
+          <span className="label">What is the issue?</span>
+          <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {REPORT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <span className="label">Details <span className="normal-case font-normal text-mist-500">(optional)</span></span>
+          <textarea className="input min-h-[90px]" maxLength={2000} value={detail} onChange={(e) => setDetail(e.target.value)}
+            placeholder="Anything that helps our team review this quickly." />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button className="btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn-primary btn-sm" disabled={busy} onClick={submit}>{busy ? 'Sending…' : 'Send report'}</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

@@ -26,7 +26,7 @@ Migrate to Postgres + object storage when any of these become true:
   - Date comparisons that append `'Z'` in JS (e.g. `new Date(x + 'Z')`) -> store `timestamptz`.
 
 **Recommended path:**
-1. Introduce **versioned migrations** first (a `schema_migrations` table + numbered SQL files), and freeze ad-hoc `ALTER TABLE`s in `db.js`. This is valuable even before Postgres.
+1. ~~Introduce versioned migrations~~ **Done.** `server/migrations.js` runs numbered `.sql` files from `server/migrations/` exactly once (recorded in `schema_migrations`, transactional, fail-loud). The bootstrap in `db.js` is now the frozen baseline; all future schema changes go through migration files.
 2. Stand up Render Postgres; translate the schema; load it via the migration files.
 3. Build a one-time exporter: read every table with the current SQLite reader, insert into Postgres.
 4. Run both in staging, diff row counts, then cut over.

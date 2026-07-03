@@ -20,7 +20,7 @@
 
 ### Wiring Sentry (server)
 
-The global error handler in `server/index.js` is the single integration point — it already builds a structured entry and has a `// wire Sentry here` marker. Add `Sentry.captureException(err)` there and `Sentry.init()` at boot guarded by `SENTRY_DSN`.
+**Already wired as a soft hook.** Set `SENTRY_DSN` and run `npm install @sentry/node` — the server initializes Sentry at boot and captures every unhandled route error in the global handler (`server/index.js`). Without the env var or the package it boots normally with a console note.
 
 ## Incident runbook (skeleton)
 

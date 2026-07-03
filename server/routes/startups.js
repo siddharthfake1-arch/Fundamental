@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, notify, audit, logCollateralAccess, canViewStartup, isListed, addActivity, areConnected, publicUser, fundamentalScore, thesisFit, FUNDING_LADDER, startupSubscribers } = require('../db');
+const { db, notify, audit, logCollateralAccess, canViewStartup, isListed, addActivity, areConnected, publicUser, isVisibleUser, fundamentalScore, thesisFit, FUNDING_LADDER, startupSubscribers } = require('../db');
 const { auth, requireRole, requireApprovedInvestor } = require('../authmw');
 const { validateUrlFields, validateNumericFields, clampStrings, safeUrl, sanitizeLinks } = require('../security');
 const { streamPrivate, deletePrivate, privateExists } = require('../storage');
@@ -70,7 +70,8 @@ router.get('/', dealFlowGate, (req, res) => {
   const verified = qstr(req.query.verified), sort = qstr(req.query.sort), q = qstr(req.query.q).trim();
   const limit = qint(req.query.limit, 30, 60), offset = qint(req.query.offset, 0);
 
-  const where = ["video_url != ''", 'hidden = 0'];
+  // Startups of suspended/flagged founders are hidden platform-wide.
+  const where = ["video_url != ''", 'hidden = 0', "founder_id IN (SELECT id FROM users WHERE status='active' AND flagged=0)"];
   const params = [];
   if (q) { where.push('(LOWER(name) LIKE ? OR LOWER(one_liner) LIKE ? OR LOWER(sector) LIKE ?)'); const t = `%${q.toLowerCase()}%`; params.push(t, t, t); }
   if (sector) { where.push('sector = ?'); params.push(sector); }
@@ -85,16 +86,31 @@ router.get('/', dealFlowGate, (req, res) => {
     where.push('(CASE WHEN arr > 0 THEN arr ELSE mrr * 12 END) >= ? AND (CASE WHEN arr > 0 THEN arr ELSE mrr * 12 END) < ?');
     params.push(lo, hi);
   }
-  const rows = db.prepare(`SELECT * FROM startups WHERE ${where.join(' AND ')}`).all(...params);
+  // Paginate in SQL and shape ONLY the returned page — tile() runs ~13 sub-queries
+  // per startup, so shaping the full result set froze the event loop as the
+  // catalog grew (audit: worst hot path in the app).
+  const whereSql = where.join(' AND ');
+  const total = db.prepare(`SELECT COUNT(*) c FROM startups WHERE ${whereSql}`).get(...params).c;
   const ip = investorProfileOf(req.user);
-  let tiles = rows.map(s => tile(s, req.user.id, ip));
-  if (sort === 'upvoted') tiles.sort((a, b) => b.upvotes - a.upvotes);
-  else if (sort === 'viewed') tiles.sort((a, b) => b.views - a.views);
-  else if (sort === 'score') tiles.sort((a, b) => b.score - a.score);
-  else if (sort === 'fit') tiles.sort((a, b) => (b.fit || 0) - (a.fit || 0));
-  else tiles.sort((a, b) => b.id - a.id); // recent
-  const total = tiles.length;
-  res.json({ startups: tiles.slice(offset, offset + limit), total, limit, offset });
+  let pageRows;
+  if (sort === 'score' || sort === 'fit') {
+    // JS-computed rankings can't be pushed into SQL — bound the candidate set to
+    // the 400 most recent, rank those, then page. (Older long-tail entries fall
+    // out of these two sorts; every other sort still covers the full catalog.)
+    const candidates = db.prepare(`SELECT * FROM startups WHERE ${whereSql} ORDER BY id DESC LIMIT 400`).all(...params);
+    const key = sort === 'score'
+      ? (s) => fundamentalScore(s).total
+      : (s) => thesisFit(s, ip) || 0;
+    pageRows = candidates.map(s => ({ s, k: key(s) })).sort((a, b) => b.k - a.k)
+      .slice(offset, offset + limit).map(x => x.s);
+  } else {
+    const orderBy = sort === 'upvoted'
+      ? '(SELECT COUNT(*) FROM upvotes WHERE startup_id = startups.id) DESC, id DESC'
+      : sort === 'viewed' ? 'views DESC, id DESC' : 'id DESC';
+    pageRows = db.prepare(`SELECT * FROM startups WHERE ${whereSql} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
+      .all(...params, limit, offset);
+  }
+  res.json({ startups: pageRows.map(s => tile(s, req.user.id, ip)), total, limit, offset });
 });
 
 router.get('/facets', dealFlowGate, (req, res) => {
@@ -199,6 +215,16 @@ router.post('/mine', requireRole('founder'), (req, res) => {
       db.prepare(`UPDATE startups SET ${keys.map(k => `${k}=?`).join(',')} WHERE id=?`)
         .run(...keys.map(k => data[k]), existing.id);
     }
+    // Delete replaced media files: otherwise every video/logo/cover swap leaves the
+    // old file on disk forever AND keeps the old pitch publicly reachable at its
+    // previous /uploads URL. Only our own uploads are unlinked (never external URLs).
+    for (const f of ['video_url', 'logo', 'cover']) {
+      const oldUrl = existing[f];
+      if (data[f] !== undefined && oldUrl && oldUrl !== data[f] && String(oldUrl).startsWith('/uploads/')) {
+        const fp = require('path').join(require('../paths').UPLOAD_DIR, require('path').basename(oldUrl));
+        try { require('fs').unlinkSync(fp); } catch { /* already gone */ }
+      }
+    }
     // F-005: audit-log public-sharing enable/disable transitions.
     if (data.public_share !== undefined && data.public_share !== existing.public_share) {
       audit(req.user.id, data.public_share ? 'enable-public-share' : 'disable-public-share', { targetType: 'startup', targetId: existing.id, ip: req.ip });
@@ -263,7 +289,7 @@ router.get('/shared-with-me', requireApprovedInvestor, (req, res) => {
   const rows = db.prepare(`SELECT ds.id, ds.note, ds.created_at, u.id from_id, u.name from_name, u.photo from_photo,
       s.id startup_id, s.name, s.logo, s.sector, s.stage, s.one_liner, s.verified
     FROM deal_shares ds JOIN users u ON u.id=ds.from_id JOIN startups s ON s.id=ds.startup_id
-    WHERE ds.to_id=? ORDER BY ds.id DESC`).all(req.user.id);
+    WHERE ds.to_id=? AND u.status='active' AND u.flagged=0 ORDER BY ds.id DESC`).all(req.user.id);
   res.json({ shared: rows });
 });
 
@@ -273,6 +299,11 @@ router.get('/:id', dealFlowGate, (req, res) => {
   if (!s) return res.status(404).json({ error: 'We could not find this startup.' });
   // Draft/unlisted startups are visible only to their owner and admins (P0-4).
   if (!canViewStartup(s, req.user)) return res.status(404).json({ error: 'We could not find this startup.' });
+  // A suspended/flagged founder's startup is hidden platform-wide (owner/admin exempt).
+  const founderRow = db.prepare('SELECT * FROM users WHERE id=?').get(s.founder_id);
+  if (!isVisibleUser(founderRow, req.user) && s.founder_id !== req.user.id) {
+    return res.status(404).json({ error: 'We could not find this startup.' });
+  }
   const isOwner = s.founder_id === req.user.id;
   if (!isOwner) {
     // De-duplicate views: at most one counted view per viewer per 6 hours (P2-10).
@@ -287,7 +318,7 @@ router.get('/:id', dealFlowGate, (req, res) => {
       if (!dup) notify(s.founder_id, 'Profile Viewed', txt, `/startup/${s.id}`);
     }
   }
-  const founder = publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(s.founder_id));
+  const founder = publicUser(founderRow);
   const connected = areConnected(req.user.id, s.founder_id);
   const collateral = db.prepare('SELECT * FROM collateral WHERE startup_id=? ORDER BY id DESC').all(s.id).map(c => {
     const myReq = db.prepare('SELECT status FROM access_requests WHERE collateral_id=? AND investor_id=?').get(c.id, req.user.id);
@@ -308,6 +339,12 @@ router.get('/:id', dealFlowGate, (req, res) => {
   ).get(req.user.id, s.founder_id, s.founder_id, req.user.id);
   const score = fundamentalScore(s);
   const stageIndex = FUNDING_LADDER.indexOf(s.stage);
+  // Sensitive operating metrics are for diligence, not competitor research: only
+  // the owner, admins, and approved investors see burn/runway/CAC/LTV/margin.
+  // Headline traction (ARR/MRR/growth) stays visible — it already shows on tiles.
+  if (!isOwner && req.user.role === 'founder') {
+    for (const k of ['burn', 'runway', 'cac', 'ltv', 'gross_margin']) s[k] = null;
+  }
   res.json({
     startup: {
       ...s, revenue_series: J(s.revenue_series), video_chapters: J(s.video_chapters), use_of_funds: J(s.use_of_funds),
@@ -339,7 +376,9 @@ router.get('/:id', dealFlowGate, (req, res) => {
 });
 
 router.post('/:id/video-view', dealFlowGate, (req, res) => {
-  db.prepare('UPDATE startups SET video_views = video_views + 1 WHERE id=?').run(req.params.id);
+  const s = db.prepare('SELECT id, founder_id, video_url, hidden FROM startups WHERE id=?').get(req.params.id);
+  if (!s || !canViewStartup(s, req.user)) return res.status(404).json({ error: 'We could not find this startup.' });
+  db.prepare('UPDATE startups SET video_views = video_views + 1 WHERE id=?').run(s.id);
   res.json({ ok: true });
 });
 
@@ -377,6 +416,8 @@ router.post('/:id/watchlist-status', requireApprovedInvestor, (req, res) => {
 
 // Private notes — visible only to the creating investor.
 router.post('/:id/notes', requireApprovedInvestor, (req, res) => {
+  const noteStartup = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
+  if (!noteStartup || !canViewStartup(noteStartup, req.user)) return res.status(404).json({ error: 'We could not find this startup.' });
   const { text, collateral_id } = req.body;
   if (!text || !text.trim()) return res.status(400).json({ error: 'Write a note before saving.' });
   // A note "on a document" must reference collateral that belongs to this startup (P2-6).
@@ -511,14 +552,20 @@ router.delete('/collateral/:cid', requireRole('founder'), (req, res) => {
   const c = db.prepare('SELECT c.*, s.founder_id FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
   if (!c || c.founder_id !== req.user.id) return res.status(403).json({ error: 'You can only manage documents in your own data room.' });
   db.prepare('DELETE FROM collateral WHERE id=?').run(c.id);
+  db.prepare('UPDATE notes SET collateral_id=NULL WHERE collateral_id=?').run(c.id); // no dangling references
   if (c.file_key) deletePrivate(c.file_key); // remove the underlying private file (P3-5)
   logCollateralAccess(c.id, c.startup_id, req.user.id, 'delete', req.ip);
   res.json({ ok: true });
 });
 
 router.post('/collateral/:cid/request', requireApprovedInvestor, (req, res) => {
-  const c = db.prepare('SELECT c.*, s.founder_id, s.name sname FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
+  const c = db.prepare('SELECT c.*, s.founder_id, s.name sname, s.video_url, s.hidden FROM collateral c JOIN startups s ON s.id=c.startup_id WHERE c.id=?').get(req.params.cid);
   if (!c) return res.status(404).json({ error: 'We could not find this document.' });
+  // Request surface mirrors the download surface: no requests (or founder pings)
+  // against collateral on draft/hidden startups the caller cannot view.
+  if (!canViewStartup({ founder_id: c.founder_id, video_url: c.video_url, hidden: c.hidden }, req.user)) {
+    return res.status(404).json({ error: 'We could not find this document.' });
+  }
   db.prepare(`INSERT INTO access_requests (collateral_id, investor_id) VALUES (?,?)
     ON CONFLICT(collateral_id, investor_id) DO UPDATE SET status='pending', created_at=datetime('now')`).run(c.id, req.user.id);
   logCollateralAccess(c.id, c.startup_id, req.user.id, 'request', req.ip);
@@ -644,8 +691,13 @@ router.delete('/updates/:uid', (req, res) => {
 // React to a founder update (one quick reaction per user; tap again to remove,
 // tap a different emoji to switch).
 router.post('/updates/:uid/react', dealFlowGate, (req, res) => {
-  const u = db.prepare('SELECT fu.*, s.founder_id, s.name sname FROM founder_updates fu JOIN startups s ON s.id=fu.startup_id WHERE fu.id=?').get(req.params.uid);
+  const u = db.prepare('SELECT fu.*, s.founder_id, s.name sname, s.video_url, s.hidden FROM founder_updates fu JOIN startups s ON s.id=fu.startup_id WHERE fu.id=?').get(req.params.uid);
   if (!u) return res.status(404).json({ error: 'We could not find this update.' });
+  // The response echoes the full update (headline/body/metrics) — never leak it
+  // for a draft/hidden startup the caller cannot view.
+  if (!canViewStartup({ founder_id: u.founder_id, video_url: u.video_url, hidden: u.hidden }, req.user)) {
+    return res.status(404).json({ error: 'We could not find this update.' });
+  }
   const { emoji } = req.body;
   if (!REACTION_EMOJI.includes(emoji)) return res.status(400).json({ error: 'Choose a valid reaction.' });
   const existing = db.prepare('SELECT emoji FROM update_reactions WHERE user_id=? AND update_id=?').get(req.user.id, u.id);
@@ -664,7 +716,8 @@ router.post('/updates/:uid/react', dealFlowGate, (req, res) => {
 // ---- Follow a company (anyone). Subscribes to its updates & milestones. ----
 router.post('/:id/follow', dealFlowGate, (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Startup not found' });
+  // Following subscribes you to future updates — visibility rules apply (no drafts).
+  if (!s || !canViewStartup(s, req.user)) return res.status(404).json({ error: 'We could not find this startup.' });
   const exists = db.prepare('SELECT 1 FROM startup_follows WHERE user_id=? AND startup_id=?').get(req.user.id, s.id);
   if (exists) {
     db.prepare('DELETE FROM startup_follows WHERE user_id=? AND startup_id=?').run(req.user.id, s.id);

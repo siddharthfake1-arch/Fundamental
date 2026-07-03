@@ -5,7 +5,7 @@ import { MotionConfig } from 'motion/react';
 import App from './App';
 import { AuthProvider } from './AuthContext';
 import { ThemeProvider } from './ThemeContext';
-import { ToastProvider } from './components/ui';
+import { ToastProvider, ConfirmProvider } from './components/ui';
 import ErrorBoundary from './components/ErrorBoundary';
 import CookieConsent from './components/CookieConsent';
 import './index.css';
@@ -18,10 +18,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <BrowserRouter>
           <ThemeProvider>
             <ToastProvider>
-              <AuthProvider>
-                <App />
-                <CookieConsent />
-              </AuthProvider>
+              <ConfirmProvider>
+                <AuthProvider>
+                  <App />
+                  <CookieConsent />
+                </AuthProvider>
+              </ConfirmProvider>
             </ToastProvider>
           </ThemeProvider>
         </BrowserRouter>

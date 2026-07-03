@@ -1,6 +1,6 @@
 const express = require('express');
 const path = require('path');
-const { db, notify, areConnected, canViewStartup, isVisibleUser } = require('../db');
+const { db, notify, areConnected, isBlocked, canViewStartup, isVisibleUser } = require('../db');
 const { auth } = require('../authmw');
 const { validateUrlFields, clampStrings } = require('../security');
 const { streamPrivate, privateExists } = require('../storage');
@@ -29,11 +29,16 @@ router.get('/', (req, res) => {
     .all(req.user.id, req.user.id);
   const list = convos.map(c => {
     const otherId = c.a_id === req.user.id ? c.b_id : c.a_id;
-    const other = db.prepare('SELECT id, name, role, photo, headline, verified FROM users WHERE id=?').get(otherId);
+    const other = db.prepare('SELECT id, name, role, photo, headline, verified, status, flagged FROM users WHERE id=?').get(otherId);
+    // Conversations with suspended/flagged/blocked counterparts are hidden from the
+    // inbox (history is preserved; the row simply doesn't list while that stands).
+    if (!isVisibleUser(other, req.user) || isBlocked(req.user.id, otherId)) return null;
+    delete other.status; delete other.flagged;
     const last = db.prepare('SELECT * FROM messages WHERE conversation_id=? ORDER BY id DESC LIMIT 1').get(c.id);
+    if (last) delete last.attachment_key; // private key never leaves the server
     const unread = db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id=? AND sender_id!=? AND read=0').get(c.id, req.user.id).c;
     return { id: c.id, deal_stage: c.deal_stage, other, last_message: last, unread };
-  });
+  }).filter(Boolean);
   res.json({ conversations: list });
 });
 
@@ -41,7 +46,7 @@ router.get('/', (req, res) => {
 router.post('/start/:userId', (req, res) => {
   const otherId = Number(req.params.userId);
   const other = db.prepare('SELECT * FROM users WHERE id=?').get(otherId);
-  if (!isVisibleUser(other, req.user)) return res.status(404).json({ error: 'We could not find that person.' });
+  if (!isVisibleUser(other, req.user) || isBlocked(req.user.id, otherId)) return res.status(404).json({ error: 'We could not find that person.' });
   if (!areConnected(req.user.id, otherId)) {
     return res.status(403).json({ error: 'Messaging unlocks once your connection is accepted. Send a connection request to get started.' });
   }
@@ -91,6 +96,10 @@ router.post('/:id/send', (req, res) => {
   const otherId = c.a_id === req.user.id ? c.b_id : c.a_id;
   if (!areConnected(req.user.id, otherId)) {
     return res.status(403).json({ error: 'You can message this person once your connection is accepted.' });
+  }
+  const otherUser = db.prepare('SELECT * FROM users WHERE id=?').get(otherId);
+  if (!isVisibleUser(otherUser, req.user) || isBlocked(req.user.id, otherId)) {
+    return res.status(403).json({ error: 'This member is not currently reachable on Fundamental.' });
   }
   // One-sided spam guard: cap messages into a conversation the recipient has never
   // replied to. The cap lifts the moment they reply (so real back-and-forth is free).

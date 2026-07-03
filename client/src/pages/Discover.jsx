@@ -139,7 +139,7 @@ export default function Discover() {
                   onClick={() => { setFilters({ ...EMPTY_FILTERS, ...asObject(asObject(s.params).filters) }); setSort(asObject(s.params).sort || 'recent'); setFiltersOpen(false); }}>
                   {s.name}
                 </button>
-                <button className="text-mist-500 hover:text-red-400 text-xs" onClick={async () => { await api.del(`/api/startups/saved-searches/${s.id}`); loadSaved(); }}>✕</button>
+                <button className="text-mist-500 hover:text-red-400 text-xs" aria-label={`Delete saved search ${s.name}`} onClick={async () => { await api.del(`/api/startups/saved-searches/${s.id}`); loadSaved(); }}>✕</button>
               </div>
             ))}
           </div>

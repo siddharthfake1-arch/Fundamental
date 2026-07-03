@@ -1,11 +1,11 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { db, notify, audit, areConnected, publicUser, trustScore, isVisibleUser, ACTIVE_USER_SQL } = require('../db');
+const { db, notify, audit, areConnected, isBlocked, publicUser, trustScore, isVisibleUser, ACTIVE_USER_SQL } = require('../db');
 const { auth, requireRole } = require('../authmw');
 const { validateUrlFields, clampStrings, sanitizeLinks } = require('../security');
 const { deletePrivate } = require('../storage');
-const { J, qstr } = require('../util');
+const { J, qstr, qint } = require('../util');
 
 const router = express.Router();
 router.use(auth);
@@ -15,16 +15,29 @@ router.get('/network', (req, res) => {
   // All query params coerced to strings so array/object inputs cannot 500 the route.
   const role = qstr(req.query.role), sector = qstr(req.query.sector), stage = qstr(req.query.stage);
   const geography = qstr(req.query.geography).toLowerCase(), active = qstr(req.query.active), q = qstr(req.query.q).toLowerCase();
-  // Only active, non-flagged, onboarded members appear in discovery (ACTIVE_USER_SQL
-  // already excludes admins). Suspended/flagged accounts are hidden platform-wide.
-  let users = db.prepare(`SELECT * FROM users WHERE id != ? AND onboarded=1 AND ${ACTIVE_USER_SQL}`).all(req.user.id);
-  if (q) users = users.filter(u => (u.name + ' ' + u.headline).toLowerCase().includes(q));
-  if (role) users = users.filter(u => u.role === role);
-  if (geography) users = users.filter(u => (u.city || '').toLowerCase().includes(geography));
-  if (active === 'true') {
-    users = users.filter(u => new Date(u.last_active + 'Z') > new Date(Date.now() - 7 * 864e5));
-  }
-  const cards = users.map(u => {
+  const limit = qint(req.query.limit, 24, 60), offset = qint(req.query.offset, 0);
+  // Filters run in SQL and results paginate in SQL — the previous version loaded
+  // every user and ran 3 queries per user, which scaled with total signups.
+  // Only active, non-flagged, onboarded members appear (ACTIVE_USER_SQL excludes admins).
+  const where = ['id != ?', 'onboarded=1', ACTIVE_USER_SQL,
+    // Blocks are mutual invisibility in discovery.
+    'id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id=?)',
+    'id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id=?)'];
+  const params = [req.user.id, req.user.id, req.user.id];
+  if (q) { where.push('(LOWER(name) LIKE ? OR LOWER(headline) LIKE ?)'); const t = `%${q}%`; params.push(t, t); }
+  if (role) { where.push('role = ?'); params.push(role); }
+  if (geography) { where.push('LOWER(city) LIKE ?'); params.push(`%${geography}%`); }
+  if (active === 'true') where.push("last_active > datetime('now','-7 days')");
+  const whereSql = where.join(' AND ');
+
+  // Sector/stage filter on an investor's focus / a founder's startup requires the
+  // shaped card, so those filters rank over a bounded recent candidate set.
+  const hasFocusFilter = !!(sector || stage);
+  const rows = hasFocusFilter
+    ? db.prepare(`SELECT * FROM users WHERE ${whereSql} ORDER BY last_active DESC LIMIT 300`).all(...params)
+    : db.prepare(`SELECT * FROM users WHERE ${whereSql} ORDER BY last_active DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+
+  let cards = rows.map(u => {
     let company = '', focus = [];
     if (u.role === 'founder') {
       const s = db.prepare('SELECT name, sector, stage FROM startups WHERE founder_id=?').get(u.id);
@@ -43,18 +56,24 @@ router.get('/network', (req, res) => {
       connection_id: conn ? conn.id : null,
       following: !!db.prepare('SELECT 1 FROM follows WHERE follower_id=? AND followee_id=?').get(req.user.id, u.id),
     };
-  }).filter(c => {
-    if (sector && !c.focus.some(f => f === sector)) return false;
-    if (stage && !c.focus.some(f => f === stage)) return false;
-    return true;
   });
-  res.json({ users: cards });
+  let total;
+  if (hasFocusFilter) {
+    cards = cards.filter(c => (!sector || c.focus.includes(sector)) && (!stage || c.focus.includes(stage)));
+    total = cards.length;
+    cards = cards.slice(offset, offset + limit);
+  } else {
+    total = db.prepare(`SELECT COUNT(*) c FROM users WHERE ${whereSql}`).get(...params).c;
+  }
+  res.json({ users: cards, total, limit, offset });
 });
 
 // ---- Connections ----
 router.post('/connect/:id', (req, res) => {
   const target = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!target || target.id === req.user.id || !isVisibleUser(target, req.user)) return res.status(400).json({ error: 'We could not find that person. Please try a different profile.' });
+  if (!target || target.id === req.user.id || !isVisibleUser(target, req.user) || isBlocked(req.user.id, target.id)) {
+    return res.status(400).json({ error: 'We could not find that person. Please try a different profile.' });
+  }
   const existing = db.prepare(
     'SELECT * FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)'
   ).get(req.user.id, target.id, target.id, req.user.id);
@@ -79,10 +98,13 @@ router.post('/connections/:id/:action', (req, res) => {
 });
 
 router.get('/connections', (req, res) => {
+  // Suspended/flagged counterparts are hidden here like everywhere else.
   const pending = db.prepare(`SELECT c.id, c.created_at, u.id user_id, u.name, u.role, u.photo, u.headline, u.verified
-    FROM connections c JOIN users u ON u.id=c.requester_id WHERE c.recipient_id=? AND c.status='pending' ORDER BY c.id DESC`).all(req.user.id);
+    FROM connections c JOIN users u ON u.id=c.requester_id AND u.status='active' AND u.flagged=0
+    WHERE c.recipient_id=? AND c.status='pending' ORDER BY c.id DESC`).all(req.user.id);
   const accepted = db.prepare(`SELECT c.id, u.id user_id, u.name, u.role, u.photo, u.headline, u.verified
     FROM connections c JOIN users u ON u.id = CASE WHEN c.requester_id=? THEN c.recipient_id ELSE c.requester_id END
+      AND u.status='active' AND u.flagged=0
     WHERE (c.requester_id=? OR c.recipient_id=?) AND c.status='accepted' ORDER BY c.id DESC`).all(req.user.id, req.user.id, req.user.id);
   res.json({ pending, accepted });
 });
@@ -91,7 +113,7 @@ router.post('/follow/:id', (req, res) => {
   const targetId = Number(req.params.id);
   if (!targetId || targetId === req.user.id) return res.status(400).json({ error: 'You cannot follow yourself.' }); // (P2-5)
   const followTarget = db.prepare('SELECT * FROM users WHERE id=?').get(targetId);
-  if (!isVisibleUser(followTarget, req.user)) return res.status(404).json({ error: 'We could not find that person.' });
+  if (!isVisibleUser(followTarget, req.user) || isBlocked(req.user.id, targetId)) return res.status(404).json({ error: 'We could not find that person.' });
   const exists = db.prepare('SELECT 1 FROM follows WHERE follower_id=? AND followee_id=?').get(req.user.id, targetId);
   if (exists) db.prepare('DELETE FROM follows WHERE follower_id=? AND followee_id=?').run(req.user.id, targetId);
   else db.prepare('INSERT INTO follows (follower_id, followee_id) VALUES (?,?)').run(req.user.id, targetId);
@@ -101,8 +123,12 @@ router.post('/follow/:id', (req, res) => {
 // ---- Profile pages ----
 router.get('/profile/:id', (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  // Hide suspended/flagged/admin profiles from normal members (owner + admins exempt).
+  // Hide suspended/flagged/admin profiles from normal members (owner + admins exempt),
+  // and profiles where either side has blocked the other.
   if (!u || !isVisibleUser(u, req.user)) return res.status(404).json({ error: 'We could not find that profile. It may have been removed.' });
+  if (u.id !== req.user.id && req.user.role !== 'admin' && isBlocked(req.user.id, u.id)) {
+    return res.status(404).json({ error: 'We could not find that profile. It may have been removed.' });
+  }
   const out = { user: publicUser(u), trust: trustScore(u) };
 
   const myConns = db.prepare(
@@ -262,6 +288,17 @@ router.put('/me', (req, res) => {
   if (urlErr) return res.status(400).json({ error: urlErr });
   clampStrings(req.body, ['name', 'city', 'headline'], 200);
   clampStrings(req.body, ['bio', 'education', 'experience'], 5000);
+  // Per-category email toggles — accept only the known keys as 0/1.
+  if (req.body.email_prefs !== undefined) {
+    const p = req.body.email_prefs;
+    if (typeof p !== 'object' || p === null || Array.isArray(p)) return res.status(400).json({ error: 'Email preferences must be an object.' });
+    const clean = {};
+    for (const k of ['messages', 'connections', 'dealroom', 'activity']) {
+      if (p[k] !== undefined) clean[k] = p[k] ? 1 : 0;
+    }
+    req.body.email_prefs = JSON.stringify(clean);
+    allowed.push('email_prefs');
+  }
   // Profile links are an array, validated/serialized separately from the flat fields.
   if (req.body.links !== undefined) {
     const r = sanitizeLinks(req.body.links);
@@ -323,15 +360,57 @@ router.get('/intro-path/:id', (req, res) => {
   res.json({ connectors, direct: false });
 });
 
+// ---- Block / unblock ----
+// Blocking is mutual invisibility: profiles 404 both ways, discovery excludes both
+// sides, and connect/follow/message are refused. Blocking also severs any existing
+// connection and follows so messaging closes immediately.
+router.post('/block/:id', (req, res) => {
+  const targetId = Number(req.params.id);
+  const target = db.prepare("SELECT id, role FROM users WHERE id=?").get(targetId);
+  if (!target || target.id === req.user.id || target.role === 'admin') {
+    return res.status(400).json({ error: 'You cannot block this account.' });
+  }
+  const existing = db.prepare('SELECT 1 FROM blocks WHERE blocker_id=? AND blocked_id=?').get(req.user.id, targetId);
+  if (existing) {
+    db.prepare('DELETE FROM blocks WHERE blocker_id=? AND blocked_id=?').run(req.user.id, targetId);
+    return res.json({ blocked: false });
+  }
+  db.prepare('INSERT INTO blocks (blocker_id, blocked_id) VALUES (?,?)').run(req.user.id, targetId);
+  db.prepare('DELETE FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)')
+    .run(req.user.id, targetId, targetId, req.user.id);
+  db.prepare('DELETE FROM follows WHERE (follower_id=? AND followee_id=?) OR (follower_id=? AND followee_id=?)')
+    .run(req.user.id, targetId, targetId, req.user.id);
+  audit(req.user.id, 'block-user', { targetType: 'user', targetId, ip: req.ip });
+  res.json({ blocked: true }); // the blocked user is never notified
+});
+
+// Blocked-members list for Settings (the profile itself 404s once blocked, so
+// unblocking has to live somewhere always reachable).
+router.get('/blocked', (req, res) => {
+  const rows = db.prepare(`SELECT u.id, u.name, u.role, u.photo, u.headline, b.created_at blocked_at
+    FROM blocks b JOIN users u ON u.id=b.blocked_id WHERE b.blocker_id=? ORDER BY b.created_at DESC`).all(req.user.id);
+  res.json({ blocked: rows });
+});
+
 router.post('/report', (req, res) => {
   const { target_type, target_id, reason } = req.body;
   if (!target_type || !target_id || !reason) return res.status(400).json({ error: 'Please add a reason so our team can review this report.' });
-  if (!['user', 'startup', 'post'].includes(target_type)) return res.status(400).json({ error: 'That report target is not supported.' });
-  // Validate the target exists (P2-9).
-  const tables = { user: 'users', startup: 'startups', post: 'posts' };
+  // Validate the target exists (P2-9). Every user-generated surface is reportable.
+  const tables = {
+    user: 'users', startup: 'startups', post: 'posts', comment: 'post_comments',
+    message: 'messages', community: 'communities', discussion: 'community_posts', reply: 'community_replies',
+  };
+  if (!tables[target_type]) return res.status(400).json({ error: 'That report target is not supported.' });
   const tid = Number(target_id) || 0;
   if (!db.prepare(`SELECT 1 FROM ${tables[target_type]} WHERE id=?`).get(tid)) {
     return res.status(404).json({ error: 'We could not find the content you are reporting.' });
+  }
+  // A message can only be reported by a participant of its conversation.
+  if (target_type === 'message') {
+    const m = db.prepare('SELECT c.a_id, c.b_id FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.id=?').get(tid);
+    if (!m || (m.a_id !== req.user.id && m.b_id !== req.user.id)) {
+      return res.status(404).json({ error: 'We could not find the content you are reporting.' });
+    }
   }
   // De-duplicate: one open report per reporter per target.
   const dup = db.prepare("SELECT 1 FROM reports WHERE reporter_id=? AND target_type=? AND target_id=? AND status='open'").get(req.user.id, target_type, tid);

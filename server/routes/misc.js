@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, publicUser, profileCompletion, notify, audit } = require('../db');
+const { db, publicUser, profileCompletion, notify, audit, ACTIVE_USER_SQL } = require('../db');
 const { auth, requireRole, requireApprovedInvestor } = require('../authmw');
 const { J, qstr, qint } = require('../util');
 const { searchCities } = require('../cities');
@@ -11,6 +11,34 @@ router.use(auth);
 // in onboarding, settings, and filters. Returns labels only — no extra metadata.
 router.get('/cities', (req, res) => {
   res.json({ cities: searchCities(qstr(req.query.q), qint(req.query.limit, 20, 30)) });
+});
+
+// ---- Global search: startups + people + communities in one query ----
+// Visibility rules match each surface: only listed startups of active founders
+// (and only for members who pass the deal-flow gate), only active members, only
+// approved communities. Small capped result sets — this powers the nav dropdown.
+router.get('/search', (req, res) => {
+  const q = qstr(req.query.q).trim().toLowerCase();
+  if (q.length < 2) return res.json({ startups: [], people: [], communities: [] });
+  const t = `%${q}%`;
+  const dealFlowOk = !(req.user.role === 'investor' && !req.user.investor_approved);
+  const startups = dealFlowOk
+    ? db.prepare(`SELECT id, name, logo, sector, stage, one_liner, verified FROM startups
+        WHERE video_url != '' AND hidden = 0
+          AND founder_id IN (SELECT id FROM users WHERE status='active' AND flagged=0)
+          AND (LOWER(name) LIKE ? OR LOWER(one_liner) LIKE ? OR LOWER(sector) LIKE ?)
+        ORDER BY verified DESC, id DESC LIMIT 5`).all(t, t, t)
+    : [];
+  const people = db.prepare(`SELECT id, name, role, photo, headline, verified FROM users
+      WHERE id != ? AND onboarded=1 AND ${ACTIVE_USER_SQL}
+        AND id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id=?)
+        AND id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id=?)
+        AND (LOWER(name) LIKE ? OR LOWER(headline) LIKE ?)
+      ORDER BY verified DESC, last_active DESC LIMIT 5`).all(req.user.id, req.user.id, req.user.id, t, t);
+  const communities = db.prepare(`SELECT id, slug, name, kind, description FROM communities
+      WHERE status='approved' AND (LOWER(name) LIKE ? OR LOWER(description) LIKE ?)
+      ORDER BY name LIMIT 5`).all(t, t);
+  res.json({ startups, people, communities });
 });
 
 // ---- Notifications ----
@@ -135,7 +163,12 @@ router.get('/dashboard/investor', requireApprovedInvestor, (req, res) => {
   const ip = db.prepare('SELECT * FROM investor_profiles WHERE user_id=?').get(req.user.id) || {};
   const sectors = J(ip.sector_focus), stages = J(ip.stage_focus);
   const savedIds = watchlist.map(w => w.id);
-  let suggested = db.prepare("SELECT * FROM startups WHERE video_url != ''").all()
+  // Bounded candidate set (was a full-table load), and hidden/suspended-founder
+  // startups are excluded like everywhere else.
+  let suggested = db.prepare(`SELECT id, name, logo, sector, stage, one_liner, verified FROM startups
+      WHERE video_url != '' AND hidden = 0
+        AND founder_id IN (SELECT id FROM users WHERE status='active' AND flagged=0)
+      ORDER BY id DESC LIMIT 150`).all()
     .filter(s => !savedIds.includes(s.id))
     .map(s => ({ s, score: (sectors.includes(s.sector) ? 2 : 0) + (stages.includes(s.stage) ? 1 : 0) + (s.verified ? 0.5 : 0) }))
     .sort((a, b) => b.score - a.score).slice(0, 6)
@@ -192,6 +225,11 @@ router.get('/admin/startups', (req, res) => {
 });
 // Verification tiers: 0 none → 1 Verified → 2 Enhanced → 3 Institution
 router.post('/admin/verify-user/:id', (req, res) => {
+  // Admin accounts are never targets of moderation toggles (an admin must not be
+  // able to flag/verify another admin — flagging would lock them out).
+  if (!db.prepare("SELECT 1 FROM users WHERE id=? AND role!='admin'").get(req.params.id)) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
   if (req.body && req.body.tier !== undefined) {
     const tier = Number(req.body.tier);
     if (!Number.isInteger(tier)) return res.status(400).json({ error: 'Verification tier must be a whole number from 0 to 3.' });
@@ -204,6 +242,9 @@ router.post('/admin/verify-user/:id', (req, res) => {
   res.json({ ok: true });
 });
 router.post('/admin/flag-user/:id', (req, res) => {
+  if (!db.prepare("SELECT 1 FROM users WHERE id=? AND role!='admin'").get(req.params.id)) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
   db.prepare('UPDATE users SET flagged = 1 - flagged WHERE id=?').run(req.params.id);
   const f = (db.prepare('SELECT flagged FROM users WHERE id=?').get(req.params.id) || {}).flagged;
   audit(req.user.id, f ? 'flag-user' : 'unflag-user', { targetType: 'user', targetId: Number(req.params.id), ip: req.ip });
@@ -254,8 +295,11 @@ router.post('/admin/hide-startup/:id', (req, res) => {
   res.json({ ok: true, hidden: hide });
 });
 router.get('/admin/reports', (req, res) => {
-  const rows = db.prepare(`SELECT r.*, u.name reporter_name FROM reports r JOIN users u ON u.id=r.reporter_id ORDER BY r.id DESC`).all();
-  res.json({ reports: rows });
+  const limit = qint(req.query.limit, 100, 500), offset = qint(req.query.offset, 0); // F-022
+  const total = db.prepare('SELECT COUNT(*) c FROM reports').get().c;
+  const rows = db.prepare(`SELECT r.*, u.name reporter_name FROM reports r JOIN users u ON u.id=r.reporter_id
+    ORDER BY CASE r.status WHEN 'open' THEN 0 ELSE 1 END, r.id DESC LIMIT ? OFFSET ?`).all(limit, offset);
+  res.json({ total, limit, offset, reports: rows });
 });
 router.post('/admin/reports/:id/:action', (req, res) => {
   const map = { resolve: 'resolved', dismiss: 'dismissed' };
@@ -278,12 +322,14 @@ router.post('/admin/posts/:id/remove', (req, res) => {
 // ---- Community moderation ----
 // Member-created communities require admin approval before they go live.
 router.get('/admin/communities', (req, res) => {
+  const limit = qint(req.query.limit, 100, 500), offset = qint(req.query.offset, 0); // F-022
+  const total = db.prepare('SELECT COUNT(*) c FROM communities').get().c;
   const rows = db.prepare(`SELECT c.*, u.name creator_name,
       (SELECT COUNT(*) FROM community_members m WHERE m.community_id=c.id) members,
       (SELECT COUNT(*) FROM community_posts p WHERE p.community_id=c.id) posts
     FROM communities c LEFT JOIN users u ON u.id=c.created_by
-    ORDER BY CASE c.status WHEN 'pending' THEN 0 ELSE 1 END, c.id DESC`).all();
-  res.json({ communities: rows });
+    ORDER BY CASE c.status WHEN 'pending' THEN 0 ELSE 1 END, c.id DESC LIMIT ? OFFSET ?`).all(limit, offset);
+  res.json({ total, limit, offset, communities: rows });
 });
 router.post('/admin/communities/:id/approve', (req, res) => {
   const c = db.prepare('SELECT * FROM communities WHERE id=?').get(req.params.id);
@@ -302,6 +348,20 @@ router.post('/admin/communities/:id/delete', (req, res) => {
   if (c.created_by) notify(c.created_by, wasPending ? 'Community Declined' : 'Community Removed',
     wasPending ? `Your community “${c.name}” was not approved. Contact support if you have questions.` : `Your community “${c.name}” was removed by a moderator.`);
   res.json({ ok: true });
+});
+
+// Read-only browser for the append-only audit trail (admin actions, moderation,
+// data-room access, blocks, password resets). Filterable by action; paginated.
+router.get('/admin/audit-logs', (req, res) => {
+  const action = qstr(req.query.action);
+  const limit = qint(req.query.limit, 100, 500), offset = qint(req.query.offset, 0);
+  const where = action ? 'WHERE a.action = ?' : '';
+  const params = action ? [action] : [];
+  const total = db.prepare(`SELECT COUNT(*) c FROM audit_logs a ${where}`).get(...params).c;
+  const logs = db.prepare(`SELECT a.*, u.name actor_name FROM audit_logs a
+    LEFT JOIN users u ON u.id=a.actor_id ${where} ORDER BY a.id DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  const actions = db.prepare('SELECT DISTINCT action FROM audit_logs ORDER BY action').all().map(r => r.action);
+  res.json({ total, limit, offset, logs, actions });
 });
 
 // Read-only browser for client-side render errors captured from the ErrorBoundary.

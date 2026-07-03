@@ -1,10 +1,80 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Link, useNavigate } from 'react-router-dom';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon, Search } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { api } from '../api';
 import { Avatar, Logo, VerifiedBadge } from './ui';
+
+// Global search: startups, people, and communities from one box. Debounced;
+// Escape or an outside click closes the dropdown.
+function GlobalSearch({ className = '' }) {
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState(null);
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef();
+  const nav = useNavigate();
+
+  useEffect(() => {
+    if (q.trim().length < 2) { setResults(null); setOpen(false); return; }
+    const t = setTimeout(async () => {
+      try {
+        const d = await api.get(`/api/search?q=${encodeURIComponent(q.trim())}`);
+        setResults(d); setOpen(true);
+      } catch { /* search is best-effort */ }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    const onDown = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, []);
+
+  const go = (path) => { setOpen(false); setQ(''); nav(path); };
+  const none = results && !results.startups.length && !results.people.length && !results.communities.length;
+  const Section = ({ title, items, render }) => items.length > 0 && (
+    <div className="py-1">
+      <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-mist-500">{title}</div>
+      {items.map(render)}
+    </div>
+  );
+  return (
+    <div ref={boxRef} className={`relative ${className}`}>
+      <Search className="w-4 h-4 text-mist-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      <input aria-label="Search Fundamental" className="input !py-2 !pl-9 !text-sm w-full" placeholder="Search…"
+        value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => results && setOpen(true)} />
+      {open && results && (
+        <div className="absolute left-0 right-0 mt-2 card p-1 max-h-96 overflow-y-auto z-50 fade-in min-w-[280px]">
+          {none && <div className="px-3 py-3 text-sm text-mist-500">No matches for “{q.trim()}”.</div>}
+          <Section title="Startups" items={results.startups} render={(s) => (
+            <button key={'s' + s.id} className="w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800 flex items-center gap-2.5" onClick={() => go(`/startup/${s.id}`)}>
+              <Avatar src={s.logo} name={s.name} size={7} square />
+              <span className="min-w-0"><span className="block text-sm font-semibold text-mist-100 truncate">{s.name}</span>
+                <span className="block text-xs text-mist-400 truncate">{s.sector} · {s.stage}</span></span>
+            </button>
+          )} />
+          <Section title="People" items={results.people} render={(p) => (
+            <button key={'p' + p.id} className="w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800 flex items-center gap-2.5" onClick={() => go(`/profile/${p.id}`)}>
+              <Avatar src={p.photo} name={p.name} size={7} />
+              <span className="min-w-0"><span className="block text-sm font-semibold text-mist-100 truncate">{p.name}</span>
+                <span className="block text-xs text-mist-400 capitalize truncate">{p.role}{p.headline ? ` · ${p.headline}` : ''}</span></span>
+            </button>
+          )} />
+          <Section title="Communities" items={results.communities} render={(c) => (
+            <button key={'c' + c.id} className="w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800" onClick={() => go(`/communities/${c.slug}`)}>
+              <span className="block text-sm font-semibold text-mist-100 truncate">{c.name}</span>
+              <span className="block text-xs text-mist-400 capitalize truncate">{c.kind} community</span>
+            </button>
+          )} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 const LINKS = [
   { to: '/discover', label: 'Discover' },
@@ -32,7 +102,10 @@ export default function Nav() {
     };
     poll();
     const t = setInterval(poll, 15000);
-    return () => { alive = false; clearInterval(t); };
+    // Pages fire this after mark-read / thread-open so the badge updates instantly
+    // instead of waiting out the poll interval.
+    window.addEventListener('badge-refresh', poll);
+    return () => { alive = false; clearInterval(t); window.removeEventListener('badge-refresh', poll); };
   }, []);
 
   useEffect(() => {
@@ -63,6 +136,8 @@ export default function Nav() {
             </NavLink>
           ))}
         </nav>
+
+        <GlobalSearch className="hidden md:block w-48 xl:w-56" />
 
         <div className="flex items-center gap-2 ml-auto lg:ml-0">
           <button onClick={toggle} className="nav-link !px-2.5" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
@@ -103,6 +178,7 @@ export default function Nav() {
 
       {mobileOpen && (
         <nav id="mobile-nav" className="lg:hidden border-t border-ink-700/60 px-4 py-3 grid grid-cols-2 gap-1 fade-in bg-ink-950">
+          <GlobalSearch className="col-span-2 mb-2 md:hidden" />
           {links.map(l => (
             <NavLink key={l.to} to={l.to} onClick={() => setMobileOpen(false)}
               className={({ isActive }) => `nav-link ${isActive ? 'nav-link-active' : ''}`}>

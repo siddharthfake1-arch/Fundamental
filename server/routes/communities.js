@@ -1,5 +1,5 @@
 const express = require('express');
-const { db, publicUser, notify, audit } = require('../db');
+const { db, publicUser, notify, audit, isVisibleUser } = require('../db');
 const { auth } = require('../authmw');
 
 const router = express.Router();
@@ -8,8 +8,10 @@ router.use(auth);
 const KINDS = ['topic', 'city', 'role'];
 
 function shape(c, userId) {
+  // created_by is internal — expose only the derived is_owner flag.
+  const { created_by, ...pub } = c;
   return {
-    ...c,
+    ...pub,
     members: db.prepare('SELECT COUNT(*) c FROM community_members WHERE community_id=?').get(c.id).c,
     posts: db.prepare('SELECT COUNT(*) c FROM community_posts WHERE community_id=?').get(c.id).c,
     joined: !!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=?').get(c.id, userId),
@@ -78,7 +80,9 @@ router.post('/:slug/join', (req, res) => {
 router.get('/:slug', (req, res) => {
   const { c, error } = getVisible(req, req.params.slug);
   if (error) return res.status(404).json({ error: 'We could not find that community. It may have been removed.' });
-  const posts = db.prepare('SELECT * FROM community_posts WHERE community_id=? ORDER BY id DESC LIMIT 50').all(c.id).map(p => ({
+  // Discussions by suspended/flagged authors are hidden platform-wide.
+  const posts = db.prepare(`SELECT p.* FROM community_posts p JOIN users u ON u.id=p.user_id
+    AND u.status='active' AND u.flagged=0 WHERE p.community_id=? ORDER BY p.id DESC LIMIT 50`).all(c.id).map(p => ({
     ...p,
     author: publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(p.user_id)),
     replies: db.prepare('SELECT COUNT(*) c FROM community_replies WHERE post_id=?').get(p.id).c,
@@ -145,7 +149,8 @@ router.post('/:slug/posts', (req, res) => {
 });
 
 router.get('/posts/:id/replies', (req, res) => {
-  const replies = db.prepare('SELECT * FROM community_replies WHERE post_id=? ORDER BY id ASC').all(req.params.id).map(r => ({
+  const replies = db.prepare(`SELECT r.* FROM community_replies r JOIN users u ON u.id=r.user_id
+    AND u.status='active' AND u.flagged=0 WHERE r.post_id=? ORDER BY r.id ASC`).all(req.params.id).map(r => ({
     ...r, author: publicUser(db.prepare('SELECT * FROM users WHERE id=?').get(r.user_id)),
     can_edit: r.user_id === req.user.id || req.user.role === 'admin',
     edited: !!r.updated_at,
@@ -219,7 +224,9 @@ router.get('/:slug/members', (req, res) => {
   const { c, error } = getVisible(req, req.params.slug);
   if (error) return res.status(404).json({ error: 'We could not find that community.' });
   const members = db.prepare(`SELECT u.* FROM community_members m JOIN users u ON u.id=m.user_id
-    WHERE m.community_id=? ORDER BY m.joined_at DESC LIMIT 200`).all(c.id).map(u => {
+    WHERE m.community_id=? ORDER BY m.joined_at DESC LIMIT 200`).all(c.id)
+    .filter(u => isVisibleUser(u, req.user)) // hide suspended/flagged/admin members (self + admin viewer exempt)
+    .map(u => {
     const pu = publicUser(u);
     const conn = db.prepare(
       'SELECT * FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)'

@@ -21,7 +21,7 @@ function shapePost(p, userId) {
     likes: db.prepare('SELECT COUNT(*) c FROM post_likes WHERE post_id=?').get(p.id).c,
     liked: !!db.prepare('SELECT 1 FROM post_likes WHERE user_id=? AND post_id=?').get(userId, p.id),
     comments: db.prepare(`SELECT pc.*, u.name, u.photo, u.role FROM post_comments pc JOIN users u ON u.id=pc.user_id
-      WHERE pc.post_id=? ORDER BY pc.id ASC`).all(p.id).map(pc => ({ ...pc, can_edit: pc.user_id === userId, edited: !!pc.updated_at })),
+      WHERE pc.post_id=? AND u.status='active' AND u.flagged=0 ORDER BY pc.id ASC`).all(p.id).map(pc => ({ ...pc, can_edit: pc.user_id === userId, edited: !!pc.updated_at })),
   };
 }
 
@@ -36,8 +36,15 @@ router.get('/types', (req, res) => {
 router.get('/', (req, res) => {
   const type = qstr(req.query.type);
   const limit = qint(req.query.limit, 30, 50), offset = qint(req.query.offset, 0);
-  let rows = db.prepare('SELECT * FROM posts WHERE removed=0 ORDER BY id DESC LIMIT 150').all();
-  if (type) rows = rows.filter(p => p.type === type);
+  // Type filter runs in SQL; posts by suspended/flagged authors are hidden.
+  // The author's verified tier rides along in the same query (no per-post lookup).
+  let sql = `SELECT p.*, u.verified author_verified FROM posts p
+    JOIN users u ON u.id = p.user_id AND u.status='active' AND u.flagged=0
+    WHERE p.removed=0`;
+  const params = [];
+  if (type) { sql += ' AND p.type = ?'; params.push(type); }
+  sql += ' ORDER BY p.id DESC LIMIT 150';
+  const rows = db.prepare(sql).all(...params);
   const ip = req.user.role === 'investor'
     ? db.prepare('SELECT sector_focus FROM investor_profiles WHERE user_id=?').get(req.user.id) : null;
   let mySectors = [];
@@ -45,14 +52,17 @@ router.get('/', (req, res) => {
   const myStartup = req.user.role === 'founder'
     ? db.prepare('SELECT sector FROM startups WHERE founder_id=?').get(req.user.id) : null;
   if (myStartup) mySectors = [myStartup.sector];
+  // One batched sector lookup for every tagged startup on the page candidates.
+  const taggedIds = [...new Set(rows.map(p => p.startup_id).filter(Boolean))];
+  const sectorOf = new Map(taggedIds.length
+    ? db.prepare(`SELECT id, sector FROM startups WHERE id IN (${taggedIds.map(() => '?').join(',')})`).all(...taggedIds).map(r => [r.id, r.sector])
+    : []);
   const SIGNAL_WEIGHT = { 'Fundraising Announcement': 3, 'Round Closed': 3, 'Investor Insight': 3, 'Milestone': 2.5, 'Investment Made': 2.5, 'Product Launch': 2, 'Hiring': 1 };
   const ranked = rows.map(p => {
-    const author = db.prepare('SELECT verified FROM users WHERE id=?').get(p.user_id);
-    const startup = p.startup_id ? db.prepare('SELECT sector FROM startups WHERE id=?').get(p.startup_id) : null;
     const ageHours = (Date.now() - new Date(p.created_at + 'Z')) / 36e5;
     const rank = (SIGNAL_WEIGHT[p.type] || 1)
-      + Math.min(3, (author?.verified || 0)) * 1.5            // credibility, capped
-      + (startup && mySectors.includes(startup.sector) ? 3 : 0) // relevance to viewer
+      + Math.min(3, p.author_verified || 0) * 1.5              // credibility, capped
+      + (p.startup_id && mySectors.includes(sectorOf.get(p.startup_id)) ? 3 : 0) // relevance
       - Math.min(8, ageHours / 24);                            // recency decay
     return { p, rank };
   }).sort((a, b) => b.rank - a.rank);

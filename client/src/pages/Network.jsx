@@ -12,6 +12,8 @@ export default function Network() {
   const tab = params.get('tab') || 'directory';
   const [filters, setFilters] = useState({ role: '', sector: '', stage: '', geography: '', active: false, q: '' });
   const [users, setUsers] = useState(null);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [conns, setConns] = useState(null);
   const toast = useToast();
 
@@ -22,10 +24,19 @@ export default function Network() {
   }, [filters]);
 
   const load = () => {
-    api.get('/api/users/network?' + qs).then(d => setUsers(asArray(d.users))).catch(e => toast(e.message, 'error'));
+    api.get('/api/users/network?' + qs).then(d => { setUsers(asArray(d.users)); setTotal(d.total || 0); }).catch(e => toast(e.message, 'error'));
     api.get('/api/users/connections').then(d => setConns({ pending: asArray(d.pending), accepted: asArray(d.accepted) })).catch(() => {});
   };
   useEffect(() => { load(); }, [qs]);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const d = await api.get(`/api/users/network?${qs}${qs ? '&' : ''}offset=${users.length}`);
+      setUsers(u => [...u, ...asArray(d.users)]);
+      setTotal(d.total || 0);
+    } catch (e) { toast(e.message, 'error'); } finally { setLoadingMore(false); }
+  };
 
   const set = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const act = async (fn, ok) => { try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } };
@@ -48,16 +59,16 @@ export default function Network() {
       {tab === 'directory' && (
         <>
           <div className="card p-4 mb-5 grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
-            <div className="col-span-2 md:col-span-1"><span className="label">Search</span><input className="input" value={filters.q} onChange={set('q')} placeholder="Name…" /></div>
+            <div className="col-span-2 md:col-span-1"><span className="label">Search</span><input aria-label="Search people" className="input" value={filters.q} onChange={set('q')} placeholder="Name…" /></div>
             <div><span className="label">Role</span>
-              <select className="input" value={filters.role} onChange={set('role')}>
+              <select aria-label="Role filter" className="input" value={filters.role} onChange={set('role')}>
                 <option value="">All</option><option value="founder">Founder</option><option value="investor">Investor</option>
               </select></div>
             <div><span className="label">Sector focus</span>
-              <select className="input" value={filters.sector} onChange={set('sector')}><option value="">All</option>{SECTORS.map(s => <option key={s}>{s}</option>)}</select></div>
+              <select aria-label="Sector focus filter" className="input" value={filters.sector} onChange={set('sector')}><option value="">All</option>{SECTORS.map(s => <option key={s}>{s}</option>)}</select></div>
             <div><span className="label">Stage focus</span>
-              <select className="input" value={filters.stage} onChange={set('stage')}><option value="">All</option>{STAGES.map(s => <option key={s}>{s}</option>)}</select></div>
-            <div><span className="label">Geography</span><input className="input" value={filters.geography} onChange={set('geography')} placeholder="City" /></div>
+              <select aria-label="Stage focus filter" className="input" value={filters.stage} onChange={set('stage')}><option value="">All</option>{STAGES.map(s => <option key={s}>{s}</option>)}</select></div>
+            <div><span className="label">Geography</span><input aria-label="Geography filter" className="input" value={filters.geography} onChange={set('geography')} placeholder="City" /></div>
             <label className="flex items-center gap-2 cursor-pointer pb-2.5">
               <input type="checkbox" checked={filters.active} onChange={set('active')} className="accent-gold-400 w-4 h-4" />
               <span className="text-sm text-mist-300">Active recently</span>
@@ -65,6 +76,7 @@ export default function Network() {
           </div>
 
           {!users ? <Spinner /> : users.length === 0 ? <Empty title="No one matches these filters" sub="Adjust your filters to widen the search." /> : (
+            <>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {users.map((u, i) => (
                 <motion.div key={u.id} className="card card-hover p-5"
@@ -95,6 +107,14 @@ export default function Network() {
                 </motion.div>
               ))}
             </div>
+            {users.length < total && (
+              <div className="text-center mt-6">
+                <button className="btn-ghost" onClick={loadMore} disabled={loadingMore}>
+                  {loadingMore ? 'Loading…' : `Load more (${users.length} of ${total})`}
+                </button>
+              </div>
+            )}
+            </>
           )}
         </>
       )}

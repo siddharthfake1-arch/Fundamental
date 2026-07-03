@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, asArray, asObject, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, BarBreakdown, CoverHero, Empty, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, BarBreakdown, CoverHero, Empty, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
 
 const BADGE_STYLES = { 'Repeat Founder': 'chip-blue', 'Exited Founder': 'chip-gold', 'High Growth Founder': 'chip-green' };
 
@@ -11,7 +11,9 @@ export default function Profile() {
   const { user: me } = useAuth();
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
+  const [reporting, setReporting] = useState(false);
   const toast = useToast();
+  const confirm = useConfirm();
   const nav = useNavigate();
 
   const load = () => api.get(`/api/users/profile/${id}`).then(setD).catch(e => setErr(e.message));
@@ -83,10 +85,20 @@ export default function Profile() {
             <button className={`btn-ghost btn-sm ${d.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
               onClick={() => act(() => api.post(`/api/users/follow/${u.id}`))}>{d.following ? '✓ Following' : 'Follow'}</button>
             {u.linkedin && <a href={u.linkedin} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">LinkedIn ↗</a>}
-            <button className="btn-ghost btn-sm ml-auto !text-mist-500" onClick={() => {
-              const reason = prompt('Report this profile — describe the issue:');
-              if (reason) act(() => api.post('/api/users/report', { target_type: 'user', target_id: u.id, reason }), 'Report sent to our moderation team');
-            }}>Report</button>
+            <div className="ml-auto flex gap-2">
+              <button className="btn-ghost btn-sm !text-mist-500" onClick={() => setReporting(true)}>Report</button>
+              <button className="btn-ghost btn-sm !text-mist-500" onClick={async () => {
+                const ok = await confirm({
+                  title: `Block ${u.name}?`,
+                  body: 'You will not see each other on Fundamental, any connection is removed, and messaging closes both ways. You can unblock later from Settings → Security.',
+                  danger: true, confirmLabel: 'Block',
+                });
+                if (!ok) return;
+                try { await api.post(`/api/users/block/${u.id}`); toast(`${u.name} has been blocked`, 'success'); nav('/network'); }
+                catch (e) { toast(e.message, 'error'); }
+              }}>Block</button>
+            </div>
+            <ReportModal open={reporting} onClose={() => setReporting(false)} targetType="user" targetId={u.id} targetLabel="profile" />
           </div>
         )}
         {self && (

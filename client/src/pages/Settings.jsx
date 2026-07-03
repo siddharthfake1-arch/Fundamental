@@ -4,7 +4,7 @@ import { Sun, Moon } from 'lucide-react';
 import { api, asArray } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
-import { FileUpload, Avatar, Spinner, CityInput, LinksEditor, TeamEditor, useToast } from '../components/ui';
+import { FileUpload, Avatar, Spinner, CityInput, LinksEditor, TeamEditor, useConfirm, useToast } from '../components/ui';
 
 const Field = ({ label, children }) => <label className="block"><span className="label">{label}</span>{children}</label>;
 
@@ -24,9 +24,11 @@ export default function Settings() {
             className={`rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
         ))}
       </div>
-      {tab === 'account' && <Account user={user} refresh={refresh} />}
-      {tab === 'startup' && <StartupSettings />}
-      {tab === 'investor' && <InvestorSettings user={user} refresh={refresh} />}
+      {/* Form tabs stay MOUNTED (hidden, not unmounted) so switching tabs never
+          silently discards half-filled edits. */}
+      <div className={tab === 'account' ? '' : 'hidden'}><Account user={user} refresh={refresh} /></div>
+      {user.role === 'founder' && <div className={tab === 'startup' ? '' : 'hidden'}><StartupSettings /></div>}
+      {user.role === 'investor' && <div className={tab === 'investor' ? '' : 'hidden'}><InvestorSettings user={user} refresh={refresh} /></div>}
       {tab === 'appearance' && <Appearance />}
       {tab === 'notifications' && <NotifPrefs user={user} refresh={refresh} />}
       {tab === 'security' && <Security user={user} />}
@@ -214,6 +216,7 @@ function CollateralRow({ c, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(c.title);
   const toast = useToast();
+  const confirm = useConfirm();
   return (
     <div className="bg-ink-850 border border-ink-700/60 rounded-xl px-4 py-2.5 space-y-2">
       <div className="flex items-center gap-3 flex-wrap">
@@ -240,7 +243,7 @@ function CollateralRow({ c, onChanged }) {
           <>
             <button className="text-mist-400 hover:text-gold-300 text-xs" onClick={() => setEditing(true)}>Edit</button>
             <button className="text-red-400 hover:text-red-300 text-xs" onClick={async () => {
-              if (!window.confirm(`Remove "${c.title}" from your data room?`)) return;
+              if (!await confirm({ title: 'Remove this document?', body: `"${c.title}" will be removed from your data room and its file deleted.`, danger: true, confirmLabel: 'Remove' })) return;
               try { await api.del(`/api/startups/collateral/${c.id}`); onChanged(); toast('Document removed', 'success'); }
               catch (err) { toast(err.message, 'error'); }
             }}>Remove</button>
@@ -315,27 +318,52 @@ function Appearance() {
   );
 }
 
+const EMAIL_CATEGORIES = [
+  ['messages', 'Messages', 'New direct messages'],
+  ['connections', 'Connections', 'Connection requests and accepts'],
+  ['dealroom', 'Data room', 'Document access requests and approvals'],
+  ['activity', 'Activity', 'Deal alerts, milestones, and community updates'],
+];
+
 function NotifPrefs({ user, refresh }) {
   const [email, setEmail] = useState(!!user.email_alerts);
   const [inapp, setInapp] = useState(user.inapp_alerts !== 0);
+  // A category is ON unless explicitly saved as 0.
+  const [prefs, setPrefs] = useState(() => Object.fromEntries(
+    EMAIL_CATEGORIES.map(([k]) => [k, (user.email_prefs || {})[k] !== 0])));
+  const [saving, setSaving] = useState(false);
   const toast = useToast();
-  const Toggle = ({ label, sub, value, onChange }) => (
-    <label className="flex items-center justify-between cursor-pointer card !rounded-xl px-4 py-3.5">
-      <div><div className="text-sm font-medium text-mist-100">{label}</div><div className="text-xs text-mist-400">{sub}</div></div>
-      <button type="button" onClick={onChange} className={`w-11 h-6 rounded-full transition-colors relative ${value ? 'bg-gold-400' : 'bg-ink-600'}`}>
+  const Toggle = ({ label, sub, value, onChange, small }) => (
+    <label className={`flex items-center justify-between cursor-pointer card !rounded-xl px-4 ${small ? 'py-2.5' : 'py-3.5'}`}>
+      <div><div className={`${small ? 'text-xs' : 'text-sm'} font-medium text-mist-100`}>{label}</div><div className="text-xs text-mist-400">{sub}</div></div>
+      <button type="button" role="switch" aria-checked={value} aria-label={label} onClick={onChange}
+        className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${value ? 'bg-gold-400' : 'bg-ink-600'}`}>
         <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${value ? 'left-[22px]' : 'left-0.5'}`} />
       </button>
     </label>
   );
   return (
     <div className="card p-6 space-y-3">
-      <Toggle label="Email alerts" sub="Connection requests, access approvals, and messages by email" value={email} onChange={() => setEmail(v => !v)} />
+      <Toggle label="Email alerts" sub="Master switch for all notification emails" value={email} onChange={() => setEmail(v => !v)} />
+      {email && (
+        <div className="pl-4 space-y-2 border-l-2 border-ink-700/60">
+          {EMAIL_CATEGORIES.map(([k, label, sub]) => (
+            <Toggle key={k} small label={label} sub={sub} value={prefs[k]} onChange={() => setPrefs(p => ({ ...p, [k]: !p[k] }))} />
+          ))}
+        </div>
+      )}
       <Toggle label="In-app alerts" sub="Notification center and badge counts" value={inapp} onChange={() => setInapp(v => !v)} />
       <div className="flex justify-end pt-2">
-        <button className="btn-primary" onClick={async () => {
-          try { await api.put('/api/users/me', { email_alerts: email ? 1 : 0, inapp_alerts: inapp ? 1 : 0 }); await refresh(); toast('Preferences saved', 'success'); }
-          catch (e) { toast(e.message, 'error'); }
-        }}>Save preferences</button>
+        <button className="btn-primary" disabled={saving} onClick={async () => {
+          setSaving(true);
+          try {
+            await api.put('/api/users/me', {
+              email_alerts: email ? 1 : 0, inapp_alerts: inapp ? 1 : 0,
+              email_prefs: Object.fromEntries(EMAIL_CATEGORIES.map(([k]) => [k, prefs[k] ? 1 : 0])),
+            });
+            await refresh(); toast('Preferences saved', 'success');
+          } catch (e) { toast(e.message, 'error'); } finally { setSaving(false); }
+        }}>{saving ? 'Saving…' : 'Save preferences'}</button>
       </div>
     </div>
   );
@@ -344,24 +372,113 @@ function NotifPrefs({ user, refresh }) {
 function Security({ user }) {
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
   return (
-    <div className="card p-6 space-y-4 max-w-md">
-      <h2 className="section-title">Change password</h2>
-      <Field label="Current password"><input type="password" className="input" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
-      <Field label="New password"><input type="password" className="input" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Minimum 8 characters" /></Field>
-      <button className="btn-primary w-full" disabled={!cur || next.length < 8} onClick={async () => {
-        try { await api.post('/api/auth/change-password', { current: cur, next }); setCur(''); setNext(''); toast('Password changed', 'success'); }
-        catch (e) { toast(e.message, 'error'); }
-      }}>Update password</button>
-      <div className="text-xs text-mist-500 pt-2">Signed in as {user.email}</div>
-      <PrivacyControls user={user} />
+    <div className="space-y-5 max-w-md">
+      <div className="card p-6 space-y-4">
+        <h2 className="section-title">Change password</h2>
+        <Field label="Current password"><input type="password" className="input" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
+        <Field label="New password"><input type="password" className="input" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Letters and numbers, 8+ characters" /></Field>
+        <button className="btn-primary w-full" disabled={busy || !cur || next.length < 8} onClick={async () => {
+          setBusy(true);
+          try { await api.post('/api/auth/change-password', { current: cur, next }); setCur(''); setNext(''); toast('Password changed', 'success'); }
+          catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+        }}>{busy ? 'Updating…' : 'Update password'}</button>
+      </div>
+      <ChangeEmail user={user} />
+      <BlockedMembers />
+      <div className="card p-6">
+        <div className="text-xs text-mist-500 mb-3">Signed in as {user.email}</div>
+        <PrivacyControls user={user} />
+      </div>
+    </div>
+  );
+}
+
+// Change the account email: requires the current password AND a verification code
+// sent to the NEW address (both factors, since email is the login credential).
+function ChangeEmail({ user }) {
+  const { refresh } = useAuth();
+  const [f, setF] = useState({ email: '', code: '', password: '', sent: false, demo: '' });
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const sendCode = async () => {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) return toast('Enter a valid new email address', 'error');
+    setBusy(true);
+    try {
+      const d = await api.post('/api/auth/send-otp', { channel: 'email', identifier: f.email });
+      setF(x => ({ ...x, sent: true, demo: d.demo_code || '' }));
+      toast(d.demo_code ? 'Demo mode — your code is shown below' : `We sent a 6-digit code to ${f.email}`, 'success');
+    } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+  };
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await api.post('/api/auth/change-email', { new_email: f.email, code: f.code, password: f.password });
+      toast('Email updated', 'success');
+      setF({ email: '', code: '', password: '', sent: false, demo: '' });
+      await refresh();
+    } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="card p-6 space-y-4">
+      <h2 className="section-title">Change email</h2>
+      <p className="text-xs text-mist-500 -mt-2">Your email is how you sign in. We verify the new address with a code before switching.</p>
+      <div className="flex gap-2">
+        <input className="input flex-1" type="email" placeholder="New email address" value={f.email}
+          onChange={(e) => setF(x => ({ ...x, email: e.target.value, sent: false }))} />
+        <button className="btn-ghost shrink-0" disabled={busy || !f.email} onClick={sendCode}>{f.sent ? 'Resend code' : 'Send code'}</button>
+      </div>
+      {f.sent && (
+        <>
+          {f.demo && <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">Demo mode — your code is <code className="font-bold">{f.demo}</code></div>}
+          <div className="grid sm:grid-cols-2 gap-3">
+            <Field label="6-digit code"><input className="input tracking-[0.4em]" inputMode="numeric" maxLength={6} value={f.code}
+              onChange={(e) => setF(x => ({ ...x, code: e.target.value.replace(/\D/g, '') }))} /></Field>
+            <Field label="Current password"><input type="password" className="input" value={f.password}
+              onChange={(e) => setF(x => ({ ...x, password: e.target.value }))} /></Field>
+          </div>
+          <button className="btn-primary w-full" disabled={busy || f.code.length < 6 || !f.password} onClick={submit}>
+            {busy ? 'Updating…' : 'Update email'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Manage blocked members. The profile itself 404s once blocked, so unblocking
+// lives here where it is always reachable.
+function BlockedMembers() {
+  const [list, setList] = useState(null);
+  const toast = useToast();
+  const load = () => api.get('/api/users/blocked').then(d => setList(asArray(d.blocked))).catch(() => setList([]));
+  useEffect(() => { load(); }, []);
+  if (!list || list.length === 0) return null;
+  return (
+    <div className="card p-6 space-y-3">
+      <h2 className="section-title">Blocked members</h2>
+      {list.map(b => (
+        <div key={b.id} className="flex items-center gap-3">
+          <Avatar src={b.photo} name={b.name} size={9} />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-mist-100 truncate">{b.name}</div>
+            <div className="text-xs text-mist-400 capitalize truncate">{b.role}</div>
+          </div>
+          <button className="btn-ghost btn-sm" onClick={async () => {
+            try { await api.post(`/api/users/block/${b.id}`); toast(`${b.name} unblocked`, 'success'); load(); }
+            catch (e) { toast(e.message, 'error'); }
+          }}>Unblock</button>
+        </div>
+      ))}
     </div>
   );
 }
 
 function PrivacyControls({ user }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const exportData = async () => {
     try {
       const res = await fetch('/api/users/me/export', { credentials: 'include' });
@@ -375,8 +492,12 @@ function PrivacyControls({ user }) {
     } catch (e) { toast(e.message, 'error'); }
   };
   const deleteAccount = async () => {
-    const sure = window.prompt('This permanently deletes your account and all associated data. Type DELETE to confirm.');
-    if (sure !== 'DELETE') return;
+    const ok = await confirm({
+      title: 'Delete your account?',
+      body: 'This permanently deletes your account, profile, startup, messages, and files. It cannot be undone.',
+      typed: 'DELETE', danger: true, confirmLabel: 'Delete my account',
+    });
+    if (!ok) return;
     try {
       await api.del('/api/users/me');
       toast('Your account has been deleted.', 'success');

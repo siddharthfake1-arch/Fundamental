@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Users, MessageSquare, ArrowLeft, Plus } from 'lucide-react';
 import { api, asArray, asObject, timeAgo } from '../api';
-import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, Modal, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
 
 const KIND_LABEL = { topic: 'Topics', city: 'Cities', role: 'Roles' };
 const KIND_OPTIONS = [['topic', 'Topic', 'A theme, sector, or interest — e.g. Fintech, AI, Fundraising'], ['city', 'City', 'A place — e.g. Bengaluru, London, San Francisco'], ['role', 'Role', 'A function — e.g. Founders, Angels, Operators']];
@@ -19,6 +19,7 @@ function CommunityIndex() {
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
   const toast = useToast();
+  const confirm = useConfirm();
   const load = () => api.get('/api/communities').then(d => { setList(asArray(d.communities)); setPending(asArray(d.pending)); }).catch(e => toast(e.message, 'error'));
   useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
@@ -56,7 +57,7 @@ function CommunityIndex() {
                 <span className="text-xs text-mist-500">An admin will review it shortly. You'll be notified when it goes live.</span>
                 <button className="text-xs font-semibold text-mist-400 hover:text-red-300 ml-auto"
                   onClick={async () => {
-                    if (!window.confirm(`Withdraw "${c.name}"? This removes your pending submission.`)) return;
+                    if (!await confirm({ title: `Withdraw "${c.name}"?`, body: 'This removes your pending submission.', danger: true, confirmLabel: 'Withdraw' })) return;
                     try { await api.del(`/api/communities/${c.slug}`); toast('Submission withdrawn', 'success'); load(); }
                     catch (e) { toast(e.message, 'error'); }
                   }}>Withdraw</button>
@@ -315,11 +316,14 @@ function Thread({ p, onChanged }) {
   const [open, setOpen] = useState(false);
   const [replies, setReplies] = useState(null);
   const [reply, setReply] = useState('');
+  const [replyBusy, setReplyBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [ef, setEf] = useState({ title: '', body: '' });
   const [editReply, setEditReply] = useState(null);
   const [erBody, setErBody] = useState('');
+  const [reporting, setReporting] = useState(null); // { type, id, label }
   const toast = useToast();
+  const confirm = useConfirm();
   const loadReplies = () => api.get(`/api/communities/posts/${p.id}/replies`).then(d => setReplies(asArray(d.replies))).catch(() => {});
 
   const startEdit = () => { setEf({ title: p.title || '', body: p.body || '' }); setEditing(true); };
@@ -328,7 +332,7 @@ function Thread({ p, onChanged }) {
     catch (e) { toast(e.message, 'error'); }
   };
   const removePost = async () => {
-    if (!window.confirm('Delete this discussion? This cannot be undone.')) return;
+    if (!await confirm({ title: 'Delete this discussion?', body: 'All replies are removed too. This cannot be undone.', danger: true })) return;
     try { await api.del(`/api/communities/posts/${p.id}`); onChanged(); toast('Discussion deleted', 'success'); }
     catch (e) { toast(e.message, 'error'); }
   };
@@ -338,9 +342,15 @@ function Thread({ p, onChanged }) {
     catch (e) { toast(e.message, 'error'); }
   };
   const removeReply = async (r) => {
-    if (!window.confirm('Delete this reply?')) return;
+    if (!await confirm({ title: 'Delete this reply?', danger: true })) return;
     try { await api.del(`/api/communities/replies/${r.id}`); loadReplies(); }
     catch (e) { toast(e.message, 'error'); }
+  };
+  const postReply = async () => {
+    if (!reply.trim() || replyBusy) return;
+    setReplyBusy(true);
+    try { await api.post(`/api/communities/posts/${p.id}/replies`, { body: reply }); setReply(''); loadReplies(); }
+    catch (er) { toast(er.message, 'error'); } finally { setReplyBusy(false); }
   };
 
   return (
@@ -353,13 +363,17 @@ function Thread({ p, onChanged }) {
           </Link>
           <div className="text-[11px] text-mist-500">{p.author.headline} · {timeAgo(p.created_at)}{p.edited && ' · edited'}</div>
         </div>
-        {p.can_edit && !editing && (
+        {p.can_edit && !editing ? (
           <div className="ml-auto flex items-center gap-2">
             <button className="text-xs font-semibold text-mist-400 hover:text-mist-100" onClick={startEdit}>Edit</button>
             <button className="text-xs font-semibold text-mist-400 hover:text-red-300" onClick={removePost}>Delete</button>
           </div>
+        ) : !p.can_edit && (
+          <button className="ml-auto text-xs font-semibold text-mist-500 hover:text-mist-200" onClick={() => setReporting({ type: 'discussion', id: p.id, label: 'discussion' })}>Report</button>
         )}
       </div>
+      <ReportModal open={!!reporting} onClose={() => setReporting(null)}
+        targetType={reporting?.type} targetId={reporting?.id} targetLabel={reporting?.label} />
       {editing ? (
         <div className="space-y-3">
           <input className="input" maxLength={140} placeholder="Title — be specific" value={ef.title} onChange={(e) => setEf(x => ({ ...x, title: e.target.value }))} />
@@ -386,11 +400,13 @@ function Thread({ p, onChanged }) {
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-mist-100">
                   {r.author.name}{!!r.author.verified && <VerifiedBadge small tier={r.author.verified} />}
                   <span className="font-normal text-mist-500">· {timeAgo(r.created_at)}{r.edited && ' · edited'}</span>
-                  {r.can_edit && editReply !== r.id && (
+                  {r.can_edit && editReply !== r.id ? (
                     <span className="ml-auto flex items-center gap-2">
                       <button className="text-[11px] font-semibold text-mist-400 hover:text-mist-100" onClick={() => startEditReply(r)}>Edit</button>
                       <button className="text-[11px] font-semibold text-mist-400 hover:text-red-300" onClick={() => removeReply(r)}>Delete</button>
                     </span>
+                  ) : !r.can_edit && (
+                    <button className="ml-auto text-[11px] font-semibold text-mist-600 hover:text-mist-300" onClick={() => setReporting({ type: 'reply', id: r.id, label: 'reply' })}>Report</button>
                   )}
                 </div>
                 {editReply === r.id ? (
@@ -407,14 +423,12 @@ function Thread({ p, onChanged }) {
               </div>
             </div>
           ))}
-          <input className="input !py-2" placeholder="Write a reply — press Enter to post" value={reply}
-            onChange={(e) => setReply(e.target.value)}
-            onKeyDown={async (e) => {
-              if (e.key === 'Enter' && reply.trim()) {
-                try { await api.post(`/api/communities/posts/${p.id}/replies`, { body: reply }); setReply(''); loadReplies(); }
-                catch (er) { toast(er.message, 'error'); }
-              }
-            }} />
+          <div className="flex gap-2">
+            <input className="input !py-2" placeholder="Write a reply — press Enter to post" value={reply} disabled={replyBusy}
+              onChange={(e) => setReply(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') postReply(); }} />
+            <button className="btn-primary btn-sm shrink-0" disabled={!reply.trim() || replyBusy} onClick={postReply}>{replyBusy ? '…' : 'Reply'}</button>
+          </div>
         </div>
       )}
     </motion.article>

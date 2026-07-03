@@ -26,11 +26,13 @@ export default function Landing() {
       <header className="fixed top-0 inset-x-0 z-50 bg-black/85">
         <div className="max-w-[1200px] mx-auto px-6 h-[72px] flex items-center justify-between">
           <Logo className="h-[63px]" variant="dark" />
-          <nav className="hidden md:flex items-center gap-9">
+          {/* Anchor links stay reachable on mobile (the old hidden-below-md nav left
+              phones with no way to the founder/investor sections). */}
+          <nav className="flex items-center gap-4 md:gap-9">
             {NAV_LINKS.map(([l, to]) => (
               to.startsWith('#')
-                ? <a key={l} href={to} className="text-[14px] tracking-[0.021em] text-[#9a9a9a] hover:text-white transition-colors">{l}</a>
-                : <Link key={l} to={to} className="text-[14px] tracking-[0.021em] text-[#9a9a9a] hover:text-white transition-colors">{l}</Link>
+                ? <a key={l} href={to} className="text-[13px] md:text-[14px] tracking-[0.021em] text-[#9a9a9a] hover:text-white transition-colors">{l}</a>
+                : <Link key={l} to={to} className="hidden sm:inline text-[13px] md:text-[14px] tracking-[0.021em] text-[#9a9a9a] hover:text-white transition-colors">{l}</Link>
             ))}
           </nav>
           <Link to="/login"
@@ -92,10 +94,10 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Stats */}
+      {/* Value props — durable claims, not live counters that drift out of date */}
       <section id="investors" className="max-w-[1200px] mx-auto px-6 py-[60px]">
         <div className="rounded-[24px] border border-white/10 p-[36px] grid sm:grid-cols-3 gap-[30px] text-center">
-          {[['8+', 'startups raising now'], ['$39M+', 'in open rounds'], ['12 min', 'to assess a deal']].map(([v, l]) => (
+          {[['12 min', 'to assess any deal'], ['100%', 'of pitches on video'], ['0', 'cold decks in your inbox']].map(([v, l]) => (
             <div key={l}>
               <div className="font-extralight text-[48px] leading-[1.1] tracking-[-0.04em]">{v}</div>
               <div className="text-[12px] uppercase tracking-[0.05em] text-[#9a9a9a] mt-[6px]">{l}</div>
@@ -119,6 +121,14 @@ export default function Landing() {
         <div className="max-w-[1200px] mx-auto px-6 py-[30px] flex items-center justify-between flex-wrap gap-[12px]">
           <Logo className="h-[52px]" variant="dark" />
           <div className="text-[12px] tracking-[0.05em] text-[#9a9a9a]">The private-market network for founders and investors.</div>
+          <nav className="flex items-center gap-5 flex-wrap" aria-label="Legal">
+            {[['Terms of Service', '/legal/terms'], ['Privacy Policy', '/legal/privacy'], ['Risk Disclosures', '/legal/disclosures']].map(([l, to]) => (
+              <Link key={to} to={to} className="text-[12px] tracking-[0.05em] text-[#9a9a9a] hover:text-white transition-colors">{l}</Link>
+            ))}
+          </nav>
+        </div>
+        <div className="max-w-[1200px] mx-auto px-6 pb-[24px] text-[11px] leading-[1.5] text-[#6a6a6a]">
+          Information on Fundamental is provided by members and is not investment advice. Investing in private companies involves substantial risk, including total loss of capital.
         </div>
       </footer>
     </div>

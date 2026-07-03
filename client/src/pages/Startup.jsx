@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { api, asArray, asObject, fmtMoney, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
-import { Avatar, BarBreakdown, CoverHero, Empty, LineChart, Modal, ScoreRing, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, BarBreakdown, CoverHero, Empty, LineChart, Modal, ScoreRing, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
 
 const Section = ({ id, title, action, children }) => (
   <motion.section id={id} className="card p-5 sm:p-6"
@@ -35,6 +35,7 @@ export default function Startup() {
   const [shareOpen, setShareOpen] = useState(false);
   const [intro, setIntro] = useState(null);
   const toast = useToast();
+  const confirm = useConfirm();
   const nav = useNavigate();
 
   const load = () => api.get(`/api/startups/${id}`).then(setD).catch(e => setErr(e.message));
@@ -91,7 +92,7 @@ export default function Startup() {
   const share = async () => {
     if (s.public_share) return copyLink();
     if (!is_owner) return toast('The founder has not enabled a public link for this startup.', 'info');
-    const ok = window.confirm('Enable public sharing?\n\nAnyone with the link — no account needed — will be able to see this startup\'s name, sector, one-liner, score, and 12-minute pitch video. Your metrics and data room stay private. You can turn this off anytime in Settings.');
+    const ok = await confirm({ title: 'Enable public sharing?', confirmLabel: 'Enable & copy link', body: 'Anyone with the link — no account needed — will be able to see this startup\'s name, sector, one-liner, score, and 12-minute pitch video. Your metrics and data room stay private. You can turn this off anytime in Settings.' });
     if (!ok) return;
     try { await api.post('/api/startups/mine', { public_share: 1 }); await load(); toast('Public sharing enabled — link copied.', 'success'); copyLink(); }
     catch (e) { toast(e.message, 'error'); }
@@ -516,6 +517,7 @@ function NoteRow({ n, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(n.text);
   const toast = useToast();
+  const confirm = useConfirm();
   return (
     <div className="bg-gold-500/5 border border-gold-500/20 rounded-xl px-4 py-3 flex gap-3">
       <div className="flex-1">
@@ -543,7 +545,7 @@ function NoteRow({ n, onChanged }) {
         <div className="flex flex-col items-end gap-1.5">
           <button className="text-mist-500 hover:text-gold-300 text-xs" onClick={() => setEditing(true)}>Edit</button>
           <button className="text-mist-500 hover:text-red-400 text-xs" onClick={async () => {
-            if (!window.confirm('Delete this note?')) return;
+            if (!await confirm({ title: 'Delete this note?', danger: true })) return;
             try { await api.del(`/api/startups/notes/${n.id}`); onChanged(); } catch (e) { toast(e.message, 'error'); }
           }}>Delete</button>
         </div>
@@ -559,6 +561,7 @@ function ActivityRow({ a, isOwner, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [f, setF] = useState({ type: a.type, text: a.text });
   const toast = useToast();
+  const confirm = useConfirm();
   if (editing) {
     return (
       <li className="ml-5 space-y-2">
@@ -587,7 +590,7 @@ function ActivityRow({ a, isOwner, onChanged }) {
           <>
             <button className="text-[11px] text-mist-400 hover:text-gold-300" onClick={() => { setF({ type: a.type, text: a.text }); setEditing(true); }}>Edit</button>
             <button className="text-[11px] text-mist-400 hover:text-red-300" onClick={async () => {
-              if (!window.confirm('Delete this signal?')) return;
+              if (!await confirm({ title: 'Delete this signal?', danger: true })) return;
               try { await api.del(`/api/startups/activity/${a.id}`); onChanged(); } catch (e) { toast(e.message, 'error'); }
             }}>Delete</button>
           </>
@@ -602,6 +605,7 @@ function UpdateRow({ u, isOwner, onChanged, onReact }) {
   const [editing, setEditing] = useState(false);
   const [f, setF] = useState({ headline: u.headline, body: u.body, arr: u.arr ?? '', mrr: u.mrr ?? '', growth: u.growth ?? '' });
   const toast = useToast();
+  const confirm = useConfirm();
   if (editing) {
     return (
       <div className="bg-ink-850 border border-ink-700/50 rounded-xl p-4 space-y-3">
@@ -634,7 +638,7 @@ function UpdateRow({ u, isOwner, onChanged, onReact }) {
             <>
               <button className="text-[11px] text-mist-400 hover:text-gold-300" onClick={() => { setF({ headline: u.headline, body: u.body, arr: u.arr ?? '', mrr: u.mrr ?? '', growth: u.growth ?? '' }); setEditing(true); }}>Edit</button>
               <button className="text-[11px] text-mist-400 hover:text-red-300" onClick={async () => {
-                if (!window.confirm('Delete this update?')) return;
+                if (!await confirm({ title: 'Delete this update?', danger: true })) return;
                 try { await api.del(`/api/startups/updates/${u.id}`); onChanged(); } catch (e) { toast(e.message, 'error'); }
               }}>Delete</button>
             </>
@@ -707,7 +711,7 @@ function ReactionBar({ update, onReact }) {
       {REACTIONS.map(e => {
         const active = update.my_reaction === e;
         return (
-          <button key={e} onClick={() => react(e)}
+          <button key={e} onClick={() => react(e)} aria-label={`React ${e}`} aria-pressed={active}
             className={`text-sm rounded-full px-2.5 py-1 border transition-colors ${active ? 'bg-gold-500/15 border-gold-500/40 text-gold-200' : 'bg-ink-900 border-ink-700/50 text-mist-400 hover:border-ink-500'}`}>
             <span>{e}</span>{counts[e] ? <span className="ml-1 tabular-nums text-[11px]">{counts[e]}</span> : null}
           </button>

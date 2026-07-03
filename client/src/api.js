@@ -50,6 +50,9 @@ function uploadTo(endpoint, file, onProgress) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', endpoint);
     xhr.withCredentials = true;
+    // A stalled upload must fail visibly, never hang the progress bar forever.
+    // 10 minutes accommodates a 100 MB pitch video on a slow uplink.
+    xhr.timeout = 10 * 60 * 1000;
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     };
@@ -59,6 +62,7 @@ function uploadTo(endpoint, file, onProgress) {
         xhr.status < 400 ? resolve(data) : reject(new Error(data.error || 'Upload failed'));
       } catch { reject(new Error('Upload failed')); }
     };
+    xhr.ontimeout = () => reject(new Error('The upload timed out. Check your connection and try again.'));
     xhr.onerror = () => reject(new Error('Upload failed — check your connection'));
     xhr.send(fd);
   });

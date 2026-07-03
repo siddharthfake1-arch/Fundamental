@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, FileUpload, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, FileUpload, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
 
 const TYPE_STYLE = {
   'Fundraising Announcement': 'chip-gold', 'Round Closed': 'chip-green', 'Milestone': 'chip-blue',
@@ -26,6 +26,19 @@ export default function Social() {
   const load = () => api.get('/api/social' + (filter ? `?type=${encodeURIComponent(filter)}` : ''))
     .then(d => setPosts(asArray(d.posts))).catch(e => toast(e.message, 'error'));
   useEffect(() => { load(); }, [filter]);
+
+  // Deep link: /social?post=ID scrolls to and briefly highlights the shared post.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const pid = searchParams.get('post');
+    if (!pid || !posts) return;
+    const el = document.getElementById(`post-${pid}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-gold-400/50');
+      setTimeout(() => el.classList.remove('ring-2', 'ring-gold-400/50'), 3000);
+    }
+  }, [posts]);
   useEffect(() => { api.get('/api/social/types').then(d => setTypes({ types: asArray(d?.types), allowed_for_me: asArray(d?.allowed_for_me) })).catch(() => {}); }, []);
 
   const visible = posts && posts
@@ -148,12 +161,29 @@ function Post({ p, onChange }) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [editComment, setEditComment] = useState(null);
   const [editCommentText, setEditCommentText] = useState('');
+  // Optimistic like: flip locally at once, reconcile with the server response —
+  // no full-feed refetch, no scroll jump, no double-fire while in flight.
+  const [likeState, setLikeState] = useState({ liked: !!p.liked, likes: p.likes, busy: false });
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [reporting, setReporting] = useState(null); // { type, id, label }
   const toast = useToast();
+  const confirm = useConfirm();
 
   const comments = asArray(p.comments);
-  const like = async () => { try { await api.post(`/api/social/${p.id}/like`); onChange(); } catch (e) { toast(e.message, 'error'); } };
+  const like = async () => {
+    if (likeState.busy) return;
+    setLikeState(s => ({ liked: !s.liked, likes: s.likes + (s.liked ? -1 : 1), busy: true }));
+    try {
+      const r = await api.post(`/api/social/${p.id}/like`);
+      setLikeState({ liked: r.liked, likes: r.likes, busy: false });
+    } catch (e) {
+      setLikeState({ liked: !!p.liked, likes: p.likes, busy: false }); // roll back
+      toast(e.message, 'error');
+    }
+  };
   const share = async () => {
-    try { await navigator.clipboard.writeText(`${window.location.origin}/social`); toast('Link copied', 'success'); } catch { toast('Could not copy link', 'error'); }
+    try { await navigator.clipboard.writeText(`${window.location.origin}/social?post=${p.id}`); toast('Link to this post copied', 'success'); }
+    catch { toast('Could not copy link', 'error'); }
   };
 
   const savePost = async () => {
@@ -164,7 +194,7 @@ function Post({ p, onChange }) {
     } catch (e) { toast(e.message, 'error'); } finally { setSavingEdit(false); }
   };
   const deletePost = async () => {
-    if (!window.confirm('Delete this post? This cannot be undone.')) return;
+    if (!await confirm({ title: 'Delete this post?', body: 'This cannot be undone.', danger: true })) return;
     try { await api.del(`/api/social/${p.id}`); onChange(); toast('Post deleted', 'success'); }
     catch (e) { toast(e.message, 'error'); }
   };
@@ -173,13 +203,19 @@ function Post({ p, onChange }) {
     catch (e) { toast(e.message, 'error'); }
   };
   const deleteComment = async (c) => {
-    if (!window.confirm('Delete this comment?')) return;
+    if (!await confirm({ title: 'Delete this comment?', danger: true })) return;
     try { await api.del(`/api/social/comments/${c.id}`); onChange(); }
     catch (e) { toast(e.message, 'error'); }
   };
+  const postComment = async () => {
+    if (!comment.trim() || commentBusy) return;
+    setCommentBusy(true);
+    try { await api.post(`/api/social/${p.id}/comment`, { text: comment }); setComment(''); onChange(); }
+    catch (er) { toast(er.message, 'error'); } finally { setCommentBusy(false); }
+  };
 
   return (
-    <motion.article className="card p-5"
+    <motion.article id={`post-${p.id}`} className="card p-5 transition-shadow"
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}>
       <div className="flex items-start gap-3">
@@ -238,12 +274,18 @@ function Post({ p, onChange }) {
       )}
 
       <div className="flex items-center gap-1 mt-4 pt-3 border-t border-ink-700/60">
-        <button onClick={like} className={`btn-ghost btn-sm !border-0 ${p.liked ? '!text-gold-300' : ''}`}>
-          {p.liked ? '♥' : '♡'} {p.likes}
+        <button onClick={like} aria-label={likeState.liked ? 'Unlike' : 'Like'} aria-pressed={likeState.liked}
+          className={`btn-ghost btn-sm !border-0 ${likeState.liked ? '!text-gold-300' : ''}`}>
+          {likeState.liked ? '♥' : '♡'} {likeState.likes}
         </button>
-        <button onClick={() => setShowComments(s => !s)} className="btn-ghost btn-sm !border-0">💬 {comments.length}</button>
-        <button onClick={share} className="btn-ghost btn-sm !border-0">↗ Share</button>
+        <button onClick={() => setShowComments(s => !s)} aria-label="Comments" className="btn-ghost btn-sm !border-0">💬 {comments.length}</button>
+        <button onClick={share} aria-label="Copy link to this post" className="btn-ghost btn-sm !border-0">↗ Share</button>
+        {!p.can_edit && (
+          <button className="btn-ghost btn-sm !border-0 ml-auto !text-mist-500" onClick={() => setReporting({ type: 'post', id: p.id, label: 'post' })}>Report</button>
+        )}
       </div>
+      <ReportModal open={!!reporting} onClose={() => setReporting(null)}
+        targetType={reporting?.type} targetId={reporting?.id} targetLabel={reporting?.label} />
 
       {showComments && (
         <div className="mt-3 space-y-3">
@@ -253,12 +295,14 @@ function Post({ p, onChange }) {
               <div className="bg-ink-850 border border-ink-700/60 rounded-xl px-3.5 py-2 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-xs font-semibold text-mist-100">{c.name} <span className="font-normal text-mist-500 capitalize">· {c.role}</span></div>
-                  {c.can_edit && editComment !== c.id && (
+                  {c.can_edit && editComment !== c.id ? (
                     <div className="flex gap-1 shrink-0">
                       <button className="text-[11px] text-mist-500 hover:text-mist-200" onClick={() => { setEditComment(c.id); setEditCommentText(c.text || ''); }}>Edit</button>
                       <span className="text-[11px] text-mist-600">·</span>
                       <button className="text-[11px] text-mist-500 hover:text-red-400" onClick={() => deleteComment(c)}>Delete</button>
                     </div>
+                  ) : !c.can_edit && (
+                    <button className="text-[11px] text-mist-600 hover:text-mist-300 shrink-0" onClick={() => setReporting({ type: 'comment', id: c.id, label: 'comment' })}>Report</button>
                   )}
                 </div>
                 {c.can_edit && editComment === c.id ? (
@@ -275,14 +319,12 @@ function Post({ p, onChange }) {
             </div>
           ))}
           <div className="flex gap-2">
-            <input className="input !py-2" placeholder="Add a comment…" value={comment}
+            <input className="input !py-2" placeholder="Add a comment…" value={comment} disabled={commentBusy}
               onChange={(e) => setComment(e.target.value)}
-              onKeyDown={async (e) => {
-                if (e.key === 'Enter' && comment.trim()) {
-                  try { await api.post(`/api/social/${p.id}/comment`, { text: comment }); setComment(''); onChange(); }
-                  catch (er) { toast(er.message, 'error'); }
-                }
-              }} />
+              onKeyDown={(e) => { if (e.key === 'Enter') postComment(); }} />
+            <button className="btn-primary btn-sm shrink-0" disabled={!comment.trim() || commentBusy} onClick={postComment}>
+              {commentBusy ? '…' : 'Post'}
+            </button>
           </div>
         </div>
       )}

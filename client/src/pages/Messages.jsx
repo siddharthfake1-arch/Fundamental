@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, timeAgo, asArray, asObject } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, FileUpload, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, FileUpload, Modal, ReportModal, Spinner, VerifiedBadge, useToast } from '../components/ui';
 
 const STAGES = ['Intro', 'Due Diligence', 'Closed', 'Passed'];
 const STAGE_STYLE = { 'Intro': 'chip-blue', 'Due Diligence': 'chip-gold', 'Closed': 'chip-green', 'Passed': 'chip-red' };
@@ -18,27 +18,40 @@ export default function Messages() {
   const [attach, setAttach] = useState('');
   const [refOpen, setRefOpen] = useState(false);
   const [refList, setRefList] = useState([]);
+  const [sending, setSending] = useState(false);
+  const [uploadPct, setUploadPct] = useState(null);
+  const [reporting, setReporting] = useState(false);
   const endRef = useRef();
+  const scrollBoxRef = useRef();
   const toast = useToast();
 
   const loadList = () => api.get('/api/messages').then(d => setConvos(asArray(d.conversations))).catch(() => setConvos([]));
   const loadThread = () => active && api.get(`/api/messages/${active}`).then(setThread).catch(e => toast(e.message, 'error'));
 
   useEffect(() => { loadList(); }, []);
-  useEffect(() => { setThread(null); loadThread(); }, [active]);
+  useEffect(() => { setThread(null); loadThread(); window.dispatchEvent(new Event('badge-refresh')); }, [active]);
   useEffect(() => {
     const t = setInterval(() => { loadThread(); loadList(); }, 8000);
     return () => clearInterval(t);
   }, [active]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [thread?.messages?.length]);
+  // Follow new messages only when the user is already near the bottom — the 8s
+  // poll must not yank someone who scrolled up to read history.
+  useEffect(() => {
+    const box = scrollBoxRef.current;
+    if (!box) return;
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+    if (nearBottom) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [thread?.messages?.length]);
 
   const send = async (extra = {}) => {
+    if (sending) return; // no duplicate sends on fast Enter / double-click
     if (!text.trim() && !attach && !extra.ref_startup_id) return;
+    setSending(true);
     try {
       await api.post(`/api/messages/${active}/send`, { text: text.trim(), attachment_key: attach?.key || '', attachment_name: attach?.name || '', ...extra });
       setText(''); setAttach(null);
       loadThread(); loadList();
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e.message, 'error'); } finally { setSending(false); }
   };
 
   const setStage = async (stage) => {
@@ -111,6 +124,7 @@ export default function Messages() {
                   {tOther.name}{!!tOther.verified && <VerifiedBadge small />}
                 </Link>
                 <div className="ml-auto flex items-center gap-1.5">
+                  <button className="btn-ghost btn-sm !text-mist-500 hidden sm:block" onClick={() => setReporting(true)}>Report</button>
                   <span className="text-[10px] uppercase tracking-wider text-mist-500 hidden sm:block">Deal stage</span>
                   <select className="input !w-auto !py-1.5 !text-xs" value={tConversation.deal_stage || ''} onChange={(e) => setStage(e.target.value)}>
                     <option value="">—</option>
@@ -119,7 +133,7 @@ export default function Messages() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div ref={scrollBoxRef} className="flex-1 overflow-y-auto p-4 space-y-3">
                 {tMessages.map(m => {
                   const mine = m.sender_id === user.id;
                   return (
@@ -145,20 +159,29 @@ export default function Messages() {
               </div>
 
               <div className="border-t border-ink-700/60 p-3">
-                {attach && <div className="text-xs text-emerald-300 mb-2">📎 {attach.name || 'File'} attached — sends with your message <button className="text-mist-500 ml-1" onClick={() => setAttach(null)}>✕</button></div>}
+                {uploadPct !== null && (
+                  <div className="mb-2">
+                    <div className="text-xs text-mist-400 mb-1">Uploading… {uploadPct}%</div>
+                    <div className="h-1 bg-ink-700 rounded-full overflow-hidden"><div className="h-full bg-gold-400 transition-all" style={{ width: uploadPct + '%' }} /></div>
+                  </div>
+                )}
+                {attach && <div className="text-xs text-emerald-300 mb-2">📎 {attach.name || 'File'} attached — sends with your message <button className="text-mist-500 ml-1" aria-label="Remove attachment" onClick={() => setAttach(null)}>✕</button></div>}
                 <div className="flex gap-2 items-end">
-                  <label className="btn-ghost btn-sm !px-2.5 cursor-pointer" title="Attach file">
-                    <input type="file" className="hidden" onChange={async (e) => {
+                  <label className="btn-ghost btn-sm !px-2.5 cursor-pointer" title="Attach file" aria-label="Attach a document (max 25 MB)">
+                    <input type="file" className="hidden" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,.txt,.zip,image/*" onChange={async (e) => {
                       const f = e.target.files[0];
+                      e.target.value = ''; // allow re-selecting the same file
                       if (!f) return;
-                      try { const d = await api.uploadPrivate(f); setAttach({ key: d.key, name: d.name }); } catch (er) { toast(er.message, 'error'); }
+                      if (f.size > 25 * 1024 * 1024) return toast(`That file is ${Math.ceil(f.size / 1048576)} MB. Attachments are limited to 25 MB.`, 'error');
+                      try { setUploadPct(0); const d = await api.uploadPrivate(f, setUploadPct); setAttach({ key: d.key, name: d.name }); }
+                      catch (er) { toast(er.message, 'error'); } finally { setUploadPct(null); }
                     }} />📎
                   </label>
-                  <button className="btn-ghost btn-sm !px-2.5" title="Reference a startup" onClick={openRef}>◳</button>
+                  <button className="btn-ghost btn-sm !px-2.5" title="Reference a startup" aria-label="Reference a startup" onClick={openRef}>◳</button>
                   <textarea className="input flex-1 !py-2.5 resize-none" rows={1} placeholder="Write a message…" value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
-                  <button className="btn-primary btn-sm !py-2.5" onClick={() => send()}>Send</button>
+                  <button className="btn-primary btn-sm !py-2.5" disabled={sending || uploadPct !== null} onClick={() => send()}>{sending ? '…' : 'Send'}</button>
                 </div>
               </div>
             </>
@@ -166,6 +189,8 @@ export default function Messages() {
           })()}
         </div>
       </div>
+
+      {thread && <ReportModal open={reporting} onClose={() => setReporting(false)} targetType="user" targetId={asObject(thread.other).id} targetLabel="conversation" />}
 
       <Modal open={refOpen} onClose={() => setRefOpen(false)} title="Reference a startup">
         <div className="space-y-2 max-h-80 overflow-y-auto">

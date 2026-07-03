@@ -122,6 +122,13 @@ ADMIN_NAME="Your Name"
   images at 10 MB (enforced server-side after a magic-byte content check).
 - **Forgot password:** self-serve reset via email OTP is built in (`/api/auth/forgot-password`
   + `/api/auth/reset-password`); a reset invalidates older sessions via `pwd_changed_at`.
+- **Notification emails:** with `RESEND_API_KEY` set, in-app notifications also email the
+  recipient (honoring the master toggle + per-category preferences in Settings, throttled to
+  one email per category per 30 min). Set `APP_URL` so email links point at your domain.
+- **Error monitoring:** set `SENTRY_DSN` and `npm install @sentry/node` to capture server
+  errors; the hook is soft and the app boots fine without it (see `docs/MONITORING.md`).
+- **Schema changes:** go through versioned migrations (`server/migrations/*.sql`, applied
+  once and recorded in `schema_migrations`) — back up before deploying one.
 - **Backups & restore:** run `npm run backup` (consistent online snapshot + uploads) and
   keep copies off-box. See `docs/BACKUP.md`, and `docs/STAGING.md` / `docs/MONITORING.md`
   / `docs/MIGRATION.md` for staging, observability, and the Postgres/S3 scaling plan.

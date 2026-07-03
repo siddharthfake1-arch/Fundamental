@@ -16,6 +16,11 @@ export default function Notifications() {
   const load = () => api.get('/api/notifications' + (filter ? `?type=${encodeURIComponent(filter)}` : ''))
     .then(setData).catch(e => toast(e.message, 'error'));
   useEffect(() => { load(); }, [filter]);
+  // Keep an open page fresh: poll every 20s so new notifications appear without a reload.
+  useEffect(() => {
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
+  }, [filter]);
 
   if (!data) return <Spinner />;
   const shown = asArray(data.notifications).filter(n => !q || String(n.text || '').toLowerCase().includes(q.toLowerCase()));
@@ -34,7 +39,7 @@ export default function Notifications() {
             {TYPES.map(t => <option key={t}>{t}</option>)}
           </select>
           <button className="btn-ghost btn-sm" disabled={!data.unread}
-            onClick={async () => { await api.post('/api/notifications/read'); load(); }}>Mark all as read</button>
+            onClick={async () => { await api.post('/api/notifications/read'); load(); window.dispatchEvent(new Event('badge-refresh')); }}>Mark all as read</button>
         </div>
       </div>
 
@@ -44,7 +49,7 @@ export default function Notifications() {
         <div className="card overflow-hidden">
           {shown.map(n => (
             <button key={n.id}
-              onClick={async () => { await api.post('/api/notifications/read', { id: n.id }); n.link ? nav(n.link) : load(); }}
+              onClick={async () => { await api.post('/api/notifications/read', { id: n.id }); window.dispatchEvent(new Event('badge-refresh')); n.link ? nav(n.link) : load(); }}
               className={`w-full flex items-start gap-3.5 px-5 py-4 text-left border-b border-ink-700/40 last:border-0 transition-colors hover:bg-ink-850 ${n.read ? 'opacity-60' : ''}`}>
               <span className="w-9 h-9 rounded-xl bg-ink-800 border border-ink-600/60 flex items-center justify-center text-sm shrink-0">{ICONS[n.type] || '•'}</span>
               <div className="flex-1 min-w-0">

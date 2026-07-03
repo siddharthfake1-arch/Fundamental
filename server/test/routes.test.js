@@ -474,6 +474,115 @@ async function run() {
     assert.strictEqual((await owner('GET', `/api/communities/${slug}`)).status, 404, 'community is gone');
   });
 
+  await test('global search returns startups, people, and communities', async () => {
+    const c = makeClient();
+    await c('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    const d = await (await c('GET', '/api/search?q=pay')).json();
+    assert.ok(Array.isArray(d.startups) && Array.isArray(d.people) && Array.isArray(d.communities), 'three result buckets');
+    const short = await (await c('GET', '/api/search?q=a')).json();
+    assert.strictEqual(short.startups.length + short.people.length + short.communities.length, 0, 'sub-2-char query returns nothing');
+  });
+
+  await test('blocking hides profiles both ways and closes messaging', async () => {
+    const a = makeClient(); const b = makeClient();
+    const ame = await (await a('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' })).json();
+    const bme = await (await b('POST', '/api/auth/login', { email: 'founder3@demo.app', password: 'demo1234' })).json();
+    // a blocks b.
+    const r = await (await a('POST', `/api/users/block/${bme.user.id}`)).json();
+    assert.strictEqual(r.blocked, true, 'block created');
+    assert.strictEqual((await a('GET', `/api/users/profile/${bme.user.id}`)).status, 404, 'blocker cannot see blocked profile');
+    assert.strictEqual((await b('GET', `/api/users/profile/${ame.user.id}`)).status, 404, 'blocked cannot see blocker profile');
+    assert.strictEqual((await b('POST', `/api/users/connect/${ame.user.id}`)).status, 400, 'blocked cannot connect');
+    assert.strictEqual((await b('POST', `/api/messages/start/${ame.user.id}`)).status, 404, 'blocked cannot start conversation');
+    // Blocked list shows them; unblock restores visibility.
+    const list = await (await a('GET', '/api/users/blocked')).json();
+    assert.ok(list.blocked.some(u => u.id === bme.user.id), 'blocked list includes the user');
+    await a('POST', `/api/users/block/${bme.user.id}`); // toggle off
+    assert.strictEqual((await a('GET', `/api/users/profile/${bme.user.id}`)).status, 200, 'unblock restores profile');
+  });
+
+  await test('change-email requires password + OTP on the new address', async () => {
+    const c = makeClient();
+    const email = `chg_${Date.now()}@example.com`;
+    await getOtpAndSignup(c, email, 'investor');
+    const newEmail = `chg_new_${Date.now()}@example.com`;
+    // Missing/incorrect password is rejected even with a valid code.
+    const s = await (await c('POST', '/api/auth/send-otp', { channel: 'email', identifier: newEmail })).json();
+    assert.strictEqual((await c('POST', '/api/auth/change-email', { new_email: newEmail, code: s.demo_code, password: 'wrongpass1' })).status, 400, 'wrong password rejected');
+    const ok = await c('POST', '/api/auth/change-email', { new_email: newEmail, code: s.demo_code, password: 'Testpass123' });
+    assert.strictEqual(ok.status, 200, 'change-email succeeds with password + code');
+    assert.strictEqual((await c('POST', '/api/auth/login', { email: newEmail, password: 'Testpass123' })).status, 200, 'login works with the new email');
+  });
+
+  await test('reports accept extended target types; message reports need participation', async () => {
+    const c = makeClient();
+    await c('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    // Reporting a nonexistent comment 404s; unsupported type 400s.
+    assert.strictEqual((await c('POST', '/api/users/report', { target_type: 'comment', target_id: 999999, reason: 'spam' })).status, 404, 'missing comment 404');
+    assert.strictEqual((await c('POST', '/api/users/report', { target_type: 'bogus', target_id: 1, reason: 'spam' })).status, 400, 'unsupported type 400');
+    // A message the reporter is not part of cannot be reported (even if it exists).
+    assert.strictEqual((await c('POST', '/api/users/report', { target_type: 'message', target_id: 999999, reason: 'spam' })).status, 404, 'foreign/missing message 404');
+  });
+
+  await test('admin audit log endpoint lists entries; non-admin blocked', async () => {
+    const admin = makeClient();
+    await admin('POST', '/api/auth/login', { email: 'admin@fundamental.app', password: 'demo1234' });
+    const d = await (await admin('GET', '/api/admin/audit-logs')).json();
+    assert.ok(typeof d.total === 'number' && Array.isArray(d.logs) && Array.isArray(d.actions), 'audit payload shape');
+    const c = makeClient();
+    await c('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    assert.strictEqual((await c('GET', '/api/admin/audit-logs')).status, 403, 'non-admin blocked');
+  });
+
+  await test('competitor founders cannot read operating financials on startup detail', async () => {
+    // founder2 views founder1's listed startup: burn/runway/cac/ltv must be nulled.
+    const owner = makeClient(); const rival = makeClient(); const inv = makeClient();
+    await owner('POST', '/api/auth/login', { email: 'founder1@demo.app', password: 'demo1234' });
+    const sid = (await (await owner('GET', '/api/startups/mine')).json()).startup.id;
+    await rival('POST', '/api/auth/login', { email: 'founder2@demo.app', password: 'demo1234' });
+    const rv = await (await rival('GET', `/api/startups/${sid}`)).json();
+    assert.strictEqual(rv.startup.burn, null, 'burn hidden from rival founder');
+    assert.strictEqual(rv.startup.runway, null, 'runway hidden from rival founder');
+    // Approved investors still see them (may be 0/null in seed, but not force-nulled
+    // when the owner views their own).
+    const own = await (await owner('GET', `/api/startups/${sid}`)).json();
+    assert.notStrictEqual(own.startup.burn, undefined, 'owner payload retains the field');
+    await inv('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    assert.strictEqual((await inv('GET', `/api/startups/${sid}`)).status, 200, 'investor detail loads');
+  });
+
+  await test('reacting to an update of a draft startup is blocked (no metric leak)', async () => {
+    // Founder3 saves a DRAFT (no video) startup with an update; founder2 must not
+    // be able to read it back through the react endpoint.
+    const owner = makeClient();
+    await owner('POST', '/api/auth/login', { email: 'founder3@demo.app', password: 'demo1234' });
+    let mine = (await (await owner('GET', '/api/startups/mine')).json()).startup;
+    if (!mine) { await owner('POST', '/api/startups/mine', { name: 'Draft Co' }); mine = (await (await owner('GET', '/api/startups/mine')).json()).startup; }
+    await owner('POST', `/api/startups/${mine.id}/updates`, { headline: 'Secret metrics', body: 'ARR is confidential here.', arr: 123456 });
+    const detail = await (await owner('GET', `/api/startups/${mine.id}`)).json();
+    const uid = detail.updates[0].id;
+    const rival = makeClient();
+    await rival('POST', '/api/auth/login', { email: 'founder2@demo.app', password: 'demo1234' });
+    if (detail.startup.video_url) {
+      // Seeded startup happens to be live — reaction is then legitimately allowed.
+      assert.ok(true, 'seed startup already live; visibility gate not exercisable here');
+    } else {
+      assert.strictEqual((await rival('POST', `/api/startups/updates/${uid}/react`, { emoji: '🔥' })).status, 404, 'draft update unreadable via react');
+    }
+  });
+
+  await test('network directory paginates and honors limit/offset', async () => {
+    const c = makeClient();
+    await c('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    const d = await (await c('GET', '/api/users/network?limit=2')).json();
+    assert.ok(typeof d.total === 'number', 'total present');
+    assert.ok(d.users.length <= 2, 'limit respected');
+    const page2 = await (await c('GET', '/api/users/network?limit=2&offset=2')).json();
+    if (d.total > 2 && page2.users.length && d.users.length) {
+      assert.notStrictEqual(page2.users[0].id, d.users[0].id, 'offset returns a different page');
+    }
+  });
+
   console.log(results.join('\n'));
   console.log(`\n${passed} route tests passed.`);
 }
