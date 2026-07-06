@@ -1,0 +1,71 @@
+# Codemagic CI — builds the iOS app in the cloud (no Mac needed) and uploads to
+# TestFlight. One-time setup in the Codemagic dashboard:
+#   1. Connect this GitHub repo.
+#   2. Team settings → Code signing identities → add your App Store Connect API key
+#      (Codemagic then creates certificates + provisioning profiles automatically).
+#   3. Set the APP_STORE_CONNECT integration name below if you named it differently.
+# Trigger: start a build on the mobile-app branch with the ios-release workflow.
+workflows:
+  ios-release:
+    name: iOS · build & upload to TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: fundamental-asc-key # the name you give your API key in Codemagic
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: co.fundamental.app
+    working_directory: client
+    scripts:
+      - name: Install web dependencies
+        script: npm ci
+      - name: Build web bundle against the live API + sync Capacitor
+        script: npm run build:mobile
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios/App
+          pod install
+      - name: Set incremental build number
+        script: |
+          cd ios/App
+          agvtool new-version -all $(($(app-store-connect get-latest-testflight-build-number "$APP_APPLE_ID" 2>/dev/null || echo 0) + 1))
+      - name: Build signed IPA
+        script: |
+          xcode-project use-profiles
+          xcode-project build-ipa --workspace ios/App/App.xcworkspace --scheme App
+    artifacts:
+      - client/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+
+  android-release:
+    name: Android · build signed AAB
+    max_build_duration: 45
+    instance_type: linux_x2
+    environment:
+      node: 22
+      java: 21
+      groups:
+        - android_signing # define KEYSTORE_FILE_B64 / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD here
+    working_directory: client
+    scripts:
+      - name: Install web dependencies
+        script: npm ci
+      - name: Build web bundle against the live API + sync Capacitor
+        script: npm run build:mobile
+      - name: Decode keystore
+        script: echo "$KEYSTORE_FILE_B64" | base64 -d > android/fundamental-upload.jks
+      - name: Build signed AAB
+        script: |
+          cd android
+          export KEYSTORE_FILE=fundamental-upload.jks
+          ./gradlew bundleRelease
+    artifacts:
+      - client/android/app/build/outputs/bundle/release/*.aab

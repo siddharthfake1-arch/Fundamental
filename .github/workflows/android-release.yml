@@ -1,0 +1,43 @@
+# Fallback CI for the Android release AAB (if not using Codemagic).
+# One-time setup: add these repository secrets (Settings → Secrets → Actions):
+#   KEYSTORE_FILE_B64  — base64 of fundamental-upload.jks   (base64 -w0 fundamental-upload.jks)
+#   KEYSTORE_PASSWORD  — the keystore password
+#   KEY_ALIAS          — upload
+#   KEY_PASSWORD       — same as the keystore password
+# Trigger manually from the Actions tab; the signed AAB appears as a build artifact.
+name: android-release
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: client
+      - name: Build web bundle against the live API + sync Capacitor
+        run: npm run build:mobile
+        working-directory: client
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_FILE_B64 }}" | base64 -d > client/android/fundamental-upload.jks
+      - name: Build signed AAB
+        run: ./gradlew bundleRelease
+        working-directory: client/android
+        env:
+          KEYSTORE_FILE: fundamental-upload.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Fundamental-release-aab
+          path: client/android/app/build/outputs/bundle/release/app-release.aab
