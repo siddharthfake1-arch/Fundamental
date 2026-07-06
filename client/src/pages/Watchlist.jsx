@@ -28,10 +28,11 @@ export default function Watchlist() {
   const loadShared = () => api.get('/api/startups/shared-with-me').then(d => setShared(asArray(d.shared))).catch(() => {});
   useEffect(() => { if (isInvestor) { load(); loadShared(); } }, [isInvestor]);
 
+  const moveBusy = useRef(false);
+
   if (!isInvestor) return <Navigate to="/dashboard" replace />;
   if (!list) return <Spinner />;
 
-  const moveBusy = useRef(false);
   const move = async (s, dir) => {
     const idx = STAGES.indexOf(s.status);
     const next = STAGES[idx + dir];

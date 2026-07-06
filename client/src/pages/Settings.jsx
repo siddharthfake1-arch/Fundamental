@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
-import { api, asArray, fetchBlob } from '../api';
+import { api, asArray, fetchBlob, session } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { FileUpload, Avatar, Spinner, CityInput, LinksEditor, TeamEditor, useConfirm, useToast } from '../components/ui';
-import { absUrl, nativeBridge } from '../config';
+import { absUrl, IS_NATIVE, nativeBridge } from '../config';
 
 const Field = ({ label, children }) => <label className="block"><span className="label">{label}</span>{children}</label>;
 
@@ -265,6 +265,7 @@ function CollateralRow({ c, onChanged }) {
 function InvestorSettings({ user, refresh }) {
   const inv = user.investor || {};
   const [f, setF] = useState({ fund_name: inv.fund_name || '', fund_size: inv.fund_size || '', check_size: inv.check_size || '', thesis: inv.thesis || '', stage_focus: asArray(inv.stage_focus), sector_focus: asArray(inv.sector_focus) });
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
   const toggle = (k, v) => setF(x => ({ ...x, [k]: x[k].includes(v) ? x[k].filter(i => i !== v) : [...x[k], v] }));
   return (
@@ -483,6 +484,7 @@ function BlockedMembers() {
 function PrivacyControls({ user }) {
   const toast = useToast();
   const confirm = useConfirm();
+  const { setUser } = useAuth();
   const exportData = async () => {
     // Native: authenticated download through the share sheet (bearer + absolute URL).
     if (nativeBridge.downloadFile) {
@@ -508,7 +510,15 @@ function PrivacyControls({ user }) {
     try {
       await api.del('/api/users/me');
       toast('Your account has been deleted.', 'success');
-      window.location.href = '/';
+      if (IS_NATIVE) {
+        // In-app teardown: clear the stored token + cached user, drop the session
+        // user (renders the logged-out routes), and route to the login screen.
+        session.onExpired?.();
+        setUser(null);
+        window.dispatchEvent(new CustomEvent('session-expired'));
+      } else {
+        window.location.href = '/';
+      }
     } catch (e) { toast(e.message, 'error'); }
   };
   return (
