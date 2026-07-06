@@ -1,5 +1,13 @@
 apply plugin: 'com.android.application'
 
+// Release signing: credentials live in android/key.properties (gitignored).
+// CI can instead provide KEYSTORE_* environment variables.
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+
 android {
     namespace "co.fundamental.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -16,10 +24,24 @@ android {
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            def storeFilePath = keystoreProperties['storeFile'] ?: System.getenv('KEYSTORE_FILE')
+            if (storeFilePath) {
+                storeFile rootProject.file(storeFilePath)
+                storePassword keystoreProperties['storePassword'] ?: System.getenv('KEYSTORE_PASSWORD')
+                keyAlias keystoreProperties['keyAlias'] ?: System.getenv('KEY_ALIAS')
+                keyPassword keystoreProperties['keyPassword'] ?: System.getenv('KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystoreProperties['storeFile'] || System.getenv('KEYSTORE_FILE')) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

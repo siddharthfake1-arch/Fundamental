@@ -17,3 +17,8 @@ client/ios/App/App/public/
 client/android/key.properties
 client/android/*.jks
 client/android/*.keystore
+client/android/keystore-password.txt
+*.apk
+*.aab
+client/store-assets/fundamental-upload.jks
+client/store-assets/KEYSTORE-CREDENTIALS.txt
