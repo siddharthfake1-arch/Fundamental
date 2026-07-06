@@ -11,8 +11,13 @@ export function AuthProvider({ children }) {
     try {
       const { user } = await api.get('/api/auth/me');
       setUser(user);
-    } catch {
-      setUser(null);
+      session.onUser?.(user); // native: cache for offline cold starts
+    } catch (e) {
+      // A NETWORK failure (no HTTP status) with a cached session must not log the
+      // user out — an offline app open shows the signed-in shell, not the landing
+      // page. A real 401/403 (e.status set) still signs out.
+      const cached = e.status === undefined && session.getCachedUser?.();
+      setUser(cached || null);
     } finally {
       setLoading(false);
     }

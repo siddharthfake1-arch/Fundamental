@@ -3,7 +3,7 @@ import { absUrl } from '../config';
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
-export default function VideoPlayer({ src, chapters = [], onFirstPlay, views }) {
+export default function VideoPlayer({ src, poster, chapters = [], onFirstPlay, views }) {
   const ref = useRef();
   const [speed, setSpeed] = useState(1);
   const [active, setActive] = useState(-1);
@@ -29,6 +29,7 @@ export default function VideoPlayer({ src, chapters = [], onFirstPlay, views }) 
         <video
           ref={ref}
           src={absUrl(src)}
+          poster={absUrl(poster) || undefined}
           controls
           playsInline
           preload="metadata"

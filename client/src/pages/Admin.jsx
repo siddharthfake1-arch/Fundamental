@@ -37,6 +37,17 @@ export default function Admin() {
   );
 }
 
+// Failed sub-tab loads must say so and offer a retry — never an infinite spinner.
+function LoadError({ msg, onRetry }) {
+  return (
+    <div className="card p-10 text-center fade-in">
+      <div className="h-display text-base">Couldn't load this tab</div>
+      <div className="text-sm text-mist-400 mt-1.5">{msg}</div>
+      <button className="btn-ghost btn-sm mt-4" onClick={onRetry}>Retry</button>
+    </div>
+  );
+}
+
 function Analytics() {
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
@@ -69,8 +80,10 @@ function Users() {
   const [q, setQ] = useState('');
   const toast = useToast();
   const confirm = useConfirm();
-  const load = () => api.get('/api/admin/users').then(d => setUsers(asArray(d.users))).catch(() => {});
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/admin/users').then(d => { setLoadErr(null); setUsers(asArray(d.users)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
+  if (loadErr && !users) return <LoadError msg={loadErr} onRetry={load} />;
   if (!users) return <Spinner />;
   const shown = users.filter(u => String((u.name || '') + ' ' + (u.email || '') + ' ' + (u.role || '') + ' ' + (u.city || '')).toLowerCase().includes(q.toLowerCase()));
   return (
@@ -130,8 +143,10 @@ function StartupsAdmin() {
   const [q, setQ] = useState('');
   const toast = useToast();
   const confirm = useConfirm();
-  const load = () => api.get('/api/admin/startups').then(d => setList(asArray(d.startups))).catch(() => {});
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/admin/startups').then(d => { setLoadErr(null); setList(asArray(d.startups)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
+  if (loadErr && !list) return <LoadError msg={loadErr} onRetry={load} />;
   if (!list) return <Spinner />;
   const shown = list.filter(s => String((s.name || '') + ' ' + (s.sector || '') + ' ' + (s.stage || '')).toLowerCase().includes(q.toLowerCase()));
   return (
@@ -181,8 +196,10 @@ function Content() {
   const [posts, setPosts] = useState(null);
   const toast = useToast();
   const confirm = useConfirm();
-  const load = () => api.get('/api/admin/posts').then(d => setPosts(asArray(d.posts))).catch(() => {});
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/admin/posts').then(d => { setLoadErr(null); setPosts(asArray(d.posts)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
+  if (loadErr && !posts) return <LoadError msg={loadErr} onRetry={load} />;
   if (!posts) return <Spinner />;
   return posts.length === 0 ? <Empty title="No content to review" /> : (
     <div className="space-y-3 max-w-3xl">
@@ -210,8 +227,10 @@ function Content() {
 function Reports() {
   const [reports, setReports] = useState(null);
   const toast = useToast();
-  const load = () => api.get('/api/admin/reports').then(d => setReports(asArray(d.reports))).catch(() => {});
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/admin/reports').then(d => { setLoadErr(null); setReports(asArray(d.reports)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
+  if (loadErr && !reports) return <LoadError msg={loadErr} onRetry={load} />;
   if (!reports) return <Spinner />;
   return reports.length === 0 ? <Empty title="No reports" sub="User reports of fraudulent or inappropriate activity appear here." /> : (
     <div className="space-y-3 max-w-3xl">
@@ -241,8 +260,10 @@ function CommunitiesAdmin() {
   const [list, setList] = useState(null);
   const toast = useToast();
   const confirm = useConfirm();
-  const load = () => api.get('/api/admin/communities').then(d => setList(asArray(d.communities))).catch(() => {});
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/admin/communities').then(d => { setLoadErr(null); setList(asArray(d.communities)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
+  if (loadErr && !list) return <LoadError msg={loadErr} onRetry={load} />;
   if (!list) return <Spinner />;
   return list.length === 0 ? <Empty title="No communities yet" sub="Member-submitted communities will appear here for review." /> : (
     <div className="card overflow-x-auto">

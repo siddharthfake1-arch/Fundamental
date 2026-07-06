@@ -40,7 +40,14 @@ export default function Startup() {
   const nav = useNavigate();
 
   const load = () => api.get(`/api/startups/${id}`).then(setD).catch(e => setErr(e.message));
-  useEffect(() => { setD(null); setIntro(null); load(); }, [id]);
+  // Reset err too — a stale error from a previous id would otherwise block the new
+  // page forever. Ignore responses that land after the id changed (fast navigation).
+  useEffect(() => {
+    let alive = true;
+    setD(null); setIntro(null); setErr(null);
+    api.get(`/api/startups/${id}`).then(x => alive && setD(x)).catch(e => alive && setErr(e.message));
+    return () => { alive = false; };
+  }, [id]);
 
   // Warm intro path — who in your network can introduce you to this founder
   useEffect(() => {
@@ -225,7 +232,7 @@ export default function Startup() {
       {/* ---- Section 1: 12-Minute Pitch ---- */}
       <Section id="pitch" title="Section 1 — The 12-minute pitch" action={<EditLink show={is_owner} label="Edit pitch video" />}>
         {s.video_url ? (
-          <VideoPlayer src={s.video_url} chapters={asArray(s.video_chapters)} views={s.video_views}
+          <VideoPlayer src={s.video_url} poster={s.cover} chapters={asArray(s.video_chapters)} views={s.video_views}
             onFirstPlay={() => api.post(`/api/startups/${s.id}/video-view`).catch(() => {})} />
         ) : (
           <div className="rounded-xl border border-gold-500/30 bg-gold-500/[0.06] p-6 text-center">
@@ -616,9 +623,9 @@ function UpdateRow({ u, isOwner, onChanged, onReact }) {
         <input className="input" maxLength={120} value={f.headline} onChange={(e) => setF(x => ({ ...x, headline: e.target.value }))} />
         <textarea className="input min-h-[80px]" maxLength={400} value={f.body} onChange={(e) => setF(x => ({ ...x, body: e.target.value }))} />
         <div className="grid grid-cols-3 gap-3">
-          <input type="number" className="input" placeholder="ARR (USD)" value={f.arr} onChange={(e) => setF(x => ({ ...x, arr: e.target.value }))} />
-          <input type="number" className="input" placeholder="MRR (USD)" value={f.mrr} onChange={(e) => setF(x => ({ ...x, mrr: e.target.value }))} />
-          <input type="number" className="input" placeholder="Growth %" value={f.growth} onChange={(e) => setF(x => ({ ...x, growth: e.target.value }))} />
+          <input type="number" inputMode="decimal" className="input" placeholder="ARR (USD)" value={f.arr} onChange={(e) => setF(x => ({ ...x, arr: e.target.value }))} />
+          <input type="number" inputMode="decimal" className="input" placeholder="MRR (USD)" value={f.mrr} onChange={(e) => setF(x => ({ ...x, mrr: e.target.value }))} />
+          <input type="number" inputMode="decimal" className="input" placeholder="Growth %" value={f.growth} onChange={(e) => setF(x => ({ ...x, growth: e.target.value }))} />
         </div>
         <div className="flex gap-2">
           <button className="btn-primary btn-sm" disabled={!f.headline.trim() || !f.body.trim()} onClick={async () => {
@@ -678,9 +685,9 @@ function UpdateComposer({ startupId, onPosted }) {
             <div className={`text-right text-[11px] mt-1 tabular-nums ${f.body.length > 360 ? 'text-amber-400' : 'text-mist-500'}`}>{f.body.length}/400</div>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <input type="number" className="input" placeholder="ARR (USD)" value={f.arr} onChange={set('arr')} />
-            <input type="number" className="input" placeholder="MRR (USD)" value={f.mrr} onChange={set('mrr')} />
-            <input type="number" className="input" placeholder="Growth %" value={f.growth} onChange={set('growth')} />
+            <input type="number" inputMode="decimal" className="input" placeholder="ARR (USD)" value={f.arr} onChange={set('arr')} />
+            <input type="number" inputMode="decimal" className="input" placeholder="MRR (USD)" value={f.mrr} onChange={set('mrr')} />
+            <input type="number" inputMode="decimal" className="input" placeholder="Growth %" value={f.growth} onChange={set('growth')} />
           </div>
           <div className="flex gap-2">
             <button className="btn-primary btn-sm" disabled={!f.headline.trim() || !f.body.trim()} onClick={async () => {

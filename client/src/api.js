@@ -6,7 +6,10 @@ import { apiUrl, IS_NATIVE } from './config';
 // token to device storage, onExpired clears it when the session dies.
 let authToken = null;
 export function setAuthToken(t) { authToken = t || null; }
-export const session = { onToken: null, onExpired: null };
+// onUser/getCachedUser let the native app keep a signed-in shell on offline cold
+// starts: the last confirmed session user is cached on device and reused when the
+// session probe fails with a NETWORK error (never for a real 401 rejection).
+export const session = { onToken: null, onExpired: null, onUser: null, getCachedUser: null };
 
 async function request(method, url, body) {
   // Native sends credentials:'omit' — the server intentionally never allows
@@ -32,7 +35,10 @@ async function request(method, url, body) {
     // session probe means the session is gone/expired — send the user to sign in.
     if (res.status === 401 && !url.endsWith('/api/auth/me') && typeof window !== 'undefined' && !location.pathname.startsWith('/login') && location.pathname !== '/') {
       session.onExpired?.();
-      location.assign('/login');
+      // Native: an in-app router transition (handled by NativeBridge) instead of a
+      // full WebView reload — no white flash, no splash re-run.
+      if (IS_NATIVE) window.dispatchEvent(new CustomEvent('session-expired'));
+      else location.assign('/login');
     }
     const err = new Error(data.error || `Request failed (${res.status})`);
     err.status = res.status;
@@ -99,7 +105,8 @@ export const fmtMoney = (n) => {
 export const timeAgo = (iso) => {
   if (!iso) return '';
   const s = (Date.now() - new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z'))) / 1000;
-  if (s < 60) return 'just now';
+  // Malformed dates (NaN) and clock skew (future timestamps) must never render garbage.
+  if (!Number.isFinite(s) || s < 60) return 'just now';
   if (s < 3600) return Math.floor(s / 60) + 'm ago';
   if (s < 86400) return Math.floor(s / 3600) + 'h ago';
   if (s < 86400 * 30) return Math.floor(s / 86400) + 'd ago';

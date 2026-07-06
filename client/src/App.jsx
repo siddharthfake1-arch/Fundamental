@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import Nav from './components/Nav';
 import ErrorBoundary from './components/ErrorBoundary';
+import OfflineBanner from './components/OfflineBanner';
+import { IS_NATIVE } from './config';
 import { Spinner } from './components/ui';
 import Auth from './pages/Auth';
 import Landing from './pages/Landing';
@@ -52,17 +54,25 @@ export default function App() {
   // Native: hold the splash screen until the session probe resolves (no white flash).
   useEffect(() => { if (!loading) window.__hideSplash?.(); }, [loading]);
 
+  // A new page must start at the top — without this, navigating from a scrolled
+  // feed into a detail page lands mid-page. Search-only changes keep the scroll.
+  useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner /></div>;
 
   if (!user) {
     return (
+      <>
+      <OfflineBanner />
       <Routes>
-        <Route path="/" element={<Landing />} />
+        {/* A native app should open on sign-in, not the marketing site. */}
+        <Route path="/" element={IS_NATIVE ? <Navigate to="/login" replace /> : <Landing />} />
         <Route path="/login" element={<Auth />} />
         <Route path="/s/:id" element={<PublicStartup />} />
         <Route path="/legal/:doc" element={<Legal />} />
         <Route path="*" element={<NotFound homeTo="/" />} />
       </Routes>
+      </>
     );
   }
 
@@ -72,6 +82,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen">
+      <OfflineBanner />
       {loc.pathname !== '/onboarding' && <Nav />}
       {/* Route-scoped boundary: a page render crash is caught here and auto-clears
           when the route changes (resetKey), so one bad page never traps the session.

@@ -3,7 +3,7 @@ import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { Sun, Moon, Search } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
-import { api } from '../api';
+import { api, asArray } from '../api';
 import { Avatar, Logo, VerifiedBadge } from './ui';
 
 // Global search: startups, people, and communities from one box. Debounced;
@@ -12,16 +12,20 @@ function GlobalSearch({ className = '' }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState(null);
   const [open, setOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [cursor, setCursor] = useState(-1); // keyboard highlight across the flat result list
   const boxRef = useRef();
   const nav = useNavigate();
 
   useEffect(() => {
-    if (q.trim().length < 2) { setResults(null); setOpen(false); return; }
+    if (q.trim().length < 2) { setResults(null); setOpen(false); setSearching(false); return; }
+    setSearching(true);
     const t = setTimeout(async () => {
       try {
         const d = await api.get(`/api/search?q=${encodeURIComponent(q.trim())}`);
-        setResults(d); setOpen(true);
+        setResults(d); setOpen(true); setCursor(-1);
       } catch { /* search is best-effort */ }
+      finally { setSearching(false); }
     }, 250);
     return () => clearTimeout(t);
   }, [q]);
@@ -35,7 +39,20 @@ function GlobalSearch({ className = '' }) {
   }, []);
 
   const go = (path) => { setOpen(false); setQ(''); nav(path); };
-  const none = results && !results.startups.length && !results.people.length && !results.communities.length;
+  // Defensive: a partial payload must never crash the whole nav.
+  const startups = asArray(results?.startups), people = asArray(results?.people), communities = asArray(results?.communities);
+  const flat = [
+    ...startups.map(s => `/startup/${s.id}`),
+    ...people.map(p => `/profile/${p.id}`),
+    ...communities.map(c => `/communities/${c.slug}`),
+  ];
+  const onKeyNav = (e) => {
+    if (!open || !flat.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => (c + 1) % flat.length); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(c => (c - 1 + flat.length) % flat.length); }
+    else if (e.key === 'Enter' && cursor >= 0) { e.preventDefault(); go(flat[cursor]); }
+  };
+  const none = results && !flat.length;
   const Section = ({ title, items, render }) => items.length > 0 && (
     <div className="py-1">
       <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-mist-500">{title}</div>
@@ -46,26 +63,27 @@ function GlobalSearch({ className = '' }) {
     <div ref={boxRef} className={`relative ${className}`}>
       <Search className="w-4 h-4 text-mist-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
       <input aria-label="Search Fundamental" className="input !py-2 !pl-9 !text-sm w-full" placeholder="Search…"
-        value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => results && setOpen(true)} />
+        value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => results && setOpen(true)} onKeyDown={onKeyNav} />
+      {searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-ink-600 border-t-gold-400 animate-spin" aria-hidden />}
       {open && results && (
         <div className="absolute left-0 right-0 mt-2 card p-1 max-h-96 overflow-y-auto z-50 fade-in min-w-[280px]">
           {none && <div className="px-3 py-3 text-sm text-mist-500">No matches for “{q.trim()}”.</div>}
-          <Section title="Startups" items={results.startups} render={(s) => (
-            <button key={'s' + s.id} className="w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800 flex items-center gap-2.5" onClick={() => go(`/startup/${s.id}`)}>
+          <Section title="Startups" items={startups} render={(s, i) => (
+            <button key={'s' + s.id} className={`w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800 flex items-center gap-2.5 ${cursor === i ? 'bg-ink-800' : ''}`} onClick={() => go(`/startup/${s.id}`)}>
               <Avatar src={s.logo} name={s.name} size={7} square />
               <span className="min-w-0"><span className="block text-sm font-semibold text-mist-100 truncate">{s.name}</span>
                 <span className="block text-xs text-mist-400 truncate">{s.sector} · {s.stage}</span></span>
             </button>
           )} />
-          <Section title="People" items={results.people} render={(p) => (
-            <button key={'p' + p.id} className="w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800 flex items-center gap-2.5" onClick={() => go(`/profile/${p.id}`)}>
+          <Section title="People" items={people} render={(p, i) => (
+            <button key={'p' + p.id} className={`w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800 flex items-center gap-2.5 ${cursor === startups.length + i ? 'bg-ink-800' : ''}`} onClick={() => go(`/profile/${p.id}`)}>
               <Avatar src={p.photo} name={p.name} size={7} />
               <span className="min-w-0"><span className="block text-sm font-semibold text-mist-100 truncate">{p.name}</span>
                 <span className="block text-xs text-mist-400 capitalize truncate">{p.role}{p.headline ? ` · ${p.headline}` : ''}</span></span>
             </button>
           )} />
-          <Section title="Communities" items={results.communities} render={(c) => (
-            <button key={'c' + c.id} className="w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800" onClick={() => go(`/communities/${c.slug}`)}>
+          <Section title="Communities" items={communities} render={(c, i) => (
+            <button key={'c' + c.id} className={`w-full text-left px-3 py-2 rounded-lg hover:bg-ink-800 ${cursor === startups.length + people.length + i ? 'bg-ink-800' : ''}`} onClick={() => go(`/communities/${c.slug}`)}>
               <span className="block text-sm font-semibold text-mist-100 truncate">{c.name}</span>
               <span className="block text-xs text-mist-400 capitalize truncate">{c.kind} community</span>
             </button>
@@ -93,23 +111,35 @@ export default function Nav() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef();
+  const headerRef = useRef();
+  // Refs mirror the open states so stable event listeners can read them.
+  const menuOpenRef = useRef(false);
+  const mobileOpenRef = useRef(false);
+  menuOpenRef.current = menuOpen;
+  mobileOpenRef.current = mobileOpen;
   const nav = useNavigate();
 
   useEffect(() => {
     let alive = true;
     const poll = async () => {
+      if (document.hidden) return; // backgrounded app: don't burn battery/API budget
       try { const c = await api.get('/api/badge-counts'); if (alive) setCounts(c); } catch {}
     };
     poll();
     const t = setInterval(poll, 15000);
-    // Pages fire this after mark-read / thread-open so the badge updates instantly
-    // instead of waiting out the poll interval.
+    // Pages fire badge-refresh after mark-read / thread-open; the native shell fires
+    // app-resumed when the app returns to the foreground — both mean "update now".
     window.addEventListener('badge-refresh', poll);
-    return () => { alive = false; clearInterval(t); window.removeEventListener('badge-refresh', poll); };
+    window.addEventListener('app-resumed', poll);
+    return () => { alive = false; clearInterval(t); window.removeEventListener('badge-refresh', poll); window.removeEventListener('app-resumed', poll); };
   }, []);
 
   useEffect(() => {
-    const fn = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); };
+    const fn = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+      // Tapping the page body (outside the header) closes the mobile panel too.
+      if (headerRef.current && !headerRef.current.contains(e.target)) setMobileOpen(false);
+    };
     // F-027: Escape closes the account and mobile menus.
     const onKey = (e) => { if (e.key === 'Escape') { setMenuOpen(false); setMobileOpen(false); } };
     document.addEventListener('mousedown', fn);
@@ -117,12 +147,21 @@ export default function Nav() {
     return () => { document.removeEventListener('mousedown', fn); document.removeEventListener('keydown', onKey); };
   }, []);
 
+  // Native: the Android back button closes an open menu before navigating away.
+  useEffect(() => {
+    const onBack = (e) => {
+      if (menuOpenRef.current || mobileOpenRef.current) { e.preventDefault(); setMenuOpen(false); setMobileOpen(false); }
+    };
+    window.addEventListener('app-back', onBack);
+    return () => window.removeEventListener('app-back', onBack);
+  }, []);
+
   const links = [...LINKS];
   if (user.role === 'investor') links.splice(6, 0, { to: '/watchlist', label: 'Pipeline' });
   if (user.role === 'admin') links.push({ to: '/admin', label: 'Admin' });
 
   return (
-    <header className="sticky top-0 z-40 bg-ink-950/85 backdrop-blur-lg border-b border-ink-700/60 safe-top">
+    <header ref={headerRef} className="sticky top-0 z-40 bg-ink-950/85 backdrop-blur-lg border-b border-ink-700/60 safe-top">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-3">
         <Link to="/discover" className="shrink-0"><Logo className="h-[58px]" /></Link>
 

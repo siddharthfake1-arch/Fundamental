@@ -226,7 +226,7 @@ function FounderFlow({ user, refresh }) {
             <Field label={<>Stage<Optional /></>}>
               <select className="input" value={s.stage} onChange={set('stage')}><option value="">Select…</option>{STAGES.map(x => <option key={x}>{x}</option>)}</select>
             </Field>
-            <Field label={<>Founded year<Optional /></>}><input type="number" className="input" value={s.founded_year} onChange={set('founded_year')} placeholder={String(new Date().getFullYear())} /></Field>
+            <Field label={<>Founded year<Optional /></>}><input type="number" inputMode="decimal" className="input" value={s.founded_year} onChange={set('founded_year')} placeholder={String(new Date().getFullYear())} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Field label={<>City<Optional /></>}><CityInput value={s.city} onChange={(city) => setS(x => ({ ...x, city }))} placeholder="Search city — e.g. Bengaluru, India" /></Field>
@@ -270,14 +270,14 @@ function FounderFlow({ user, refresh }) {
       valid: true,
       body: (
         <div className="grid grid-cols-2 gap-4">
-          <Field label="ARR (USD)"><input type="number" className="input" value={s.arr} onChange={set('arr')} placeholder="0" /></Field>
-          <Field label="MRR (USD)"><input type="number" className="input" value={s.mrr} onChange={set('mrr')} placeholder="0" /></Field>
-          <Field label="Growth % (MoM)"><input type="number" className="input" value={s.growth} onChange={set('growth')} placeholder="0" /></Field>
-          <Field label="Gross margin %"><input type="number" className="input" value={s.gross_margin} onChange={set('gross_margin')} placeholder="0" /></Field>
-          <Field label="Monthly burn (USD)"><input type="number" className="input" value={s.burn} onChange={set('burn')} placeholder="0" /></Field>
-          <Field label="Runway (months)"><input type="number" className="input" value={s.runway} onChange={set('runway')} placeholder="0" /></Field>
-          <Field label="CAC (USD)"><input type="number" className="input" value={s.cac} onChange={set('cac')} placeholder="0" /></Field>
-          <Field label="LTV (USD)"><input type="number" className="input" value={s.ltv} onChange={set('ltv')} placeholder="0" /></Field>
+          <Field label="ARR (USD)"><input type="number" inputMode="decimal" className="input" value={s.arr} onChange={set('arr')} placeholder="0" /></Field>
+          <Field label="MRR (USD)"><input type="number" inputMode="decimal" className="input" value={s.mrr} onChange={set('mrr')} placeholder="0" /></Field>
+          <Field label="Growth % (MoM)"><input type="number" inputMode="decimal" className="input" value={s.growth} onChange={set('growth')} placeholder="0" /></Field>
+          <Field label="Gross margin %"><input type="number" inputMode="decimal" className="input" value={s.gross_margin} onChange={set('gross_margin')} placeholder="0" /></Field>
+          <Field label="Monthly burn (USD)"><input type="number" inputMode="decimal" className="input" value={s.burn} onChange={set('burn')} placeholder="0" /></Field>
+          <Field label="Runway (months)"><input type="number" inputMode="decimal" className="input" value={s.runway} onChange={set('runway')} placeholder="0" /></Field>
+          <Field label="CAC (USD)"><input type="number" inputMode="decimal" className="input" value={s.cac} onChange={set('cac')} placeholder="0" /></Field>
+          <Field label="LTV (USD)"><input type="number" inputMode="decimal" className="input" value={s.ltv} onChange={set('ltv')} placeholder="0" /></Field>
         </div>
       ),
     },

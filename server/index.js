@@ -71,6 +71,32 @@ app.get('/api/config', (req, res) => res.json({
   google_enabled: false,
 }));
 
+// ---- Mobile deep links (universal/app links) ----
+// Served only when configured: ANDROID_CERT_SHA256 is the app-signing certificate
+// fingerprint from Play Console (App integrity page, colon-separated hex), and
+// APPLE_TEAM_ID is the Apple Developer Team ID. With these set, tapping a
+// https://fundamental.co.in/... link opens the installed app instead of the browser.
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  if (!process.env.ANDROID_CERT_SHA256) return res.status(404).json({ error: 'Not configured' });
+  res.json([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: 'co.fundamental.app',
+      sha256_cert_fingerprints: process.env.ANDROID_CERT_SHA256.split(',').map(s => s.trim()),
+    },
+  }]);
+});
+app.get('/.well-known/apple-app-site-association', (req, res) => {
+  if (!process.env.APPLE_TEAM_ID) return res.status(404).json({ error: 'Not configured' });
+  res.type('application/json').json({
+    applinks: {
+      apps: [],
+      details: [{ appID: `${process.env.APPLE_TEAM_ID}.co.fundamental.app`, paths: ['*'] }],
+    },
+  });
+});
+
 // Client-side render-error capture (from the browser ErrorBoundary). Public on
 // purpose: crashes can happen on public pages or with an expired session. Lightly
 // rate-limited, payload clamped, user attached when a valid session cookie exists.

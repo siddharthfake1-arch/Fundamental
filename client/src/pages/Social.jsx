@@ -176,6 +176,7 @@ function Post({ p, onChange }) {
     setLikeState(s => ({ liked: !s.liked, likes: s.likes + (s.liked ? -1 : 1), busy: true }));
     try {
       const r = await api.post(`/api/social/${p.id}/like`);
+      if (r.liked) nativeBridge.haptic?.('light');
       setLikeState({ liked: r.liked, likes: r.likes, busy: false });
     } catch (e) {
       setLikeState({ liked: !!p.liked, likes: p.likes, busy: false }); // roll back
@@ -262,9 +263,9 @@ function Post({ p, onChange }) {
 
       {p.media && (
         /\.(mp4|webm|mov)/i.test(p.media)
-          ? <video src={absUrl(p.media)} controls className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
+          ? <video src={absUrl(p.media)} controls playsInline preload="metadata" className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
           : /\.(png|jpe?g|gif|svg|webp)/i.test(p.media)
-            ? <img src={absUrl(p.media)} alt="" className="mt-3 rounded-xl w-full border border-ink-600/60" />
+            ? <img src={absUrl(p.media)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="mt-3 rounded-xl w-full border border-ink-600/60" />
             : <a href={absUrl(p.media)} target="_blank" rel="noreferrer" className="block mt-3 text-sm text-accent-400 underline">📎 View attachment</a>
       )}
 

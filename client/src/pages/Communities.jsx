@@ -24,9 +24,12 @@ function CommunityIndex() {
   useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
 
+  const [joinBusy, setJoinBusy] = useState(null);
   const join = async (slug) => {
-    try { await api.post(`/api/communities/${slug}/join`); load(); }
-    catch (e) { toast(e.message, 'error'); }
+    if (joinBusy) return; // rapid double-tap must not double-fire
+    setJoinBusy(slug);
+    try { await api.post(`/api/communities/${slug}/join`); await load(); }
+    catch (e) { toast(e.message, 'error'); } finally { setJoinBusy(null); }
   };
 
   const filtered = list.filter(c => String((c.name || '') + ' ' + (c.description || '')).toLowerCase().includes(q.toLowerCase()));
@@ -187,6 +190,7 @@ function CommunityDetail({ slug }) {
   const toast = useToast();
   const nav = useNavigate();
   const [showMembers, setShowMembers] = useState(false);
+  const [memberBusy, setMemberBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [ef, setEf] = useState({ name: '', description: '', kind: 'topic' });
   const load = () => api.get(`/api/communities/${slug}`).then(setD).catch(e => toast(e.message, 'error'));
@@ -266,8 +270,13 @@ function CommunityDetail({ slug }) {
             <div className="flex items-center gap-2">
               {c.is_owner && <button className="btn-ghost btn-sm" onClick={startEdit}>Edit community</button>}
               {!isPending && (
-                <button className={c.joined ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'}
-                  onClick={async () => { try { await api.post(`/api/communities/${slug}/join`); load(); } catch (e) { toast(e.message, 'error'); } }}>
+                <button className={c.joined ? 'btn-ghost btn-sm' : 'btn-primary btn-sm'} disabled={memberBusy}
+                  onClick={async () => {
+                    if (memberBusy) return;
+                    setMemberBusy(true);
+                    try { await api.post(`/api/communities/${slug}/join`); await load(); }
+                    catch (e) { toast(e.message, 'error'); } finally { setMemberBusy(false); }
+                  }}>
                   {c.joined ? 'Leave' : 'Join community'}
                 </button>
               )}
