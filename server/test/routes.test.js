@@ -583,6 +583,81 @@ async function run() {
     }
   });
 
+  // ---- Mobile auth: bearer tokens + app-origin CORS ----
+  // The native apps (Capacitor WebView at capacitor://localhost / https://localhost)
+  // authenticate with Authorization: Bearer and credentials:'omit'. These tests pin
+  // the whole contract: token issuance, header auth, CORS headers, preflight, and
+  // that the web cookie CSRF posture is unchanged.
+
+  let bearerToken;
+  await test('login response includes a bearer token alongside the cookie', async () => {
+    const c = makeClient();
+    const r = await c('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    assert.strictEqual(r.status, 200);
+    const d = await r.json();
+    assert.ok(typeof d.token === 'string' && d.token.length > 20, 'token present in body');
+    bearerToken = d.token;
+  });
+
+  await test('bearer token authenticates /me without any cookie', async () => {
+    const r = await fetch(BASE + '/api/auth/me', { headers: { Authorization: `Bearer ${bearerToken}` } });
+    assert.strictEqual(r.status, 200, 'bearer-only auth works, got ' + r.status);
+    const d = await r.json();
+    assert.strictEqual(d.user.email, 'investor1@demo.app');
+  });
+
+  await test('garbage bearer token is rejected with 401', async () => {
+    const r = await fetch(BASE + '/api/auth/me', { headers: { Authorization: 'Bearer nonsense' } });
+    assert.strictEqual(r.status, 401);
+  });
+
+  await test('bearer write from the app origin passes CSRF and gets CORS headers', async () => {
+    const r = await fetch(BASE + '/api/notifications/read', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${bearerToken}`, Origin: 'capacitor://localhost', 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    assert.strictEqual(r.status, 200, 'app-origin bearer write allowed, got ' + r.status);
+    assert.strictEqual(r.headers.get('access-control-allow-origin'), 'capacitor://localhost');
+  });
+
+  await test('CORS preflight from the app origin gets 204 without Allow-Credentials', async () => {
+    const r = await fetch(BASE + '/api/auth/login', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'capacitor://localhost',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization,content-type',
+      },
+    });
+    assert.strictEqual(r.status, 204, 'preflight answered, got ' + r.status);
+    assert.strictEqual(r.headers.get('access-control-allow-origin'), 'capacitor://localhost');
+    assert.ok(/authorization/i.test(r.headers.get('access-control-allow-headers') || ''), 'Authorization allowed');
+    assert.strictEqual(r.headers.get('access-control-allow-credentials'), null, 'credentials must NOT be allowed');
+  });
+
+  await test('cookie write from a foreign web origin is still blocked (CSRF regression)', async () => {
+    const c = makeClient();
+    await c('POST', '/api/auth/login', { email: 'investor1@demo.app', password: 'demo1234' });
+    const r = await c('POST', '/api/notifications/read', {}, {});
+    assert.strictEqual(r.status, 200, 'same-origin write works');
+    // Same session, hostile origin, no bearer → 403.
+    const hostile = await fetch(BASE + '/api/notifications/read', {
+      method: 'POST',
+      headers: { Origin: 'https://evil.example', 'Content-Type': 'application/json', Cookie: `token=${bearerToken}` },
+      body: '{}',
+    });
+    assert.strictEqual(hostile.status, 403, 'foreign-origin cookie write blocked, got ' + hostile.status);
+  });
+
+  await test('bearer header takes precedence over a valid cookie', async () => {
+    // Valid cookie + garbage bearer must fail: the explicit header IS the identity.
+    const r = await fetch(BASE + '/api/auth/me', {
+      headers: { Cookie: `token=${bearerToken}`, Authorization: 'Bearer nonsense' },
+    });
+    assert.strictEqual(r.status, 401, 'garbage bearer must not fall back to cookie');
+  });
+
   console.log(results.join('\n'));
   console.log(`\n${passed} route tests passed.`);
 }

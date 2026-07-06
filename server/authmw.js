@@ -16,8 +16,18 @@ function sign(user) {
   return jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '30d' });
 }
 
+// Sessions arrive as an httpOnly cookie (web) or an Authorization: Bearer header
+// (native mobile apps, which store the token in secure device storage). Bearer takes
+// precedence: a client that explicitly presents Authorization is a programmatic
+// client, and an ambient cookie must never override its stated identity.
+function extractToken(req) {
+  const h = req.headers.authorization || '';
+  if (h.startsWith('Bearer ')) return h.slice(7).trim();
+  return req.cookies.token;
+}
+
 function auth(req, res, next) {
-  const token = req.cookies.token;
+  const token = extractToken(req);
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -84,4 +94,4 @@ function validateProductionConfig() {
   }
 }
 
-module.exports = { sign, auth, requireRole, requireApprovedInvestor, validateProductionConfig, JWT_SECRET };
+module.exports = { sign, auth, extractToken, requireRole, requireApprovedInvestor, validateProductionConfig, JWT_SECRET };

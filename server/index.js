@@ -14,8 +14,8 @@ const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
-const { auth, validateProductionConfig, JWT_SECRET } = require('./authmw');
-const { rateLimit, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType } = require('./security');
+const { auth, extractToken, validateProductionConfig, JWT_SECRET } = require('./authmw');
+const { rateLimit, appCors, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType } = require('./security');
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
@@ -53,6 +53,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-Id', req.id);
   next();
 });
+app.use('/api', appCors); // native app WebView origins: CORS headers + preflight (before CSRF/rate limits)
 app.use('/api', csrfOriginCheck); // reject state-changing requests from foreign origins
 app.use('/api', rateLimit({ name: 'api', windowMs: 5 * 60_000, max: 1500 })); // generous global ceiling
 
@@ -79,10 +80,10 @@ app.post('/api/client-errors', clientErrorLimiter, (req, res) => {
   try {
     const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
     const b = req.body || {};
-    // Attach the user id only if a valid session cookie is present (best-effort).
+    // Attach the user id only if a valid session (cookie or bearer) is present (best-effort).
     let userId = null;
     try {
-      const t = req.cookies && req.cookies.token;
+      const t = extractToken(req);
       if (t) userId = require('jsonwebtoken').verify(t, JWT_SECRET).id || null;
     } catch { /* anonymous or expired — fine */ }
     require('./db').db.prepare(

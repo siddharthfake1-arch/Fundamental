@@ -122,6 +122,30 @@ function sanitizeLinks(input, max = 10) {
   return { links: out };
 }
 
+// ---- Mobile app CORS ----
+// The native iOS/Android apps are a bundled Capacitor WebView whose document origin is
+// capacitor://localhost (iOS) or https://localhost (Android). They authenticate with a
+// Bearer token and send credentials: 'omit', so we deliberately NEVER set
+// Access-Control-Allow-Credentials — the session cookie cannot ride cross-origin, which
+// removes the entire CSRF surface for these origins by construction.
+const APP_ORIGINS = new Set(['capacitor://localhost', 'https://localhost']);
+// Test/staging hook only (e.g. a local browser smoke test) — never set in production.
+if (process.env.CORS_EXTRA_ORIGIN) APP_ORIGINS.add(process.env.CORS_EXTRA_ORIGIN);
+
+function appCors(req, res, next) {
+  const origin = req.headers.origin;
+  if (origin && APP_ORIGINS.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id, Retry-After');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    if (req.method === 'OPTIONS') return res.status(204).end();
+  }
+  next();
+}
+
 // ---- CSRF defense-in-depth ----
 // Cookies are SameSite=Lax (blocks cross-site POSTs in modern browsers); this adds an
 // explicit Origin check for state-changing API requests as a second layer.
@@ -129,6 +153,12 @@ function csrfOriginCheck(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const origin = req.headers.origin;
   if (!origin) return next(); // non-browser clients (curl, tests) and same-origin older browsers
+  // The app WebView origins are safe: they never carry the session cookie (see appCors).
+  if (APP_ORIGINS.has(origin)) return next();
+  // A request that presents Authorization is CSRF-immune: a hostile page cannot attach
+  // that header without a preflight only APP_ORIGINS pass, and when it is present the
+  // auth middleware ignores the cookie entirely — a forged bearer just gets 401.
+  if ((req.headers.authorization || '').startsWith('Bearer ')) return next();
   try {
     if (new URL(origin).host === req.headers.host) return next();
   } catch { /* malformed origin */ }
@@ -184,4 +214,4 @@ function sniffFileType(buf, name = '') {
   return null;
 }
 
-module.exports = { rateLimit, safeUrl, validateUrlFields, validateNumericFields, clampStrings, sanitizeLinks, validatePassword, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType };
+module.exports = { rateLimit, safeUrl, validateUrlFields, validateNumericFields, clampStrings, sanitizeLinks, validatePassword, appCors, csrfOriginCheck, securityHeaders, randomFileName, sniffFileType };

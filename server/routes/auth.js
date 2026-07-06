@@ -99,7 +99,10 @@ router.post('/signup', authLimiter, async (req, res) => {
     .run(role, String(name).trim(), email.toLowerCase(), hash, String(city || '').slice(0, 120), phone ? normalizePhone(phone) || '' : '');
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(info.lastInsertRowid);
   if (role === 'investor') db.prepare('INSERT INTO investor_profiles (user_id) VALUES (?)').run(user.id);
-  res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
+  // The token also travels in the body for native app clients that cannot use
+  // cross-origin cookies; the page served from our own origin simply ignores it.
+  const token = sign(user);
+  res.cookie('token', token, COOKIE).json({ user: sessionPayload(user), token });
 });
 
 router.post('/login', authLimiter, loginIdLimiter, async (req, res) => {
@@ -111,7 +114,8 @@ router.post('/login', authLimiter, loginIdLimiter, async (req, res) => {
   if (user.status === 'suspended' || user.flagged) {
     return res.status(403).json({ error: 'Your account has been suspended. Contact support@fundamental.app if you believe this is a mistake.' });
   }
-  res.cookie('token', sign(user), COOKIE).json({ user: sessionPayload(user) });
+  const token = sign(user);
+  res.cookie('token', token, COOKIE).json({ user: sessionPayload(user), token });
 });
 
 // ---- Forgot password ----
@@ -206,7 +210,8 @@ router.post('/change-password', auth, authLimiter, async (req, res) => {
   const hash = await bcrypt.hash(next, BCRYPT_ROUNDS);
   db.prepare("UPDATE users SET password_hash=?, pwd_changed_at=datetime('now') WHERE id=?").run(hash, req.user.id);
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id);
-  res.cookie('token', sign(user), COOKIE).json({ ok: true });
+  const token = sign(user);
+  res.cookie('token', token, COOKIE).json({ ok: true, token });
 });
 
 module.exports = router;
