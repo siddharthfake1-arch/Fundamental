@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { Users, MessageSquare, ArrowLeft, Plus } from 'lucide-react';
 import { api, asArray, asObject, timeAgo } from '../api';
 import { Avatar, Empty, Modal, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
+import PullToRefresh from '../components/PullToRefresh';
 
 const KIND_LABEL = { topic: 'Topics', city: 'Cities', role: 'Roles' };
 const KIND_OPTIONS = [['topic', 'Topic', 'A theme, sector, or interest — e.g. Fintech, AI, Fundraising'], ['city', 'City', 'A place — e.g. Bengaluru, London, San Francisco'], ['role', 'Role', 'A function — e.g. Founders, Angels, Operators']];
@@ -20,11 +21,11 @@ function CommunityIndex() {
   const [creating, setCreating] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
+  const [joinBusy, setJoinBusy] = useState(null);
   const load = () => api.get('/api/communities').then(d => { setList(asArray(d.communities)); setPending(asArray(d.pending)); }).catch(e => toast(e.message, 'error'));
   useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
 
-  const [joinBusy, setJoinBusy] = useState(null);
   const join = async (slug) => {
     if (joinBusy) return; // rapid double-tap must not double-fire
     setJoinBusy(slug);
@@ -36,6 +37,7 @@ function CommunityIndex() {
   const kinds = ['topic', 'city', 'role'].filter(kind => filtered.some(c => c.kind === kind));
 
   return (
+    <PullToRefresh onRefresh={load}>
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
@@ -101,6 +103,7 @@ function CommunityIndex() {
         </div>
       ))}
     </div>
+    </PullToRefresh>
   );
 }
 

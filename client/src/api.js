@@ -60,6 +60,33 @@ export const api = {
   uploadPrivate: (file, onProgress) => uploadTo('/api/upload/private', file, onProgress),
 };
 
+// Authenticated binary fetch (data export, file downloads on web). Same auth rules
+// as request(): bearer on native, cookies on web, absolute URL via apiUrl.
+export async function fetchBlob(url) {
+  const opts = { credentials: IS_NATIVE ? 'omit' : 'include', headers: {} };
+  if (authToken) opts.headers.Authorization = 'Bearer ' + authToken;
+  const res = await fetch(apiUrl(url), opts);
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  return res.blob();
+}
+
+// Best-effort crash reporting from the ErrorBoundary. Must never throw and must
+// work from the native WebView too (absolute URL + bearer, keepalive for web
+// navigations). Failures are swallowed — logging must not compound a crash.
+export function reportClientError(payload) {
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authToken) headers.Authorization = 'Bearer ' + authToken;
+    fetch(apiUrl('/api/client-errors'), {
+      method: 'POST',
+      credentials: IS_NATIVE ? 'omit' : 'include',
+      keepalive: true,
+      headers,
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  } catch { /* ignore */ }
+}
+
 // Defensive normalizers for API payloads. A missing/null field, or an unexpected
 // shape (e.g. an object where an array was expected), must never crash a render —
 // these coerce to a safe empty value so `.map`/`.length`/`.filter` are always valid.

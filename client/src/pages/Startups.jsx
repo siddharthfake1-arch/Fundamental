@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, asArray, fmtMoney } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, Spinner, VerifiedBadge } from '../components/ui';
+import PullToRefresh from '../components/PullToRefresh';
 
 // Index of all listed startups — a denser, institutional view next to Discover's tiles.
 export default function Startups() {
@@ -12,15 +13,17 @@ export default function Startups() {
   const [q, setQ] = useState('');
   const nav = useNavigate();
 
-  useEffect(() => {
-    api.get('/api/startups?sort=upvoted').then(setData).catch(() => setData({ startups: [] }));
-    if (user.role === 'founder') api.get('/api/startups/mine').then(d => setMine(d.startup)).catch(() => {});
-  }, []);
+  const load = () => Promise.all([
+    api.get('/api/startups?sort=upvoted').then(setData).catch(() => setData({ startups: [] })),
+    user.role === 'founder' ? api.get('/api/startups/mine').then(d => setMine(d.startup)).catch(() => {}) : null,
+  ]);
+  useEffect(() => { load(); }, []);
 
   if (!data) return <Spinner />;
   const list = asArray(data.startups).filter(s => String((s.name || '') + (s.sector || '') + (s.city || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (
+    <PullToRefresh onRefresh={load}>
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
@@ -76,5 +79,6 @@ export default function Startups() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }

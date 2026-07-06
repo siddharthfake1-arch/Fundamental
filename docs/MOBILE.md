@@ -50,7 +50,11 @@ Play release; iOS build numbers auto-increment in the Codemagic workflow.
 
 ## Release pipelines
 
-- **Android locally**: works in any Linux environment with JDK 21 + Android SDK 35
+- **Requirements for local Android builds**: JDK 21 (`JAVA_HOME` set) + Android SDK 35
+  (`ANDROID_HOME` set). On Windows, `npm run build:mobile` works out of the box
+  (cross-env); use `gradlew.bat` inside `client/android`. Without a local JDK,
+  build through CI instead.
+- **Android locally**: any machine meeting the above
   (`gradle bundleRelease`).
 - **Android CI**: `.github/workflows/android-release.yml` (GitHub Actions, manual
   trigger, needs the four `KEYSTORE_*` secrets) — or the `android-release` workflow
@@ -116,6 +120,17 @@ Play release; iOS build numbers auto-increment in the Codemagic workflow.
 
 **Category**: Business (or Finance) · **Content rating**: 17+/18+ (unmoderated
 user content + financial topics answered honestly in the questionnaire)
+
+## Versioning & QA
+
+- Current app version: **1.2 (versionCode 3)**. Bump BOTH values in
+  `client/android/app/build.gradle` before every Play upload — versionCode must
+  strictly increase. iOS build numbers auto-increment in Codemagic.
+- Token storage uses Capacitor Preferences — fine for beta (sandboxed per-app,
+  `allowBackup=false`); consider a Keychain/Keystore-backed secure-storage plugin
+  before large-scale production.
+- Before ANY store submission or mobile→production merge, complete
+  `docs/MOBILE_QA_CHECKLIST.md` on a real device.
 
 ## Known limitations (v1)
 

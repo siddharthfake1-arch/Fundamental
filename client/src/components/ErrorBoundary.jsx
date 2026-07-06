@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { reportClientError } from '../api';
 
 // Error boundary with two recovery paths:
 //  1. `resetKey` — when the route changes, the parent passes a new key and the
@@ -22,22 +23,14 @@ export default class ErrorBoundary extends Component {
       path,
     });
     // Best-effort server-side capture so production crashes are visible without a
-    // user screenshot. Fire-and-forget: keepalive survives the navigation/reload,
-    // and any failure here is swallowed so logging never compounds the crash.
-    try {
-      fetch('/api/client-errors', {
-        method: 'POST',
-        credentials: 'include',
-        keepalive: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: error?.message || String(error || ''),
-          stack: error?.stack || '',
-          componentStack: info?.componentStack || '',
-          path,
-        }),
-      }).catch(() => {});
-    } catch { /* ignore */ }
+    // user screenshot — routed through the shared helper so it reaches the real
+    // backend from the native app too (absolute URL + bearer auth).
+    reportClientError({
+      message: error?.message || String(error || ''),
+      stack: error?.stack || '',
+      componentStack: info?.componentStack || '',
+      path,
+    });
   }
 
   componentDidUpdate(prevProps) {

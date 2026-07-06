@@ -64,14 +64,18 @@ export default function App() {
     return (
       <>
       <OfflineBanner />
-      <Routes>
-        {/* A native app should open on sign-in, not the marketing site. */}
-        <Route path="/" element={IS_NATIVE ? <Navigate to="/login" replace /> : <Landing />} />
-        <Route path="/login" element={<Auth />} />
-        <Route path="/s/:id" element={<PublicStartup />} />
-        <Route path="/legal/:doc" element={<Legal />} />
-        <Route path="*" element={<NotFound homeTo="/" />} />
-      </Routes>
+      {/* Route-scoped boundary here too: a crash on login/signup/legal must clear
+          on navigation, never trap the logged-out session until a full reload. */}
+      <ErrorBoundary resetKey={loc.pathname + loc.search}>
+        <Routes>
+          {/* A native app should open on sign-in, not the marketing site. */}
+          <Route path="/" element={IS_NATIVE ? <Navigate to="/login" replace /> : <Landing />} />
+          <Route path="/login" element={<Auth />} />
+          <Route path="/s/:id" element={<PublicStartup />} />
+          <Route path="/legal/:doc" element={<Legal />} />
+          <Route path="*" element={<NotFound homeTo="/" />} />
+        </Routes>
+      </ErrorBoundary>
       </>
     );
   }

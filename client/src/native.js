@@ -9,7 +9,7 @@
 //   - authenticated file downloads land in the OS share sheet
 //   - haptic feedback hook for taps that deserve it
 import { setAuthToken, session } from './api';
-import { apiUrl, nativeBridge } from './config';
+import { API_BASE, apiUrl, nativeBridge } from './config';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'cached_user';
@@ -80,6 +80,8 @@ export async function initNative() {
   // the app (LinkedIn profiles, legal docs, user links, /uploads attachments) without
   // touching each page. Internal SPA links are untouched.
   nativeBridge.openExternal = (url) => Browser.open({ url }).catch(() => {});
+  let siteHost = '';
+  try { siteHost = new URL(API_BASE).host; } catch { /* no base configured */ }
   document.addEventListener('click', (e) => {
     const a = e.target && e.target.closest && e.target.closest('a[href]');
     if (!a || e.defaultPrevented) return;
@@ -87,10 +89,19 @@ export async function initNative() {
     if (!/^https?:/i.test(a.href)) return; // mailto:, tel:, etc. → let the OS handle them
     const external = /^https?:\/\//i.test(href) || a.target === '_blank';
     const sameApp = a.href.startsWith(window.location.origin) && !/^https?:\/\//i.test(href);
-    if (external && !sameApp) {
-      e.preventDefault();
-      Browser.open({ url: a.href }).catch(() => {});
-    }
+    if (!external || sameApp) return;
+    e.preventDefault();
+    // Absolute links to our OWN site (share links, notification links) are app
+    // content — route them inside the SPA instead of bouncing to the browser.
+    // /uploads and /api paths stay external (raw files, not routable pages).
+    try {
+      const u = new URL(a.href);
+      if (siteHost && u.host === siteHost && !/^\/(uploads|api)\//.test(u.pathname)) {
+        window.dispatchEvent(new CustomEvent('app-navigate', { detail: u.pathname + u.search }));
+        return;
+      }
+    } catch { /* malformed URL → treat as external */ }
+    Browser.open({ url: a.href }).catch(() => {});
   }, true);
 
   // ---- Native share sheet ----

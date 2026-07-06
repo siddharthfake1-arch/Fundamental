@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Sun, Moon } from 'lucide-react';
-import { api, asArray } from '../api';
+import { api, asArray, fetchBlob } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { FileUpload, Avatar, Spinner, CityInput, LinksEditor, TeamEditor, useConfirm, useToast } from '../components/ui';
-import { absUrl } from '../config';
+import { absUrl, nativeBridge } from '../config';
 
 const Field = ({ label, children }) => <label className="block"><span className="label">{label}</span>{children}</label>;
 
@@ -484,10 +484,13 @@ function PrivacyControls({ user }) {
   const toast = useToast();
   const confirm = useConfirm();
   const exportData = async () => {
+    // Native: authenticated download through the share sheet (bearer + absolute URL).
+    if (nativeBridge.downloadFile) {
+      nativeBridge.downloadFile('/api/users/me/export', 'fundamental-data-export.json');
+      return;
+    }
     try {
-      const res = await fetch('/api/users/me/export', { credentials: 'include' });
-      if (!res.ok) throw new Error('Export failed');
-      const blob = await res.blob();
+      const blob = await fetchBlob('/api/users/me/export');
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = 'fundamental-data-export.json';

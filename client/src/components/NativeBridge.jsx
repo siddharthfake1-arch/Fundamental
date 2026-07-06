@@ -58,6 +58,14 @@ export default function NativeBridge() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Absolute links to our own site (from native.js's interceptor) route in-app.
+  useEffect(() => {
+    const onNavigate = (e) => { if (e.detail) nav(e.detail); };
+    window.addEventListener('app-navigate', onNavigate);
+    return () => window.removeEventListener('app-navigate', onNavigate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Download failures surface as a normal error toast.
   useEffect(() => {
     const onErr = (e) => toast(e.detail || 'Download failed', 'error');

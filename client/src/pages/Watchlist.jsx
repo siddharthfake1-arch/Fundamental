@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, StickyNote, Tag } from 'lucide-react';
 import { api, timeAgo, asArray } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import PullToRefresh from '../components/PullToRefresh';
 
 const STAGES = ['Tracking', 'Intro Call Done', 'Due Diligence', 'Term Sheet', 'Passed'];
 const STAGE_TINT = {
@@ -41,6 +42,7 @@ export default function Watchlist() {
   };
 
   return (
+    <PullToRefresh onRefresh={() => Promise.all([load(), loadShared()])}>
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
@@ -146,6 +148,7 @@ export default function Watchlist() {
       <NotesModal s={notesFor} onClose={() => setNotesFor(null)} onChange={load} />
       <TagsModal s={tagsFor} onClose={() => setTagsFor(null)} onChange={load} />
     </div>
+    </PullToRefresh>
   );
 }
 

@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { Flame, TrendingUp, Activity, Building2 } from 'lucide-react';
 import { api, asArray, asObject } from '../api';
 import { Spinner, Stat, useToast } from '../components/ui';
+import PullToRefresh from '../components/PullToRefresh';
 
 const Bar = ({ pct, color = 'rgb(var(--acc-500))' }) => (
   <div className="h-1.5 bg-ink-700/70 rounded-full overflow-hidden flex-1">
@@ -17,7 +18,8 @@ export default function Pulse() {
   const [d, setD] = useState(null);
   const [q, setQ] = useState('');
   const toast = useToast();
-  useEffect(() => { api.get('/api/pulse').then(setD).catch(e => toast(e.message, 'error')); }, []);
+  const load = () => api.get('/api/pulse').then(setD).catch(e => toast(e.message, 'error'));
+  useEffect(() => { load(); }, []);
   if (!d) return <Spinner />;
   const match = (name) => !q || String(name || '').toLowerCase().includes(q.toLowerCase());
 
@@ -33,6 +35,7 @@ export default function Pulse() {
   const maxInterest = Math.max(...sectors.map(s => s.pipeline_adds_30d + s.upvotes_30d), 1);
 
   return (
+    <PullToRefresh onRefresh={load}>
     <div className="fade-in space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
@@ -140,5 +143,6 @@ export default function Pulse() {
         </div>
       </div>
     </div>
+    </PullToRefresh>
   );
 }
