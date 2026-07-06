@@ -9,3 +9,13 @@ server/uploads/*
 
 server/uploads-private/
 backups/
+
+# Native app projects live on the mobile-app branch only; build artifacts and
+# signing material must never land on this branch.
+client/android/
+client/ios/
+client/store-assets/
+client/capacitor.config.ts
+*.apk
+*.aab
+*.jks
