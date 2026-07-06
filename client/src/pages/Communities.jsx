@@ -20,11 +20,11 @@ function CommunityIndex() {
   const [creating, setCreating] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
+  const [joinBusy, setJoinBusy] = useState(null);
   const load = () => api.get('/api/communities').then(d => { setList(asArray(d.communities)); setPending(asArray(d.pending)); }).catch(e => toast(e.message, 'error'));
   useEffect(() => { load(); }, []);
   if (!list) return <Spinner />;
 
-  const [joinBusy, setJoinBusy] = useState(null);
   const join = async (slug) => {
     if (joinBusy) return; // rapid double-tap must not double-fire
     setJoinBusy(slug);

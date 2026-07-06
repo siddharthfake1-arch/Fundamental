@@ -5,6 +5,14 @@ import { useAuth } from '../AuthContext';
 import { Logo, FileUpload, CityInput, LinksEditor, TeamEditor, useToast } from '../components/ui';
 import { absUrl } from '../config';
 
+// Storage can throw in private mode / hardened WebViews — draft-step persistence is
+// a convenience and must never be able to break signup or onboarding.
+const safeStorage = {
+  get(key) { try { return localStorage.getItem(key); } catch { return null; } },
+  set(key, value) { try { localStorage.setItem(key, value); } catch { /* blocked — skip */ } },
+  remove(key) { try { localStorage.removeItem(key); } catch { /* blocked — skip */ } },
+};
+
 const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer', 'Other'];
 const STAGES = ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'];
 const COLLATERAL_TYPES = ['Deck', 'IM', 'Financial Model', 'Industry Overview', 'Product Demo', 'Cap Table'];
@@ -143,7 +151,7 @@ function FounderFlow({ user, refresh }) {
         }
       } catch { /* no draft yet */ }
       try {
-        const local = JSON.parse(localStorage.getItem(draftKey) || '{}');
+        const local = JSON.parse(safeStorage.get(draftKey) || '{}');
         if (local.step) setStep(Math.min(local.step, 6));
         // F-009: document drafts (which carry private file_keys) are NOT restored
         // from localStorage — only the step position is persisted client-side.
@@ -164,7 +172,7 @@ function FounderFlow({ user, refresh }) {
     try {
       await api.put('/api/users/me', normalizeMe(me));
       if (s.name) { await api.post('/api/startups/mine', startupPayload()); await saveTeam(); }
-      localStorage.setItem(draftKey, JSON.stringify({ step })); // never persist private file keys (F-009)
+      safeStorage.set(draftKey, JSON.stringify({ step })); // never persist private file keys (F-009)
       if (!silent) toast(s.name
         ? 'Progress saved. Sign out any time — you\'ll pick up where you left off.'
         : 'Profile saved. Add a startup name to save your startup draft too.', 'success');
@@ -189,7 +197,7 @@ function FounderFlow({ user, refresh }) {
         d._posted = true;
       }
       await api.post('/api/users/complete-onboarding'); // server validates required artifacts
-      localStorage.removeItem(draftKey);
+      safeStorage.remove(draftKey);
       await refresh();
       toast(s.video_url
         ? 'Welcome to Fundamental. Your startup is live.'
@@ -415,7 +423,7 @@ function InvestorFlow({ user, refresh }) {
 
   useEffect(() => {
     try {
-      const local = JSON.parse(localStorage.getItem(draftKey) || '{}');
+      const local = JSON.parse(safeStorage.get(draftKey) || '{}');
       if (local.step) setStep(Math.min(local.step, 1));
     } catch { /* no draft */ }
   }, []);
@@ -428,7 +436,7 @@ function InvestorFlow({ user, refresh }) {
   const saveDraft = async () => {
     try {
       await api.put('/api/users/me', payload());
-      localStorage.setItem(draftKey, JSON.stringify({ step }));
+      safeStorage.set(draftKey, JSON.stringify({ step }));
       toast('Progress saved — you can sign out and continue any time.', 'success');
     } catch (e) { toast(e.message, 'error'); }
   };
@@ -438,7 +446,7 @@ function InvestorFlow({ user, refresh }) {
     try {
       await api.put('/api/users/me', payload());
       await api.post('/api/users/complete-onboarding');
-      localStorage.removeItem(draftKey);
+      safeStorage.remove(draftKey);
       await refresh();
       toast('Welcome to Fundamental.', 'success');
       nav('/discover');

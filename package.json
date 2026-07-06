@@ -2,7 +2,7 @@
   "name": "fundamental",
   "version": "1.0.0",
   "private": true,
-  "description": "Fundamental — Fundraising? Fundamental. A serious fundraising marketplace and professional network for founders and investors.",
+  "description": "Fundamental \u2014 Fundraising? Fundamental. A serious fundraising marketplace and professional network for founders and investors.",
   "engines": {
     "node": ">=18.0.0"
   },
@@ -15,12 +15,13 @@
     "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
     "seed": "node server/seed.js",
     "start": "node server/index.js",
-    "test": "npm run test:unit && npm run test:encoding && npm run test:routes",
+    "test": "npm run lint && npm run test:unit && npm run test:encoding && npm run test:routes",
     "test:unit": "node server/selftest.js",
     "test:encoding": "node server/scripts/check-encoding.js",
     "test:routes": "node server/test/routes.test.js",
     "backup": "node server/scripts/backup.js",
-    "restore": "node server/scripts/restore.js"
+    "restore": "node server/scripts/restore.js",
+    "lint": "eslint client/src server"
   },
   "dependencies": {
     "@sentry/node": "^10.63.0",
@@ -35,6 +36,9 @@
   "devDependencies": {
     "all-the-cities": "^3.1.0",
     "concurrently": "^9.1.2",
+    "eslint": "^10.6.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.7.0",
     "i18n-iso-countries": "^7.14.0"
   },
   "overrides": {
