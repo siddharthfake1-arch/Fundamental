@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, StickyNote, Tag } from 'lucide-react';
@@ -30,12 +30,14 @@ export default function Watchlist() {
   if (!isInvestor) return <Navigate to="/dashboard" replace />;
   if (!list) return <Spinner />;
 
+  const moveBusy = useRef(false);
   const move = async (s, dir) => {
     const idx = STAGES.indexOf(s.status);
     const next = STAGES[idx + dir];
-    if (!next) return;
-    try { await api.post(`/api/startups/${s.id}/watchlist-status`, { status: next }); load(); }
-    catch (e) { toast(e.message, 'error'); }
+    if (!next || moveBusy.current) return; // rapid taps must not skip stages
+    moveBusy.current = true;
+    try { await api.post(`/api/startups/${s.id}/watchlist-status`, { status: next }); await load(); }
+    catch (e) { toast(e.message, 'error'); } finally { moveBusy.current = false; }
   };
 
   return (
@@ -123,11 +125,11 @@ export default function Watchlist() {
                         </div>
                         <div className="flex gap-0.5">
                           <button onClick={() => move(s, -1)} disabled={STAGES.indexOf(s.status) === 0}
-                            className="p-1 rounded text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Move back">
+                            className="p-2.5 rounded-lg text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Move back">
                             <ChevronLeft className="w-3.5 h-3.5" />
                           </button>
                           <button onClick={() => move(s, 1)} disabled={STAGES.indexOf(s.status) === STAGES.length - 1}
-                            className="p-1 rounded text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Advance">
+                            className="p-2.5 rounded-lg text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Advance">
                             <ChevronRight className="w-3.5 h-3.5" />
                           </button>
                         </div>

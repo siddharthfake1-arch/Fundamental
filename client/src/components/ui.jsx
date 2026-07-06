@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, createContext, useContext, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../api';
-import { absUrl } from '../config';
+import { absUrl, IS_NATIVE } from '../config';
 
 export function Avatar({ src, name, size = 10, square = false }) {
   const px = size * 4;
@@ -68,7 +68,7 @@ export function CoverHero({ cover, fallbackKey = '', height = 'h-44 sm:h-56', ch
     <div className="card overflow-hidden !rounded-2xl">
       <div className={`relative ${height} overflow-hidden`}>
         {cover ? (
-          <img ref={ref} src={absUrl(cover)} alt="" className="absolute inset-0 w-full h-full object-cover will-change-transform" style={{ transform: 'scale(1.06)' }} />
+          <img ref={ref} src={absUrl(cover)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="absolute inset-0 w-full h-full object-cover will-change-transform" style={{ transform: 'scale(1.06)' }} />
         ) : (
           <div ref={ref} className="absolute inset-0 will-change-transform" style={{ transform: 'scale(1.06)', background: `linear-gradient(120deg, hsl(${hue} 55% 24%), hsl(${(hue + 50) % 360} 65% 40%))` }} />
         )}
@@ -110,11 +110,15 @@ export function Modal({ open, onClose, title, children, wide }) {
       }
     };
     document.addEventListener('keydown', onKey);
+    // Native: the Android back button dismisses the dialog instead of navigating.
+    const onBack = (e) => { e.preventDefault(); onClose(); };
+    window.addEventListener('app-back', onBack);
     document.body.style.overflow = 'hidden';
     // Move focus into the dialog.
     setTimeout(() => panelRef.current?.querySelector('button,a,input,textarea,select')?.focus(), 0);
     return () => {
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('app-back', onBack);
       document.body.style.overflow = '';
       if (prevFocus && prevFocus.focus) prevFocus.focus(); // return focus to trigger
     };
@@ -132,8 +136,9 @@ export function Modal({ open, onClose, title, children, wide }) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 16 }}
             transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-            className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto p-6 rounded-b-none sm:rounded-2xl`}>
-            <div className="flex items-center justify-between mb-4">
+            className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto p-6 !pt-0 rounded-b-none sm:rounded-2xl`}
+            style={{ overscrollBehavior: 'contain' }}>
+            <div className="flex items-center justify-between mb-4 sticky top-0 z-10 bg-inherit pt-6 pb-1 -mx-1 px-1">
               <h3 className="h-display text-lg">{title}</h3>
               <button onClick={onClose} aria-label="Close dialog" className="text-mist-400 hover:text-mist-100 text-xl leading-none px-1">×</button>
             </div>
@@ -190,6 +195,10 @@ export function FileUpload({ label, accept, onUploaded, hint, currentUrl, upload
     if (maxBytes && file.size > maxBytes) {
       toast(`That file is ${Math.ceil(file.size / 1048576)} MB. The limit is ${Math.round(maxBytes / 1048576)} MB.`, 'error');
       return;
+    }
+    // Big uploads pause if the OS backgrounds the app — warn once, up front.
+    if (IS_NATIVE && file.size > 20 * 1048576) {
+      toast('Keep the app open while your file uploads.', 'info');
     }
     try {
       setProgress(0);
@@ -527,7 +536,7 @@ export function ConfirmProvider({ children }) {
             <div className="flex justify-end gap-2 pt-1">
               <button className="btn-ghost btn-sm" onClick={() => close(false)}>Cancel</button>
               <button className={`${state.danger ? 'btn-danger' : 'btn-primary'} btn-sm`} disabled={needsTyped}
-                onClick={() => close(true)}>
+                autoFocus={!state.typed} onClick={() => close(true)}>
                 {state.confirmLabel || (state.danger ? 'Delete' : 'Confirm')}
               </button>
             </div>

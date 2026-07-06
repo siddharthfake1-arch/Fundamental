@@ -59,7 +59,8 @@ async function getOtpAndSignup(c, email, role) {
 async function run() {
   cleanupDb();
   server = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
-    env: { ...process.env, NODE_ENV: 'test', PORT: String(PORT), DB_PATH, AUTO_SEED: 'true', MSG_ONE_SIDED_CAP: '3' },
+    env: { ...process.env, NODE_ENV: 'test', PORT: String(PORT), DB_PATH, AUTO_SEED: 'true', MSG_ONE_SIDED_CAP: '3',
+      ANDROID_CERT_SHA256: 'AA:BB:CC', APPLE_TEAM_ID: 'TESTTEAMID' },
     stdio: ['ignore', 'ignore', 'inherit'],
   });
   await waitForHealth();
@@ -656,6 +657,18 @@ async function run() {
       headers: { Cookie: `token=${bearerToken}`, Authorization: 'Bearer nonsense' },
     });
     assert.strictEqual(r.status, 401, 'garbage bearer must not fall back to cookie');
+  });
+
+  await test('deep-link well-known files are served when configured', async () => {
+    const al = await fetch(BASE + '/.well-known/assetlinks.json');
+    assert.strictEqual(al.status, 200);
+    const alBody = await al.json();
+    assert.strictEqual(alBody[0].target.package_name, 'co.fundamental.app');
+    assert.deepStrictEqual(alBody[0].target.sha256_cert_fingerprints, ['AA:BB:CC']);
+    const aasa = await fetch(BASE + '/.well-known/apple-app-site-association');
+    assert.strictEqual(aasa.status, 200);
+    const aasaBody = await aasa.json();
+    assert.strictEqual(aasaBody.applinks.details[0].appID, 'TESTTEAMID.co.fundamental.app');
   });
 
   console.log(results.join('\n'));

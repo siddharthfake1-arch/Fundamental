@@ -115,7 +115,7 @@ function StartupSettings() {
             <select className="input" value={s.stage || ''} onChange={set('stage')}>
               {['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'].map(x => <option key={x}>{x}</option>)}
             </select></Field>
-          <Field label="Founded year"><input type="number" className="input" value={s.founded_year || ''} onChange={set('founded_year')} /></Field>
+          <Field label="Founded year"><input type="number" inputMode="decimal" className="input" value={s.founded_year || ''} onChange={set('founded_year')} /></Field>
           <Field label="Raising status">
             <select className="input" value={s.raising_status || ''} onChange={set('raising_status')}>
               {['Actively Raising', 'Round Closing', 'Not Raising'].map(x => <option key={x}>{x}</option>)}
@@ -141,7 +141,7 @@ function StartupSettings() {
       <div className="card p-6 space-y-4">
         <h2 className="section-title">Metrics</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {NUM.map(([k, l]) => <Field key={k} label={l}><input type="number" className="input" value={s[k] ?? ''} onChange={set(k)} /></Field>)}
+          {NUM.map(([k, l]) => <Field key={k} label={l}><input type="number" inputMode="decimal" className="input" value={s[k] ?? ''} onChange={set(k)} /></Field>)}
         </div>
       </div>
 
@@ -185,7 +185,7 @@ function ManageCollateral({ startupId }) {
   const [docs, setDocs] = useState([]);
   const [d, setD] = useState({ title: '', type: 'Deck', access_level: 'Request Access', file_key: '' });
   const toast = useToast();
-  const load = () => api.get(`/api/startups/${startupId}`).then(r => setDocs(asArray(r.collateral))).catch(() => {});
+  const load = () => api.get(`/api/startups/${startupId}`).then(r => setDocs(asArray(r.collateral))).catch(e => toast(e.message, 'error'));
   useEffect(() => { load(); }, [startupId]);
   return (
     <div className="card p-6 space-y-4">
@@ -290,10 +290,13 @@ function InvestorSettings({ user, refresh }) {
       </Field>
       <Field label="Investment thesis"><textarea className="input min-h-[100px]" value={f.thesis} onChange={(e) => setF(x => ({ ...x, thesis: e.target.value }))} /></Field>
       <div className="flex justify-end">
-        <button className="btn-primary" onClick={async () => {
+        <button className="btn-primary" disabled={busy} onClick={async () => {
+          if (busy) return;
+          setBusy(true);
           try { await api.put('/api/users/me', { investor: f }); await refresh(); toast('Investor profile saved', 'success'); }
           catch (e) { toast(e.message, 'error'); }
-        }}>Save changes</button>
+          finally { setBusy(false); }
+        }}>{busy ? 'Saving…' : 'Save changes'}</button>
       </div>
     </div>
   );

@@ -247,13 +247,13 @@ export default function Auth() {
             {/* ---- Login ---- */}
             {mode === 'login' && !forgot.on && (
               <>
-                <div><span className="label">Email</span><input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
+                <div><span className="label">Email</span><input aria-label="Email" type="email" autoComplete="email" inputMode="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
                 <div>
                   <div className="flex items-center justify-between">
                     <span className="label !mb-0">Password</span>
                     <button type="button" className="text-xs text-gold-300 hover:text-gold-200 mb-1.5" onClick={() => setForgot(f => ({ ...f, on: true, step: 'request' }))}>Forgot password?</button>
                   </div>
-                  <input aria-label="Password" type="password" className="input" value={form.password} onChange={set('password')} placeholder="••••••••" required />
+                  <input aria-label="Password" type="password" autoComplete="current-password" className="input" value={form.password} onChange={set('password')} placeholder="••••••••" required />
                 </div>
               </>
             )}
@@ -268,14 +268,14 @@ export default function Auth() {
                 {forgot.step === 'request' ? (
                   <>
                     <p className="text-xs text-mist-400 leading-relaxed">Enter your account email and we'll send a 6-digit reset code.</p>
-                    <input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required />
+                    <input aria-label="Email" type="email" autoComplete="email" inputMode="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required />
                   </>
                 ) : (
                   <>
                     <p className="text-xs text-mist-400 leading-relaxed">Enter the code we sent to <span className="text-mist-200 font-medium">{form.email}</span> and choose a new password.</p>
                     <input aria-label="Reset code" className="input text-center tracking-[0.5em] text-lg" inputMode="numeric" maxLength={6} value={forgot.code}
                       onChange={(e) => setForgot(f => ({ ...f, code: e.target.value.replace(/\D/g, '') }))} placeholder="••••••" />
-                    <input aria-label="New password" type="password" className="input" value={forgot.password} onChange={(e) => setForgot(f => ({ ...f, password: e.target.value }))} placeholder="New password — letters and numbers, 8+ chars" />
+                    <input aria-label="New password" type="password" autoComplete="new-password" className="input" value={forgot.password} onChange={(e) => setForgot(f => ({ ...f, password: e.target.value }))} placeholder="New password — letters and numbers, 8+ chars" />
                     <button type="button" className="text-xs text-gold-300 hover:text-gold-200" onClick={requestReset} disabled={busy}>Resend code</button>
                     {forgot.demo_code && (
                       <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">
@@ -303,8 +303,8 @@ export default function Auth() {
                   </div>
                 </div>
                 <div><span className="label">Full name</span><input aria-label="Full name" className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
-                <div><span className="label">Email</span><input aria-label="Email" type="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
-                <div><span className="label">Password</span><input aria-label="Password" type="password" className="input" value={form.password} onChange={set('password')} placeholder="Minimum 8 characters" required /></div>
+                <div><span className="label">Email</span><input aria-label="Email" type="email" autoComplete="email" inputMode="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
+                <div><span className="label">Password</span><input aria-label="Password" type="password" autoComplete="new-password" className="input" value={form.password} onChange={set('password')} placeholder="Minimum 8 characters" required /></div>
                 <div><span className="label">City</span><input aria-label="City" className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
                 <div><span className="label">Phone <span className="normal-case font-normal text-mist-500">(optional)</span></span><input aria-label="Phone" className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="With country code, e.g. +966 5x xxx xxxx" /></div>
                 <label className="flex items-start gap-2.5 cursor-pointer text-xs text-mist-400 leading-relaxed">

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Flame, Bookmark, ChevronUp, PlayCircle, FolderLock, Target } from 'lucide-react';
 import { api, fmtMoney } from '../api';
+import { nativeBridge } from '../config';
 import { useAuth } from '../AuthContext';
 import { Avatar, Sparkline, VerifiedBadge, useToast } from './ui';
 
@@ -13,22 +14,30 @@ export default function StartupCard({ s }) {
   const [upvotes, setUpvotes] = useState(s.upvotes);
   const [burst, setBurst] = useState(0);
 
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [voteBusy, setVoteBusy] = useState(false);
+
   const toggleSave = async (e) => {
     e.preventDefault();
+    if (saveBusy) return; // no double-fire on fast taps
+    setSaveBusy(true);
     try {
       const r = await api.post(`/api/startups/${s.id}/save`);
       setSaved(r.saved);
+      nativeBridge.haptic?.('light');
       toast(r.saved ? 'Saved to pipeline' : 'Removed from pipeline', 'success');
-    } catch (err) { toast(err.message, 'error'); }
+    } catch (err) { toast(err.message, 'error'); } finally { setSaveBusy(false); }
   };
 
   const toggleUpvote = async (e) => {
     e.preventDefault();
+    if (voteBusy) return;
+    setVoteBusy(true);
     try {
       const r = await api.post(`/api/startups/${s.id}/upvote`);
       setUpvoted(r.upvoted); setUpvotes(r.upvotes);
-      if (r.upvoted) setBurst(b => b + 1);
-    } catch (err) { toast(err.message, 'error'); }
+      if (r.upvoted) { setBurst(b => b + 1); nativeBridge.haptic?.('light'); }
+    } catch (err) { toast(err.message, 'error'); } finally { setVoteBusy(false); }
   };
 
   const hot = s.momentum >= 40;
@@ -47,7 +56,7 @@ export default function StartupCard({ s }) {
           <div className="text-xs text-mist-400 mt-0.5 truncate">{s.sector} · {s.stage} · {s.city}</div>
         </div>
         <button onClick={toggleSave} title={saved ? 'Remove from pipeline' : 'Save to pipeline'}
-          className={`p-1.5 -m-1 rounded-lg transition-colors ${saved ? 'text-gold-400' : 'text-mist-500 hover:text-mist-200'}`}>
+          className={`p-2.5 -m-2 rounded-lg transition-colors ${saved ? 'text-gold-400' : 'text-mist-500 hover:text-mist-200'}`}>
           <Bookmark className="w-[18px] h-[18px]" fill={saved ? 'currentColor' : 'none'} />
         </button>
       </div>

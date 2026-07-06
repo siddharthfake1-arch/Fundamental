@@ -26,20 +26,40 @@ export default function Messages() {
   const scrollBoxRef = useRef();
   const toast = useToast();
 
-  const loadList = () => api.get('/api/messages').then(d => setConvos(asArray(d.conversations))).catch(() => setConvos([]));
-  const loadThread = () => active && api.get(`/api/messages/${active}`).then(setThread).catch(e => toast(e.message, 'error'));
+  const [listErr, setListErr] = useState(null);
+  // A failed load must NOT paint the "no conversations" empty state (offline would
+  // look like you have no messages) — surface the error; the 8s poll auto-retries.
+  const loadList = () => api.get('/api/messages').then(d => { setListErr(null); setConvos(asArray(d.conversations)); }).catch(e => setListErr(e.message));
+  // Guard against a stale response painting the wrong thread: capture the id at
+  // call time and drop the result if the user has switched conversations since.
+  const loadThread = () => {
+    const id = active;
+    return id && api.get(`/api/messages/${id}`).then(t => { if (id === activeRef.current) setThread(t); }).catch(e => toast(e.message, 'error'));
+  };
+  const activeRef = useRef(active);
+  activeRef.current = active;
 
   useEffect(() => { loadList(); }, []);
   useEffect(() => { setThread(null); loadThread(); window.dispatchEvent(new Event('badge-refresh')); }, [active]);
   useEffect(() => {
-    const t = setInterval(() => { loadThread(); loadList(); }, 8000);
-    return () => clearInterval(t);
+    const tick = () => { if (!document.hidden) { loadThread(); loadList(); } };
+    const t = setInterval(tick, 8000);
+    window.addEventListener('app-resumed', tick); // native: instant refresh on foreground
+    return () => { clearInterval(t); window.removeEventListener('app-resumed', tick); };
   }, [active]);
   // Follow new messages only when the user is already near the bottom — the 8s
-  // poll must not yank someone who scrolled up to read history.
+  // poll must not yank someone who scrolled up to read history. The FIRST paint
+  // of a thread jumps instantly (no animated scroll through the whole history).
+  const firstPaint = useRef(true);
+  useEffect(() => { firstPaint.current = true; }, [active]);
   useEffect(() => {
     const box = scrollBoxRef.current;
     if (!box) return;
+    if (firstPaint.current && thread?.messages?.length) {
+      endRef.current?.scrollIntoView({ behavior: 'auto' });
+      firstPaint.current = false;
+      return;
+    }
     const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
     if (nearBottom) endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [thread?.messages?.length]);
@@ -65,7 +85,11 @@ export default function Messages() {
     setRefList(asArray(d.startups)); setRefOpen(true);
   };
 
-  if (!convos) return <Spinner />;
+  if (!convos) {
+    return listErr
+      ? <Empty title="Couldn't load your messages" sub={`${listErr} — retrying automatically.`} />
+      : <Spinner />;
+  }
   const filtered = convos.filter(c => String(c.other?.name || '').toLowerCase().includes(search.toLowerCase()));
 
   return (
@@ -73,7 +97,7 @@ export default function Messages() {
       <h1 className="h-display text-2xl mb-1">Messages</h1>
       <p className="text-sm text-mist-400 mb-5">Conversations open once a connection is accepted.</p>
 
-      <div className="card overflow-hidden grid md:grid-cols-[320px_1fr]" style={{ height: 'calc(100vh - 220px)', minHeight: 420 }}>
+      <div className="card overflow-hidden grid md:grid-cols-[320px_1fr]" style={{ height: 'calc(100dvh - 220px)', minHeight: 420 }}>
         {/* Left panel */}
         <div className={`border-r border-ink-700/60 flex flex-col ${active ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b border-ink-700/60">
@@ -134,7 +158,7 @@ export default function Messages() {
                 </div>
               </div>
 
-              <div ref={scrollBoxRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div ref={scrollBoxRef} className="flex-1 overflow-y-auto p-4 space-y-3" style={{ overscrollBehavior: 'contain' }}>
                 {tMessages.map(m => {
                   const mine = m.sender_id === user.id;
                   return (
@@ -169,7 +193,7 @@ export default function Messages() {
                 )}
                 {attach && <div className="text-xs text-emerald-300 mb-2">📎 {attach.name || 'File'} attached — sends with your message <button className="text-mist-500 ml-1" aria-label="Remove attachment" onClick={() => setAttach(null)}>✕</button></div>}
                 <div className="flex gap-2 items-end">
-                  <label className="btn-ghost btn-sm !px-2.5 cursor-pointer" title="Attach file" aria-label="Attach a document (max 25 MB)">
+                  <label className="btn-ghost btn-sm !px-3 !py-2.5 cursor-pointer" title="Attach file" aria-label="Attach a document (max 25 MB)">
                     <input type="file" className="hidden" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,.txt,.zip,image/*" onChange={async (e) => {
                       const f = e.target.files[0];
                       e.target.value = ''; // allow re-selecting the same file
@@ -179,8 +203,8 @@ export default function Messages() {
                       catch (er) { toast(er.message, 'error'); } finally { setUploadPct(null); }
                     }} />📎
                   </label>
-                  <button className="btn-ghost btn-sm !px-2.5" title="Reference a startup" aria-label="Reference a startup" onClick={openRef}>◳</button>
-                  <textarea className="input flex-1 !py-2.5 resize-none" rows={1} placeholder="Write a message…" value={text}
+                  <button className="btn-ghost btn-sm !px-3 !py-2.5" title="Reference a startup" aria-label="Reference a startup" onClick={openRef}>◳</button>
+                  <textarea className="input flex-1 !py-2.5 resize-none" rows={1} placeholder="Write a message…" enterKeyHint="send" value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
                   <button className="btn-primary btn-sm !py-2.5" disabled={sending || uploadPct !== null} onClick={() => send()}>{sending ? '…' : 'Send'}</button>

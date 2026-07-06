@@ -144,6 +144,16 @@ html.light {
 .upvote-burst { animation: burst 0.5s ease-out forwards; }
 
 /* Native app safe areas (notch / home indicator / gesture bar). env() resolves to 0
-   in ordinary browsers, so these are inert on the web. */
-.safe-top { padding-top: env(safe-area-inset-top, 0px); }
+   in ordinary browsers, so these are inert on the web. --status-bar-height is set by
+   the native runtime on Android, where env(safe-area-inset-top) is unreliable. */
+.safe-top { padding-top: max(env(safe-area-inset-top, 0px), var(--status-bar-height, 0px)); }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+/* Touch devices: iOS zooms the whole page when a focused field is under 16px —
+   keep form text at 16px on coarse pointers so focus never triggers a zoom. */
+@media (pointer: coarse) {
+  .input, textarea.input, select.input { font-size: 16px; }
+}
+
+/* Kill scroll chaining / rubber-band background flashes behind the fixed header. */
+html, body { overscroll-behavior-y: none; }

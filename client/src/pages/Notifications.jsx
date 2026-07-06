@@ -18,8 +18,10 @@ export default function Notifications() {
   useEffect(() => { load(); }, [filter]);
   // Keep an open page fresh: poll every 20s so new notifications appear without a reload.
   useEffect(() => {
-    const t = setInterval(load, 20000);
-    return () => clearInterval(t);
+    const tick = () => { if (!document.hidden) load(); };
+    const t = setInterval(tick, 20000);
+    window.addEventListener('app-resumed', tick); // native: refresh on foreground
+    return () => { clearInterval(t); window.removeEventListener('app-resumed', tick); };
   }, [filter]);
 
   if (!data) return <Spinner />;
