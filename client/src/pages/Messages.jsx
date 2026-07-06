@@ -4,6 +4,7 @@ import { api, timeAgo, asArray, asObject } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, FileUpload, Modal, ReportModal, Spinner, VerifiedBadge, useToast } from '../components/ui';
 import { absUrl, nativeBridge } from '../config';
+import PullToRefresh from '../components/PullToRefresh';
 
 const STAGES = ['Intro', 'Due Diligence', 'Closed', 'Passed'];
 const STAGE_STYLE = { 'Intro': 'chip-blue', 'Due Diligence': 'chip-gold', 'Closed': 'chip-green', 'Passed': 'chip-red' };
@@ -94,6 +95,7 @@ export default function Messages() {
   const filtered = convos.filter(c => String(c.other?.name || '').toLowerCase().includes(search.toLowerCase()));
 
   return (
+    <PullToRefresh onRefresh={() => Promise.all([loadList(), loadThread()].filter(Boolean))}>
     <div className="fade-in">
       <h1 className="h-display text-2xl mb-1">Messages</h1>
       <p className="text-sm text-mist-400 mb-5">Conversations open once a connection is accepted.</p>
@@ -231,5 +233,6 @@ export default function Messages() {
         </div>
       </Modal>
     </div>
+    </PullToRefresh>
   );
 }

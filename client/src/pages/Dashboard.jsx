@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, asArray, asObject, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, LineChart, Spinner, Stat, VerifiedBadge, useToast } from '../components/ui';
+import PullToRefresh from '../components/PullToRefresh';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -38,6 +39,7 @@ function FounderDash() {
   const docs = asArray(an?.docs);
 
   return (
+    <PullToRefresh onRefresh={() => Promise.all([load(), api.get('/api/dashboard/founder/analytics').then(setAn).catch(() => {})])}>
     <div className="fade-in space-y-5">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
@@ -202,13 +204,15 @@ function FounderDash() {
         </>
       )}
     </div>
+    </PullToRefresh>
   );
 }
 
 function InvestorDash() {
   const [d, setD] = useState(null);
   const toast = useToast();
-  useEffect(() => { api.get('/api/dashboard/investor').then(setD).catch(e => toast(e.message, 'error')); }, []);
+  const load = () => api.get('/api/dashboard/investor').then(setD).catch(e => toast(e.message, 'error'));
+  useEffect(() => { load(); }, []);
   if (!d) return <Spinner />;
 
   const watchlist = asArray(d.watchlist);
@@ -216,6 +220,7 @@ function InvestorDash() {
   const suggested = asArray(d.suggested);
 
   return (
+    <PullToRefresh onRefresh={load}>
     <div className="fade-in space-y-5">
       <div>
         <h1 className="h-display text-2xl">Investor dashboard</h1>
@@ -296,5 +301,6 @@ function InvestorDash() {
         )}
       </div>
     </div>
+    </PullToRefresh>
   );
 }

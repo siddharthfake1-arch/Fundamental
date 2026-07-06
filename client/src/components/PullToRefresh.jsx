@@ -13,8 +13,17 @@ export default function PullToRefresh({ onRefresh, children }) {
 
   if (!IS_NATIVE) return children;
 
+  // A touch that starts inside a nested scroll container that is itself scrolled
+  // (message thread, dropdown) is a scroll gesture there — never a page refresh.
+  const inScrolledContainer = (el) => {
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      if (n.scrollTop > 0) return true;
+    }
+    return false;
+  };
+
   const onTouchStart = (e) => {
-    if (window.scrollY > 0 || busy) return;
+    if (window.scrollY > 0 || busy || inScrolledContainer(e.target)) return;
     startY.current = e.touches[0].clientY;
   };
   const onTouchMove = (e) => {

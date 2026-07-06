@@ -47,7 +47,6 @@ export default function NativeBridge() {
       });
     })();
     return () => { cancelled = true; backSub?.remove(); urlSub?.remove(); stateSub?.remove(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Session expiry (from api.js): an in-app route change, not a WebView reload.
@@ -55,7 +54,6 @@ export default function NativeBridge() {
     const onExpired = () => nav('/login');
     window.addEventListener('session-expired', onExpired);
     return () => window.removeEventListener('session-expired', onExpired);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Absolute links to our own site (from native.js's interceptor) route in-app.
@@ -63,7 +61,6 @@ export default function NativeBridge() {
     const onNavigate = (e) => { if (e.detail) nav(e.detail); };
     window.addEventListener('app-navigate', onNavigate);
     return () => window.removeEventListener('app-navigate', onNavigate);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Download failures surface as a normal error toast.
@@ -71,7 +68,6 @@ export default function NativeBridge() {
     const onErr = (e) => toast(e.detail || 'Download failed', 'error');
     window.addEventListener('native-download-error', onErr);
     return () => window.removeEventListener('native-download-error', onErr);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { /* keep location observed so back-button state stays fresh */ }, [loc]);
