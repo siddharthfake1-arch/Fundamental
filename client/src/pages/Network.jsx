@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, asArray } from '../api';
 import { Avatar, Empty, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { nativeBridge } from '../config';
 
 const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer'];
 const STAGES = ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'];
@@ -39,7 +40,7 @@ export default function Network() {
   };
 
   const set = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
-  const act = async (fn, ok) => { try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } };
+  const act = async (fn, ok) => { try { await fn(); nativeBridge.haptic?.('light'); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } };
 
   return (
     <div className="fade-in">

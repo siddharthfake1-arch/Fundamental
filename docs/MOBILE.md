@@ -121,7 +121,11 @@ user content + financial topics answered honestly in the questionnaire)
 
 - No push notifications yet — the app polls in-app notifications every 20s like the
   web. Fast-follow: FCM/APNs via `@capacitor/push-notifications` + server work.
-- Deep links (`https://fundamental.co.in/...` opening the app) need store-console
-  verification files — stubbed in `NativeBridge.jsx`, wire in a fast-follow.
+- Deep links are fully wired in the apps (Android App Links intent filter + iOS
+  Associated Domains + in-app routing). To activate them, set two env vars on the
+  server: `ANDROID_CERT_SHA256` (Play Console → App integrity → App signing key
+  certificate SHA-256) and `APPLE_TEAM_ID` (Apple Developer Team ID). The server
+  then serves `/.well-known/assetlinks.json` and
+  `/.well-known/apple-app-site-association`, and links open the app.
 - Keep the app open while a pitch video uploads (uploads pause if iOS backgrounds
   the app; the 10-minute upload timeout already guards against hangs).

@@ -23,7 +23,10 @@ const config: CapacitorConfig = {
       resize: 'body',
     },
     StatusBar: {
-      overlaysWebView: true,
+      // Android: keep the WebView BELOW the status bar (env(safe-area-inset-top) is 0
+      // in the Android WebView, so overlaying would put the header under the clock).
+      // iOS ignores this and always overlays; .safe-top CSS pads the notch there.
+      overlaysWebView: false,
       style: 'DARK',
       backgroundColor: '#04091a',
     },

@@ -5,6 +5,7 @@ import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, FileUpload, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
 import { absUrl, nativeBridge, shareOrigin } from '../config';
+import PullToRefresh from '../components/PullToRefresh';
 
 const TYPE_STYLE = {
   'Fundraising Announcement': 'chip-gold', 'Round Closed': 'chip-green', 'Milestone': 'chip-blue',
@@ -47,6 +48,7 @@ export default function Social() {
     .filter(p => !q || String((p.text || '') + ' ' + (p.author?.name || '') + ' ' + (p.startup?.name || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (
+    <PullToRefresh onRefresh={load}>
     <div className="max-w-2xl mx-auto fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-5">
         <div>
@@ -88,6 +90,7 @@ export default function Social() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }
 

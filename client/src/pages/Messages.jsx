@@ -70,6 +70,7 @@ export default function Messages() {
     setSending(true);
     try {
       await api.post(`/api/messages/${active}/send`, { text: text.trim(), attachment_key: attach?.key || '', attachment_name: attach?.name || '', ...extra });
+      nativeBridge.haptic?.('light');
       setText(''); setAttach(null);
       loadThread(); loadList();
     } catch (e) { toast(e.message, 'error'); } finally { setSending(false); }

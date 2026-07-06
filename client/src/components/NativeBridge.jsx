@@ -1,23 +1,32 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useToast } from './ui';
 
 // Router-coupled native behavior. Lazily rendered (only on device) inside
-// BrowserRouter, so useNavigate/useLocation are available. Renders nothing.
+// BrowserRouter + ToastProvider, so useNavigate/useToast are available. Renders nothing.
 //
-// - Android hardware back: navigate back through the SPA history; on a root
-//   screen, background the app instead of dead-ending.
-// - appUrlOpen: deep links (https://fundamental.co.in/...) route in-app once
-//   universal/app links are configured in the store consoles (fast-follow).
+// - Android hardware back: an open overlay (modal/menu) consumes it first via the
+//   cancellable 'app-back' event; otherwise navigate back, or background the app
+//   on a root screen instead of dead-ending.
+// - appUrlOpen: deep links (https://fundamental.co.in/...) route in-app.
+// - appStateChange: returning to the foreground refreshes badges and page polls.
+// - session-expired: in-app transition to /login (no full WebView reload).
+// - native-download-error: surfaced through the app's own toast system.
 export default function NativeBridge() {
   const nav = useNavigate();
   const loc = useLocation();
+  const toast = useToast();
 
   useEffect(() => {
-    let sub, urlSub, cancelled = false;
+    let backSub, urlSub, stateSub, cancelled = false;
     (async () => {
       const { App } = await import('@capacitor/app');
       if (cancelled) return;
-      sub = await App.addListener('backButton', ({ canGoBack }) => {
+      backSub = await App.addListener('backButton', ({ canGoBack }) => {
+        // Give open overlays (modals, menus) first right of refusal.
+        const ev = new CustomEvent('app-back', { cancelable: true });
+        window.dispatchEvent(ev);
+        if (ev.defaultPrevented) return;
         const roots = ['/', '/discover', '/login'];
         if (roots.includes(window.location.pathname) || !canGoBack) App.minimizeApp();
         else window.history.back();
@@ -28,17 +37,33 @@ export default function NativeBridge() {
           if (u.pathname && u.pathname !== '/') nav(u.pathname + u.search);
         } catch { /* not a routable URL */ }
       });
+      stateSub = await App.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          // Wake the pollers immediately — badges/threads must not stay stale
+          // for up to a full poll interval after returning to the app.
+          window.dispatchEvent(new Event('badge-refresh'));
+          window.dispatchEvent(new Event('app-resumed'));
+        }
+      });
     })();
-    return () => { cancelled = true; sub?.remove(); urlSub?.remove(); };
+    return () => { cancelled = true; backSub?.remove(); urlSub?.remove(); stateSub?.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Surface native download failures through the app's own toast styling-free path:
-  // keep it simple — an alert is honest and rare (download errors only).
+  // Session expiry (from api.js): an in-app route change, not a WebView reload.
   useEffect(() => {
-    const onErr = (e) => { try { window.alert(e.detail || 'Download failed'); } catch { /* ignore */ } };
+    const onExpired = () => nav('/login');
+    window.addEventListener('session-expired', onExpired);
+    return () => window.removeEventListener('session-expired', onExpired);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Download failures surface as a normal error toast.
+  useEffect(() => {
+    const onErr = (e) => toast(e.detail || 'Download failed', 'error');
     window.addEventListener('native-download-error', onErr);
     return () => window.removeEventListener('native-download-error', onErr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => { /* keep location observed so back-button state stays fresh */ }, [loc]);

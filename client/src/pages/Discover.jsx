@@ -6,6 +6,7 @@ import { api, asArray, asObject } from '../api';
 import StartupCard from '../components/StartupCard';
 import Constellation from '../components/Constellation';
 import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import PullToRefresh from '../components/PullToRefresh';
 
 function TrendingStrip({ startups }) {
   const trending = [...asArray(startups)].sort((a, b) => b.momentum - a.momentum).slice(0, 5).filter(s => s.momentum > 0);
@@ -149,6 +150,7 @@ export default function Discover() {
   );
 
   return (
+    <PullToRefresh onRefresh={async () => { const d = await api.get(`/api/startups?${qs}&limit=${PAGE}&offset=0`); setData(d); setItems(asArray(d.startups)); }}>
     <div className="fade-in overflow-x-clip">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div className="flex items-center gap-4">
@@ -217,5 +219,6 @@ export default function Discover() {
         </div>
       </Modal>
     </div>
+    </PullToRefresh>
   );
 }

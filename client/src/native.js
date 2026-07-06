@@ -2,15 +2,17 @@
 // so none of this (or the Capacitor packages) ever lands in the web bundle.
 //
 // Responsibilities:
-//   - restore the bearer session from device storage BEFORE React renders
+//   - restore the bearer session (and cached user) from device storage BEFORE React renders
 //   - persist/clear tokens via the api.js session hooks
 //   - status bar style follows the app theme; splash hides when the session probe resolves
 //   - external links open in the system browser, not inside the WebView
 //   - authenticated file downloads land in the OS share sheet
+//   - haptic feedback hook for taps that deserve it
 import { setAuthToken, session } from './api';
 import { apiUrl, nativeBridge } from './config';
 
 const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'cached_user';
 
 export async function initNative() {
   const { Preferences } = await import('@capacitor/preferences');
@@ -19,11 +21,18 @@ export async function initNative() {
   const { Browser } = await import('@capacitor/browser');
   const { Share } = await import('@capacitor/share');
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
+  const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
   const { Capacitor } = await import('@capacitor/core');
+  const isAndroid = Capacitor.getPlatform() === 'android';
 
   // ---- Session restore + persistence ----
   let token = null;
-  try { token = (await Preferences.get({ key: TOKEN_KEY })).value; } catch { /* first run */ }
+  let cachedUser = null;
+  try {
+    token = (await Preferences.get({ key: TOKEN_KEY })).value;
+    const cu = (await Preferences.get({ key: USER_KEY })).value;
+    if (cu) cachedUser = JSON.parse(cu);
+  } catch { /* first run */ }
   if (token) setAuthToken(token);
   session.onToken = (t) => {
     setAuthToken(t);
@@ -33,15 +42,27 @@ export async function initNative() {
   session.onExpired = () => {
     setAuthToken(null);
     token = null;
+    cachedUser = null;
     Preferences.remove({ key: TOKEN_KEY }).catch(() => {});
+    Preferences.remove({ key: USER_KEY }).catch(() => {});
   };
+  // Offline cold starts: AuthContext falls back to this when the session probe
+  // fails with a NETWORK error (never for a real 401 — onExpired clears it).
+  session.onUser = (user) => {
+    cachedUser = user;
+    Preferences.set({ key: USER_KEY, value: JSON.stringify(user) }).catch(() => {});
+  };
+  session.getCachedUser = () => (token ? cachedUser : null);
 
   // ---- Status bar follows the theme ----
+  // Android: the WebView does NOT overlay the status bar (config overlaysWebView:false
+  // + edge-to-edge opt-out in styles.xml), so we just tint it. iOS: overlays, with
+  // safe-area padding handled by the .safe-top CSS.
   const setTheme = async (theme) => {
     try {
       // Style.Dark = light text (for our dark UI); Style.Light = dark text.
       await StatusBar.setStyle({ style: theme === 'light' ? Style.Light : Style.Dark });
-      if (Capacitor.getPlatform() === 'android') {
+      if (isAndroid) {
         await StatusBar.setBackgroundColor({ color: theme === 'light' ? '#f8fafc' : '#04091a' });
       }
     } catch { /* status bar unavailable (e.g. iPad multitasking) */ }
@@ -74,6 +95,12 @@ export async function initNative() {
 
   // ---- Native share sheet ----
   nativeBridge.share = ({ title, url }) => Share.share({ title: title || 'Fundamental', url });
+
+  // ---- Haptics (fire-and-forget; never block or throw into callers) ----
+  nativeBridge.haptic = (style = 'light') => {
+    const map = { light: ImpactStyle.Light, medium: ImpactStyle.Medium, heavy: ImpactStyle.Heavy };
+    Haptics.impact({ style: map[style] || ImpactStyle.Light }).catch(() => {});
+  };
 
   // ---- Authenticated downloads → share sheet (open / save / AirDrop) ----
   nativeBridge.downloadFile = async (url, name) => {

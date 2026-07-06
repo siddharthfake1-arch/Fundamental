@@ -31,8 +31,15 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // Every session-user update (login, signup, profile edits) also refreshes the
+  // native offline cache, so a fresh sign-in survives an offline relaunch too.
+  const setUserCached = useCallback((u) => {
+    setUser(u);
+    if (u) session.onUser?.(u);
+  }, []);
+
   return (
-    <AuthCtx.Provider value={{ user, setUser, refresh, logout, loading }}>
+    <AuthCtx.Provider value={{ user, setUser: setUserCached, refresh, logout, loading }}>
       {children}
     </AuthCtx.Provider>
   );
