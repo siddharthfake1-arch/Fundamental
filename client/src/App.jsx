@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
@@ -48,6 +49,9 @@ export default function App() {
   const { user, loading } = useAuth();
   const loc = useLocation();
 
+  // Native: hold the splash screen until the session probe resolves (no white flash).
+  useEffect(() => { if (!loading) window.__hideSplash?.(); }, [loading]);
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner /></div>;
 
   if (!user) {
@@ -78,7 +82,7 @@ export default function App() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="max-w-7xl mx-auto px-4 py-6 pb-20">
+          className="max-w-7xl mx-auto px-4 py-6 pb-20 safe-bottom">
           <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />

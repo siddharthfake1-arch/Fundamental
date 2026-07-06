@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api, timeAgo, asArray, asObject } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, FileUpload, Modal, ReportModal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { absUrl, nativeBridge } from '../config';
 
 const STAGES = ['Intro', 'Due Diligence', 'Closed', 'Passed'];
 const STAGE_STYLE = { 'Intro': 'chip-blue', 'Due Diligence': 'chip-gold', 'Closed': 'chip-green', 'Passed': 'chip-red' };
@@ -148,8 +149,9 @@ export default function Messages() {
                         )}
                         {m.text}
                         {m.attachment_download
-                          ? <a href={m.attachment_download} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline">📎 Attachment</a>
-                          : m.attachment && <a href={m.attachment} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline">📎 Attachment</a>}
+                          ? <a href={m.attachment_download} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline"
+                              onClick={(e) => { if (nativeBridge.downloadFile) { e.preventDefault(); nativeBridge.downloadFile(m.attachment_download, m.attachment_name || 'attachment'); } }}>📎 Attachment</a>
+                          : m.attachment && <a href={absUrl(m.attachment)} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline">📎 Attachment</a>}
                         <div className={`text-[10px] mt-1 ${mine ? 'text-gold-300/50' : 'text-mist-500'}`}>{timeAgo(m.created_at)}</div>
                       </div>
                     </div>

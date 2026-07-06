@@ -15,6 +15,7 @@ export function ThemeProvider({ children }) {
     root.classList.remove('dark', 'light');
     root.classList.add(theme);
     writeTheme(theme);
+    window.__setNativeTheme?.(theme); // native: keep the status bar style in sync
   }, [theme]);
 
   const toggle = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'));

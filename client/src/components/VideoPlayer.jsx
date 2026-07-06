@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { absUrl } from '../config';
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
@@ -27,7 +28,7 @@ export default function VideoPlayer({ src, chapters = [], onFirstPlay, views }) 
       <div className="relative rounded-xl overflow-hidden border border-ink-600/60 bg-black">
         <video
           ref={ref}
-          src={src}
+          src={absUrl(src)}
           controls
           playsInline
           preload="metadata"

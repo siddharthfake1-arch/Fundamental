@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { IS_NATIVE } from '../config';
 
 // Minimal, accessible cookie/consent disclosure. The session cookie is essential
 // (no third-party tracking), so this is a disclosure + acknowledgement.
@@ -7,7 +8,8 @@ export default function CookieConsent() {
   const [dismissed, setDismissed] = useState(() => {
     try { return localStorage.getItem('cookie_ack') === '1'; } catch { return false; }
   });
-  if (dismissed) return null;
+  // The native app doesn't use cookies at all (bearer token in device storage).
+  if (IS_NATIVE || dismissed) return null;
   const ack = () => { try { localStorage.setItem('cookie_ack', '1'); } catch { /* ignore */ } setDismissed(true); };
   return (
     <div role="region" aria-label="Cookie notice"

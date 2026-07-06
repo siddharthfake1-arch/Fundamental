@@ -50,7 +50,7 @@ export default function Legal() {
   const { doc } = useParams();
   const d = DOCS[doc] || DOCS.terms;
   return (
-    <div className="min-h-screen bg-ink-950">
+    <div className="min-h-screen bg-ink-950 safe-top safe-bottom">
       <header className="max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
         <Link to="/"><Logo className="h-[40px]" /></Link>
         <Link to="/" className="btn-ghost btn-sm">Back to Fundamental</Link>

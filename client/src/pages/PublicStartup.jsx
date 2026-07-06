@@ -5,6 +5,7 @@ import { MoveRight, PlayCircle } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Logo, ScoreRing, Spinner, VerifiedBadge } from '../components/ui';
+import { absUrl } from '../config';
 
 // Public, shareable startup snapshot — the platform's top-of-funnel.
 export default function PublicStartup() {
@@ -27,7 +28,7 @@ export default function PublicStartup() {
   const { startup: s, founder } = d;
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-ink-950">
+    <div className="min-h-screen relative overflow-hidden bg-ink-950 safe-top safe-bottom">
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(55% 45% at 15% 0%, rgba(128,82,255,0.12), transparent 70%), radial-gradient(50% 40% at 90% 100%, rgba(128,82,255,0.10), transparent 70%)' }} />
 
       <header className="relative max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
@@ -66,7 +67,7 @@ export default function PublicStartup() {
             <PlayCircle className="w-4 h-4 text-gold-400" />
             <span className="section-title">The 12-minute pitch</span>
           </div>
-          <video src={s.video_url} controls playsInline preload="metadata" className="w-full aspect-video rounded-xl bg-black border border-ink-600/50" />
+          <video src={absUrl(s.video_url)} controls playsInline preload="metadata" className="w-full aspect-video rounded-xl bg-black border border-ink-600/50" />
           {founder && (
             <div className="flex items-center gap-2 mt-4 text-sm text-mist-400">
               Pitched by <span className="font-semibold text-mist-100">{founder.name}</span>

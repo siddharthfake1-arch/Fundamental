@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, createContext, useContext, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../api';
+import { absUrl } from '../config';
 
 export function Avatar({ src, name, size = 10, square = false }) {
   const px = size * 4;
   const cls = `${square ? 'rounded-xl' : 'rounded-full'} object-cover bg-ink-700 border border-ink-600/60 shrink-0`;
-  if (src) return <img src={src} alt={name} style={{ width: px, height: px }} className={cls} />;
+  if (src) return <img src={absUrl(src)} alt={name} style={{ width: px, height: px }} className={cls} />;
   return (
     <div style={{ width: px, height: px, fontSize: px * 0.38 }}
       className={`${cls} flex items-center justify-center font-display font-bold text-mist-300`}>
@@ -67,7 +68,7 @@ export function CoverHero({ cover, fallbackKey = '', height = 'h-44 sm:h-56', ch
     <div className="card overflow-hidden !rounded-2xl">
       <div className={`relative ${height} overflow-hidden`}>
         {cover ? (
-          <img ref={ref} src={cover} alt="" className="absolute inset-0 w-full h-full object-cover will-change-transform" style={{ transform: 'scale(1.06)' }} />
+          <img ref={ref} src={absUrl(cover)} alt="" className="absolute inset-0 w-full h-full object-cover will-change-transform" style={{ transform: 'scale(1.06)' }} />
         ) : (
           <div ref={ref} className="absolute inset-0 will-change-transform" style={{ transform: 'scale(1.06)', background: `linear-gradient(120deg, hsl(${hue} 55% 24%), hsl(${(hue + 50) % 360} 65% 40%))` }} />
         )}
@@ -157,7 +158,7 @@ export function ToastProvider({ children }) {
     <ToastCtx.Provider value={toast}>
       {children}
       {/* F-026: announce toasts to assistive tech (errors assertively, rest politely). */}
-      <div aria-live="polite" aria-atomic="true" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92%] max-w-md pointer-events-none">
+      <div aria-live="polite" aria-atomic="true" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92%] max-w-md pointer-events-none safe-bottom">
         <AnimatePresence>
           {toasts.map(t => (
             <motion.div key={t.id} role={t.kind === 'error' ? 'alert' : 'status'}

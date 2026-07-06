@@ -122,7 +122,7 @@ export default function Nav() {
   if (user.role === 'admin') links.push({ to: '/admin', label: 'Admin' });
 
   return (
-    <header className="sticky top-0 z-40 bg-ink-950/85 backdrop-blur-lg border-b border-ink-700/60">
+    <header className="sticky top-0 z-40 bg-ink-950/85 backdrop-blur-lg border-b border-ink-700/60 safe-top">
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center gap-3">
         <Link to="/discover" className="shrink-0"><Logo className="h-[58px]" /></Link>
 

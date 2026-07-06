@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { api } from './api';
+import { api, session } from './api';
 
 const AuthCtx = createContext(null);
 
@@ -22,6 +22,7 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     await api.post('/api/auth/logout');
+    session.onExpired?.(); // native: clear the stored bearer token
     setUser(null);
   };
 

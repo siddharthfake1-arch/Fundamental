@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, FileUpload, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
+import { absUrl, nativeBridge, shareOrigin } from '../config';
 
 const TYPE_STYLE = {
   'Fundraising Announcement': 'chip-gold', 'Round Closed': 'chip-green', 'Milestone': 'chip-blue',
@@ -182,7 +183,9 @@ function Post({ p, onChange }) {
     }
   };
   const share = async () => {
-    try { await navigator.clipboard.writeText(`${window.location.origin}/social?post=${p.id}`); toast('Link to this post copied', 'success'); }
+    const url = `${shareOrigin()}/social?post=${p.id}`;
+    if (nativeBridge.share) { try { await nativeBridge.share({ url }); } catch { /* user dismissed */ } return; }
+    try { await navigator.clipboard.writeText(url); toast('Link to this post copied', 'success'); }
     catch { toast('Could not copy link', 'error'); }
   };
 
@@ -259,10 +262,10 @@ function Post({ p, onChange }) {
 
       {p.media && (
         /\.(mp4|webm|mov)/i.test(p.media)
-          ? <video src={p.media} controls className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
+          ? <video src={absUrl(p.media)} controls className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
           : /\.(png|jpe?g|gif|svg|webp)/i.test(p.media)
-            ? <img src={p.media} alt="" className="mt-3 rounded-xl w-full border border-ink-600/60" />
-            : <a href={p.media} target="_blank" rel="noreferrer" className="block mt-3 text-sm text-accent-400 underline">📎 View attachment</a>
+            ? <img src={absUrl(p.media)} alt="" className="mt-3 rounded-xl w-full border border-ink-600/60" />
+            : <a href={absUrl(p.media)} target="_blank" rel="noreferrer" className="block mt-3 text-sm text-accent-400 underline">📎 View attachment</a>
       )}
 
       {p.startup && (

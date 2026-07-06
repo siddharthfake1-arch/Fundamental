@@ -5,6 +5,7 @@ import { api, asArray } from '../api';
 import { useAuth } from '../AuthContext';
 import { useTheme } from '../ThemeContext';
 import { FileUpload, Avatar, Spinner, CityInput, LinksEditor, TeamEditor, useConfirm, useToast } from '../components/ui';
+import { absUrl } from '../config';
 
 const Field = ({ label, children }) => <label className="block"><span className="label">{label}</span>{children}</label>;
 
@@ -43,7 +44,7 @@ function Account({ user, refresh }) {
   const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
   return (
     <div className="card p-6 space-y-4">
-      {f.cover && <img src={f.cover} alt="" className="w-full h-28 object-cover rounded-xl border border-ink-700/50" />}
+      {f.cover && <img src={absUrl(f.cover)} alt="" className="w-full h-28 object-cover rounded-xl border border-ink-700/50" />}
       <FileUpload label="Cover banner — a wide image for your profile header" accept="image/*" currentUrl={f.cover} onUploaded={(d) => setF(x => ({ ...x, cover: d.url }))} />
       <div className="flex items-center gap-4">
         <Avatar src={f.photo} name={f.name} size={16} />
@@ -163,7 +164,7 @@ function StartupSettings() {
         <div className="text-xs text-mist-300 bg-gold-500/[0.06] border border-gold-500/30 rounded-lg px-3 py-2">
           You can save your profile without a video, but it will not go live until a video is added.
         </div>
-        {s.video_url && <video src={s.video_url} controls className="w-full rounded-xl aspect-video bg-black border border-ink-600/60" />}
+        {s.video_url && <video src={absUrl(s.video_url)} controls className="w-full rounded-xl aspect-video bg-black border border-ink-600/60" />}
         <FileUpload label="Pitch video" accept="video/*" currentUrl={s.video_url} hint="MP4 / WebM / MOV · up to 12 minutes · max 100 MB" maxBytes={100 * 1024 * 1024}
           onUploaded={(d) => {
             if (d.duration && d.duration > 12 * 60) { toast(`That video is ${Math.round(d.duration / 60)} minutes. The pitch must be 12 minutes or less.`, 'error'); return; }

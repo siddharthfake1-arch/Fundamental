@@ -159,7 +159,7 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden bg-ink-950">
+    <div className="min-h-screen flex flex-col lg:flex-row relative overflow-hidden bg-ink-950 safe-top safe-bottom">
       {/* Edgeless ambient glow for depth — no hard-edged orbs */}
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(60% 50% at 22% 8%, rgba(128,82,255,0.12), transparent 70%), radial-gradient(55% 45% at 88% 92%, rgba(128,82,255,0.10), transparent 70%)' }} />
 

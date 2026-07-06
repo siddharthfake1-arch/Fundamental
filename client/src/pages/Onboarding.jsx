@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
 import { Logo, FileUpload, CityInput, LinksEditor, TeamEditor, useToast } from '../components/ui';
+import { absUrl } from '../config';
 
 const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer', 'Other'];
 const STAGES = ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'];
@@ -27,7 +28,7 @@ export default function Onboarding() {
 
 function Shell({ step, total, title, sub, children, completion }) {
   return (
-    <div className="min-h-screen max-w-2xl mx-auto px-4 py-10">
+    <div className="min-h-screen max-w-2xl mx-auto px-4 py-10 safe-top safe-bottom">
       <div className="flex items-center justify-between mb-8">
         <Logo className="h-[58px]" />
         {completion != null && (
@@ -348,7 +349,7 @@ function VideoStep({ s, setS, toast }) {
         }} />
       {s.video_url && (
         <div className="card p-3">
-          <video src={s.video_url} controls className="w-full rounded-lg aspect-video bg-black" />
+          <video src={absUrl(s.video_url)} controls className="w-full rounded-lg aspect-video bg-black" />
           {s.video_minutes != null && <div className="text-xs text-mist-400 mt-2">Duration ≈ {s.video_minutes} min ✓</div>}
         </div>
       )}

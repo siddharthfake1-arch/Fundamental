@@ -5,6 +5,7 @@ import { api, asArray, asObject, fmtMoney, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import VideoPlayer from '../components/VideoPlayer';
 import { Avatar, BarBreakdown, CoverHero, Empty, LineChart, Modal, ScoreRing, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
+import { nativeBridge, shareOrigin } from '../config';
 
 const Section = ({ id, title, action, children }) => (
   <motion.section id={id} className="card p-5 sm:p-6"
@@ -82,7 +83,8 @@ export default function Startup() {
   }, d.connected ? null : 'Connection request sent');
 
   const copyLink = async () => {
-    const url = `${window.location.origin}/s/${s.id}`;
+    const url = `${shareOrigin()}/s/${s.id}`;
+    if (nativeBridge.share) { try { await nativeBridge.share({ title: s.name, url }); } catch { /* user dismissed */ } return; }
     try { await navigator.clipboard.writeText(url); toast('Public link copied.', 'success'); }
     catch { toast(url, 'info'); }
   };
@@ -283,9 +285,11 @@ export default function Startup() {
                   <button className="btn-ghost btn-sm" disabled={!c.has_file && !c.file_url} onClick={async () => {
                     if (c.file_url) { // external link — open safely
                       api.post(`/api/startups/collateral/${c.id}/download`).catch(() => {});
-                      window.open(c.file_url, '_blank', 'noopener,noreferrer');
+                      if (nativeBridge.openExternal) nativeBridge.openExternal(c.file_url);
+                      else window.open(c.file_url, '_blank', 'noopener,noreferrer');
                     } else if (c.has_file) { // private file — streamed through the access-checked endpoint
-                      window.open(`/api/startups/collateral/${c.id}/download`, '_blank', 'noopener,noreferrer');
+                      if (nativeBridge.downloadFile) nativeBridge.downloadFile(`/api/startups/collateral/${c.id}/download`, c.title || 'document');
+                      else window.open(`/api/startups/collateral/${c.id}/download`, '_blank', 'noopener,noreferrer');
                     } else {
                       toast('No file attached to this document yet', 'info');
                     }

@@ -21,7 +21,7 @@ export default function Landing() {
   const [shape, setShape] = useState(SHAPES[0]);
 
   return (
-    <div className="min-h-screen bg-black text-white" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-black text-white safe-top safe-bottom" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       {/* Nav */}
       <header className="fixed top-0 inset-x-0 z-50 bg-black/85">
         <div className="max-w-[1200px] mx-auto px-6 h-[72px] flex items-center justify-between">

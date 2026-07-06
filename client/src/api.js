@@ -1,5 +1,18 @@
+import { apiUrl, IS_NATIVE } from './config';
+
+// Native session plumbing. On the web, auth is an httpOnly cookie and all of this is
+// inert. The native app (Capacitor) cannot use cross-origin cookies, so it holds a
+// bearer token: native.js installs these hooks at boot — onToken persists a fresh
+// token to device storage, onExpired clears it when the session dies.
+let authToken = null;
+export function setAuthToken(t) { authToken = t || null; }
+export const session = { onToken: null, onExpired: null };
+
 async function request(method, url, body) {
-  const opts = { method, credentials: 'include', headers: {} };
+  // Native sends credentials:'omit' — the server intentionally never allows
+  // credentialed CORS, so the pair (bearer + omit) is what keeps requests readable.
+  const opts = { method, credentials: IS_NATIVE ? 'omit' : 'include', headers: {} };
+  if (authToken) opts.headers.Authorization = 'Bearer ' + authToken;
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
@@ -9,21 +22,25 @@ async function request(method, url, body) {
   const timeout = setTimeout(() => ctrl.abort(), 20000);
   opts.signal = ctrl.signal;
   let res;
-  try { res = await fetch(url, opts); }
+  try { res = await fetch(apiUrl(url), opts); }
   catch (e) { clearTimeout(timeout); throw new Error(e.name === 'AbortError' ? 'The request timed out. Check your connection and try again.' : 'Network error — please try again.'); }
   clearTimeout(timeout);
   let data = {};
   try { data = await res.json(); } catch { /* empty body */ }
   if (!res.ok) {
     // Centralized session-expiry handling: a 401 on anything other than the
-    // session probe means the cookie is gone/expired — send the user to sign in.
+    // session probe means the session is gone/expired — send the user to sign in.
     if (res.status === 401 && !url.endsWith('/api/auth/me') && typeof window !== 'undefined' && !location.pathname.startsWith('/login') && location.pathname !== '/') {
+      session.onExpired?.();
       location.assign('/login');
     }
     const err = new Error(data.error || `Request failed (${res.status})`);
     err.status = res.status;
     throw err;
   }
+  // Auth responses (login/signup/change-password) carry the session token in the
+  // body for token clients — adopting it here means no page-level code changes.
+  if (data && typeof data.token === 'string' && session.onToken) session.onToken(data.token);
   return data;
 }
 
@@ -48,8 +65,9 @@ function uploadTo(endpoint, file, onProgress) {
   fd.append('file', file);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', endpoint);
-    xhr.withCredentials = true;
+    xhr.open('POST', apiUrl(endpoint));
+    xhr.withCredentials = !IS_NATIVE;
+    if (authToken) xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
     // A stalled upload must fail visibly, never hang the progress bar forever.
     // 10 minutes accommodates a 100 MB pitch video on a slow uplink.
     xhr.timeout = 10 * 60 * 1000;
