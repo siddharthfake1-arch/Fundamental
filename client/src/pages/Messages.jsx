@@ -97,10 +97,14 @@ export default function Messages() {
   return (
     <PullToRefresh onRefresh={() => Promise.all([loadList(), active && loadThread()].filter(Boolean))}>
     <div className="fade-in">
-      <h1 className="h-display text-2xl mb-1">Messages</h1>
-      <p className="text-sm text-mist-400 mb-5">Conversations open once a connection is accepted.</p>
+      {/* On phones an open thread takes the whole screen (real chat app) — the
+          page title only shows on the conversation list / desktop split view. */}
+      <div className={active ? 'hidden md:block' : ''}>
+        <h1 className="h-display text-2xl mb-1">Messages</h1>
+        <p className="text-sm text-mist-400 mb-5 page-sub">Conversations open once a connection is accepted.</p>
+      </div>
 
-      <div className="card overflow-hidden grid md:grid-cols-[320px_1fr]" style={{ height: 'calc(100dvh - 220px)', minHeight: 420 }}>
+      <div className={`card overflow-hidden grid md:grid-cols-[320px_1fr] chat-card ${active ? 'chat-card-active' : ''}`}>
         {/* Left panel */}
         <div className={`border-r border-ink-700/60 flex flex-col ${active ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b border-ink-700/60">

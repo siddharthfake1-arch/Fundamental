@@ -19,10 +19,10 @@ export default function Settings() {
   return (
     <div className="max-w-3xl mx-auto fade-in">
       <h1 className="h-display text-2xl mb-5">Settings</h1>
-      <div className="flex gap-1 mb-6 overflow-x-auto rounded-xl bg-ink-850 border border-ink-600/60 p-1 w-fit max-w-full">
+      <div className="flex gap-1 mb-6 overflow-x-auto no-scrollbar rounded-xl bg-ink-850 border border-ink-600/60 p-1 w-fit max-w-full -mx-1 px-1 sm:mx-0">
         {tabs.map(([t, l]) => (
           <button key={t} onClick={() => setParams({ tab: t })}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors min-h-[42px] ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
         ))}
       </div>
       {/* Form tabs stay MOUNTED (hidden, not unmounted) so switching tabs never

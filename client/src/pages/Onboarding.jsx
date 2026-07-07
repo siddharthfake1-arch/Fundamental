@@ -36,7 +36,7 @@ export default function Onboarding() {
 
 function Shell({ step, total, title, sub, children, completion }) {
   return (
-    <div className="min-h-screen max-w-2xl mx-auto px-4 py-10 safe-top safe-bottom">
+    <div className="min-h-screen max-w-2xl mx-auto px-4 py-10 safe-top safe-bottom kb-pad pb-16">
       <div className="flex items-center justify-between mb-8">
         <Logo className="h-[58px]" />
         {completion != null && (
