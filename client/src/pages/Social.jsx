@@ -53,7 +53,7 @@ export default function Social() {
       <div className="flex items-end justify-between flex-wrap gap-3 mb-5">
         <div>
           <h1 className="h-display text-2xl">Social</h1>
-          <p className="text-sm text-mist-400 mt-1">Professional updates from the network, capped at 400 characters.</p>
+          <p className="text-sm text-mist-400 mt-1 page-sub">Professional updates from the network, capped at 400 characters.</p>
         </div>
         <div className="flex gap-2">
           <input className="input !w-44 !py-2 !text-xs" aria-label="Search" placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />

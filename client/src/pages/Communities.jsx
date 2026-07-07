@@ -40,7 +40,7 @@ function CommunityIndex() {
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="h-display text-2xl">Communities</h1>
-          <p className="text-sm text-mist-400 mt-1">Where founders, investors, and operators share what they know.</p>
+          <p className="text-sm text-mist-400 mt-1 page-sub">Where founders, investors, and operators share what they know.</p>
         </div>
         <div className="flex gap-2">
           <input className="input !w-56" aria-label="Search" placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} />

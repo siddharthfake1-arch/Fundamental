@@ -174,3 +174,43 @@ html, body { overscroll-behavior-y: none; }
 
 /* Bottom tab bar (mobile) */
 .bottomnav-blur { background: rgb(var(--ink-950) / 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+
+/* ---- Native app shell ---- */
+/* Keyboard awareness: the native runtime sets --keyboard-height and toggles
+   body.kb-open around the OS keyboard. Inert on the web (var stays 0). */
+body.kb-open .kb-hide { display: none; }
+.kb-pad { padding-bottom: var(--keyboard-height, 0px); }
+
+/* Hide scrollbars on horizontal tab strips without killing scroll */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Compact contextual native header */
+.mobile-header { background: rgb(var(--ink-950) / 0.92); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+
+/* Menu page list rows — large, thumb-friendly targets */
+.menu-row { @apply w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl text-left text-sm font-medium text-mist-200 active:bg-ink-800 transition-colors min-h-[52px]; }
+
+/* Bottom sheet drag handle (Modal on touch screens) */
+.sheet-handle { display: none; }
+@media (pointer: coarse) {
+  .sheet-handle { display: block; width: 40px; height: 4px; border-radius: 9999px;
+    background: rgb(var(--ink-600)); margin: 10px auto 2px; }
+}
+
+/* Long marketing subtitles are noise on a phone — keep list pages scannable. */
+@media (max-width: 639px) {
+  .page-sub { display: none; }
+}
+
+/* Messages split view. Desktop: fixed card below the page title. Phones with an
+   open thread: near-full-height chat; when the native keyboard opens the height
+   shrinks by --keyboard-height so the composer rides just above the keys. */
+.chat-card { height: calc(100dvh - 220px); min-height: 420px; }
+@media (max-width: 767px) {
+  .chat-card { height: calc(100dvh - 260px); min-height: 360px; }
+  .chat-card-active { height: calc(100dvh - 150px); min-height: 0; }
+  /* Keyboard open: the OS resizes the WebView (100dvh shrinks with it), the tab
+     bar hides (kb-hide), so only the header offset remains. */
+  body.kb-open .chat-card-active { height: calc(100dvh - 84px); }
+}

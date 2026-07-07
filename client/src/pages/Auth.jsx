@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { MoveRight, PlayCircle, ShieldCheck, FolderLock, TrendingUp, Globe2 } from 'lucide-react';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import { IS_NATIVE } from '../config';
 import { Logo, useToast } from '../components/ui';
 import Constellation from '../components/Constellation';
 
@@ -163,8 +164,11 @@ export default function Auth() {
       {/* Edgeless ambient glow for depth — no hard-edged orbs */}
       <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(60% 50% at 22% 8%, rgba(128,82,255,0.12), transparent 70%), radial-gradient(55% 45% at 88% 92%, rgba(128,82,255,0.10), transparent 70%)' }} />
 
-      {/* Brand panel */}
-      <div className="lg:w-[52%] relative flex flex-col justify-between p-8 lg:p-14 border-b lg:border-b-0 lg:border-r border-ink-700/50 overflow-hidden">
+      {/* Brand panel — desktop marketing chrome. The native app opens straight on
+          the form (full-screen native auth); mobile web shows the form FIRST and
+          the brand story below it, so Sign in is never buried under a scroll. */}
+      {!IS_NATIVE && (
+      <div className="order-2 lg:order-1 lg:w-[52%] relative flex flex-col justify-between p-8 lg:p-14 border-t lg:border-t-0 lg:border-r border-ink-700/50 overflow-hidden">
         {/* The constellation lives behind the brand copy — masked to a soft nebula
             so it reads as intentional depth, never scattered noise behind the text */}
         <div className="absolute inset-0 pointer-events-none opacity-[0.3]"
@@ -219,9 +223,15 @@ export default function Auth() {
 
         <div className="relative text-xs text-mist-500 hidden lg:block">The private-market network for founders and investors.</div>
       </div>
+      )}
 
       {/* Form panel */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-14 relative">
+      <div className="order-1 lg:order-2 flex-1 flex flex-col items-center justify-start lg:justify-center p-6 lg:p-14 relative kb-pad">
+        {/* Native / mobile: a compact brand header above the form instead of the full panel */}
+        <div className={`w-full max-w-md mb-6 mt-2 ${IS_NATIVE ? '' : 'lg:hidden'}`}>
+          <Logo className="h-[52px] mx-auto" />
+          <p className="text-center text-xs text-mist-400 mt-2">The serious fundraising platform.</p>
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15 }}
           className="w-full max-w-md">

@@ -3,9 +3,11 @@ import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-do
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import Nav from './components/Nav';
+import MobileHeader from './components/MobileHeader';
 import ErrorBoundary from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
 import BottomNav from './components/BottomNav';
+import Menu from './pages/Menu';
 import { IS_NATIVE } from './config';
 import { Spinner } from './components/ui';
 import Auth from './pages/Auth';
@@ -84,7 +86,9 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <OfflineBanner />
-      {loc.pathname !== '/onboarding' && <Nav />}
+      {/* Native gets the compact contextual header — the full web nav (link row +
+          hamburger) is desktop chrome that steals vertical space on a phone. */}
+      {loc.pathname !== '/onboarding' && (IS_NATIVE ? <MobileHeader /> : <Nav />)}
       {loc.pathname !== '/onboarding' && <BottomNav />}
       {/* Route-scoped boundary: a page render crash is caught here and auto-clears
           when the route changes (resetKey), so one bad page never traps the session.
@@ -95,7 +99,7 @@ export default function App() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="max-w-7xl mx-auto px-4 py-6 pb-32 lg:pb-20 safe-bottom">
+          className="max-w-7xl mx-auto px-4 pt-4 sm:pt-6 pb-32 lg:pb-20 safe-bottom">
           <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />
@@ -114,6 +118,7 @@ export default function App() {
           <Route path="/social" element={<Social />} />
           <Route path="/watchlist" element={<Watchlist />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/menu" element={<Menu />} />
           <Route path="/legal/:doc" element={<Legal />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound homeTo="/discover" />} />

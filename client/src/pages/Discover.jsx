@@ -160,7 +160,7 @@ export default function Discover() {
           </div>
           <div>
             <h1 className="h-display text-2xl">Discover</h1>
-            <p className="text-sm text-mist-400 mt-1">Every startup here opens with a 12-minute pitch — watch it before you reach out. <Link to="/startups" className="text-gold-300 hover:text-gold-200">Index view →</Link></p>
+            <p className="text-sm text-mist-400 mt-1 page-sub">Every startup here opens with a 12-minute pitch — watch it before you reach out. <Link to="/startups" className="text-gold-300 hover:text-gold-200">Index view →</Link></p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -177,7 +177,15 @@ export default function Discover() {
       </div>
 
       <div className="grid lg:grid-cols-[260px_1fr] gap-6 items-start">
-        <aside className={`card p-4 lg:sticky lg:top-20 ${filtersOpen ? '' : 'hidden lg:block'}`}>{sidebar}</aside>
+        {/* Desktop keeps the sticky sidebar; phones get the same filters as a
+            bottom sheet (the Modal renders as a sheet on small screens). */}
+        <aside className="card p-4 lg:sticky lg:top-20 hidden lg:block">{sidebar}</aside>
+        <Modal open={filtersOpen} onClose={() => setFiltersOpen(false)} title={`Filters${active ? ` (${active})` : ''}`}>
+          {sidebar}
+          <button className="btn-primary w-full mt-5" onClick={() => setFiltersOpen(false)}>
+            Show {data ? `${data.total} startup${data.total !== 1 ? 's' : ''}` : 'results'}
+          </button>
+        </Modal>
         <div className="min-w-0">
           {data && <TrendingStrip startups={items} />}
           {!data ? <SkeletonList kind="card" n={6} /> : items.length === 0 ? (

@@ -179,8 +179,9 @@ export function Modal({ open, onClose, title, children, wide }) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 16 }}
             transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-            className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto p-6 !pt-0 rounded-b-none sm:rounded-2xl`}
+            className={`card w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[85dvh] sm:max-h-[90vh] overflow-y-auto p-6 !pt-0 rounded-b-none sm:rounded-2xl pb-[max(1.5rem,env(safe-area-inset-bottom))]`}
             style={{ overscrollBehavior: 'contain' }}>
+            <div className="sheet-handle sm:!hidden" aria-hidden />
             <div className="flex items-center justify-between mb-4 sticky top-0 z-10 bg-inherit pt-6 pb-1 -mx-1 px-1">
               <h3 className="h-display text-lg">{title}</h3>
               <button onClick={onClose} aria-label="Close dialog" className="text-mist-400 hover:text-mist-100 text-xl leading-none px-1">×</button>
@@ -206,7 +207,8 @@ export function ToastProvider({ children }) {
     <ToastCtx.Provider value={toast}>
       {children}
       {/* F-026: announce toasts to assistive tech (errors assertively, rest politely). */}
-      <div aria-live="polite" aria-atomic="true" className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92%] max-w-md pointer-events-none safe-bottom">
+      {/* bottom-20 on phones so toasts float above the bottom tab bar */}
+      <div aria-live="polite" aria-atomic="true" className="fixed bottom-20 lg:bottom-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-[92%] max-w-md pointer-events-none safe-bottom">
         <AnimatePresence>
           {toasts.map(t => (
             <motion.div key={t.id} role={t.kind === 'error' ? 'alert' : 'status'}

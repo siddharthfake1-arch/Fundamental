@@ -7,8 +7,9 @@ import { api, asArray } from '../api';
 import { Avatar, Logo, VerifiedBadge } from './ui';
 
 // Global search: startups, people, and communities from one box. Debounced;
-// Escape or an outside click closes the dropdown.
-function GlobalSearch({ className = '' }) {
+// Escape or an outside click closes the dropdown. Exported for the native
+// header's full-screen search overlay.
+export function GlobalSearch({ className = '', autoFocus = false, onNavigate }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState(null);
   const [open, setOpen] = useState(false);
@@ -38,7 +39,7 @@ function GlobalSearch({ className = '' }) {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, []);
 
-  const go = (path) => { setOpen(false); setQ(''); nav(path); };
+  const go = (path) => { setOpen(false); setQ(''); nav(path); onNavigate?.(); };
   // Defensive: a partial payload must never crash the whole nav.
   const startups = asArray(results?.startups), people = asArray(results?.people), communities = asArray(results?.communities);
   const flat = [
@@ -62,7 +63,7 @@ function GlobalSearch({ className = '' }) {
   return (
     <div ref={boxRef} className={`relative ${className}`}>
       <Search className="w-4 h-4 text-mist-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-      <input aria-label="Search Fundamental" className="input !py-2 !pl-9 !text-sm w-full" placeholder="Search…"
+      <input aria-label="Search Fundamental" className="input !py-2 !pl-9 !text-sm w-full" placeholder="Search…" autoFocus={autoFocus}
         value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => results && setOpen(true)} onKeyDown={onKeyNav} />
       {searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-ink-600 border-t-gold-400 animate-spin" aria-hidden />}
       {open && results && (

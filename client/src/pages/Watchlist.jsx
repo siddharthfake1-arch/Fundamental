@@ -46,7 +46,7 @@ export default function Watchlist() {
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
           <h1 className="h-display text-2xl">Pipeline</h1>
-          <p className="text-sm text-mist-400 mt-1">Your deal flow from first look to decision — private to you.</p>
+          <p className="text-sm text-mist-400 mt-1 page-sub">Your deal flow from first look to decision — private to you.</p>
         </div>
         <div className="flex items-center gap-2">
           <input className="input !w-56 !py-2" aria-label="Search" placeholder="Search pipeline…" value={q} onChange={(e) => setQ(e.target.value)} />
