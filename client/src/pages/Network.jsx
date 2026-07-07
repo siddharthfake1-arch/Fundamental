@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, asArray } from '../api';
 import { Avatar, Empty, Spinner, VerifiedBadge, useToast, SkeletonList } from '../components/ui';
+import PullToRefresh from '../components/PullToRefresh';
 
 const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer'];
 const STAGES = ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'];
@@ -42,6 +43,7 @@ export default function Network() {
   const act = async (fn, ok) => { try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } };
 
   return (
+    <PullToRefresh onRefresh={load}>
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
@@ -153,5 +155,6 @@ export default function Network() {
         </div>
       ))}
     </div>
+    </PullToRefresh>
   );
 }

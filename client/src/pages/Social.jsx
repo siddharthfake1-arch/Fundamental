@@ -5,6 +5,7 @@ import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
 import { Avatar, Empty, FileUpload, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast, SkeletonList } from '../components/ui';
 import { absUrl, nativeBridge, shareOrigin } from '../config';
+import PullToRefresh from '../components/PullToRefresh';
 
 const TYPE_STYLE = {
   'Fundraising Announcement': 'chip-gold', 'Round Closed': 'chip-green', 'Milestone': 'chip-blue',
@@ -47,6 +48,7 @@ export default function Social() {
     .filter(p => !q || String((p.text || '') + ' ' + (p.author?.name || '') + ' ' + (p.startup?.name || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (
+    <PullToRefresh onRefresh={load}>
     <div className="max-w-2xl mx-auto fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-5">
         <div>
@@ -88,6 +90,7 @@ export default function Social() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   );
 }
 
@@ -263,7 +266,7 @@ function Post({ p, onChange }) {
 
       {p.media && (
         /\.(mp4|webm|mov)/i.test(p.media)
-          ? <video src={absUrl(p.media)} controls playsInline preload="metadata" className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
+          ? <video src={absUrl(p.media)} controls playsInline preload="metadata" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
           : /\.(png|jpe?g|gif|svg|webp)/i.test(p.media)
             ? <img src={absUrl(p.media)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="mt-3 rounded-xl w-full border border-ink-600/60" />
             : <a href={absUrl(p.media)} target="_blank" rel="noreferrer" className="block mt-3 text-sm text-accent-400 underline">📎 View attachment</a>
