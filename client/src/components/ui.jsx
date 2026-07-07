@@ -6,7 +6,11 @@ import { absUrl, IS_NATIVE } from '../config';
 export function Avatar({ src, name, size = 10, square = false }) {
   const px = size * 4;
   const cls = `${square ? 'rounded-xl' : 'rounded-full'} object-cover bg-ink-700 border border-ink-600/60 shrink-0`;
-  if (src) return <img src={absUrl(src)} alt={name} style={{ width: px, height: px }} className={cls} />;
+  if (src) {
+    return <img src={absUrl(src)} alt={name} loading="lazy" style={{ width: px, height: px }}
+      className={`${cls} img-fade`} onLoad={(e) => e.currentTarget.classList.add('loaded')}
+      onError={(e) => e.currentTarget.classList.add('loaded')} />;
+  }
   return (
     <div style={{ width: px, height: px, fontSize: px * 0.38 }}
       className={`${cls} flex items-center justify-center font-display font-bold text-mist-300`}>
@@ -78,6 +82,45 @@ export function CoverHero({ cover, fallbackKey = '', height = 'h-44 sm:h-56', ch
     </div>
   );
 }
+
+// Content-shaped loading placeholders. A page that knows its final layout should
+// show its silhouette (no jump when data lands), not a centered spinner.
+export const Skeleton = ({ className = '' }) => <div className={`skeleton rounded-lg ${className}`} aria-hidden />;
+
+export const SkeletonCard = () => (
+  <div className="card p-5 space-y-3.5" aria-hidden>
+    <div className="flex items-start gap-3.5">
+      <Skeleton className="w-12 h-12 !rounded-xl" />
+      <div className="flex-1 space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/2" /></div>
+    </div>
+    <Skeleton className="h-3 w-full" />
+    <Skeleton className="h-3 w-5/6" />
+    <div className="flex gap-2 pt-1"><Skeleton className="h-6 w-16 !rounded-full" /><Skeleton className="h-6 w-20 !rounded-full" /></div>
+  </div>
+);
+
+export const SkeletonPost = () => (
+  <div className="card p-5 space-y-3" aria-hidden>
+    <div className="flex items-center gap-3">
+      <Skeleton className="w-10 h-10 !rounded-full" />
+      <div className="flex-1 space-y-2"><Skeleton className="h-3.5 w-40" /><Skeleton className="h-3 w-24" /></div>
+    </div>
+    <Skeleton className="h-3.5 w-full" />
+    <Skeleton className="h-3.5 w-4/5" />
+  </div>
+);
+
+export const SkeletonRow = () => (
+  <div className="card px-4 py-3.5 flex items-center gap-3" aria-hidden>
+    <Skeleton className="w-10 h-10 !rounded-full shrink-0" />
+    <div className="flex-1 space-y-2"><Skeleton className="h-3.5 w-3/5" /><Skeleton className="h-3 w-2/5" /></div>
+  </div>
+);
+
+export const SkeletonList = ({ n = 4, kind = 'row' }) => {
+  const K = kind === 'card' ? SkeletonCard : kind === 'post' ? SkeletonPost : SkeletonRow;
+  return <div className={kind === 'card' ? 'grid sm:grid-cols-2 xl:grid-cols-3 gap-4' : 'space-y-3'}>{Array.from({ length: n }, (_, i) => <K key={i} />)}</div>;
+};
 
 export const Spinner = ({ className = '' }) => (
   <div className={`flex justify-center py-12 ${className}`}>

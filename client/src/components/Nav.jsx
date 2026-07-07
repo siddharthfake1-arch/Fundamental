@@ -123,7 +123,10 @@ export default function Nav() {
     let alive = true;
     const poll = async () => {
       if (document.hidden) return; // backgrounded app: don't burn battery/API budget
-      try { const c = await api.get('/api/badge-counts'); if (alive) setCounts(c); } catch {}
+      try {
+        const c = await api.get('/api/badge-counts');
+        if (alive) { setCounts(c); window.dispatchEvent(new CustomEvent('badge-counts', { detail: c })); }
+      } catch { /* transient */ }
     };
     poll();
     const t = setInterval(poll, 15000);

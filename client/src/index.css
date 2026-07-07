@@ -157,3 +157,20 @@ html.light {
 
 /* Kill scroll chaining / rubber-band background flashes behind the fixed header. */
 html, body { overscroll-behavior-y: none; }
+
+/* ---- Micro-interactions ---- */
+/* Every button gives tactile press feedback. */
+.btn, .nav-link, .chip { -webkit-tap-highlight-color: transparent; }
+.btn:active { transform: scale(0.97); }
+.btn { transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .1s ease; }
+
+/* Like/upvote pop */
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
+.animate-pop { animation: pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* Images fade in as they decode — no hard pop-in. */
+.img-fade { opacity: 0; transition: opacity .35s ease; }
+.img-fade.loaded { opacity: 1; }
+
+/* Bottom tab bar (mobile) */
+.bottomnav-blur { background: rgb(var(--ink-950) / 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }

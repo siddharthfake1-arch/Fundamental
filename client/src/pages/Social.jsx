@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, FileUpload, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
+import { Avatar, Empty, FileUpload, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast, SkeletonList } from '../components/ui';
 import { absUrl, nativeBridge, shareOrigin } from '../config';
 import PullToRefresh from '../components/PullToRefresh';
 
@@ -84,7 +84,7 @@ export default function Social() {
         </div>
       )}
 
-      {!posts ? <Spinner /> : visible.length === 0 ? <Empty title="No posts yet" sub="Updates from the network appear here." /> : (
+      {!posts ? <SkeletonList kind="post" n={3} /> : visible.length === 0 ? <Empty title="No posts yet" sub="Updates from the network appear here." /> : (
         <div className="space-y-4">
           {visible.map(p => <Post key={p.id} p={p} onChange={load} />)}
         </div>
@@ -283,7 +283,7 @@ function Post({ p, onChange }) {
       <div className="flex items-center gap-1 mt-4 pt-3 border-t border-ink-700/60">
         <button onClick={like} aria-label={likeState.liked ? 'Unlike' : 'Like'} aria-pressed={likeState.liked}
           className={`btn-ghost btn-sm !border-0 ${likeState.liked ? '!text-gold-300' : ''}`}>
-          {likeState.liked ? '♥' : '♡'} {likeState.likes}
+          <span key={likeState.liked} className={`inline-block ${likeState.liked ? 'animate-pop' : ''}`}>{likeState.liked ? '♥' : '♡'}</span> {likeState.likes}
         </button>
         <button onClick={() => setShowComments(s => !s)} aria-label="Comments" className="btn-ghost btn-sm !border-0">💬 {comments.length}</button>
         <button onClick={share} aria-label="Copy link to this post" className="btn-ghost btn-sm !border-0">↗ Share</button>

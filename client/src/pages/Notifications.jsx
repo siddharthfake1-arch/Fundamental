@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, timeAgo, asArray } from '../api';
-import { Empty, Spinner, useToast } from '../components/ui';
+import { Empty, Spinner, useToast, SkeletonList } from '../components/ui';
 import PullToRefresh from '../components/PullToRefresh';
 
 const TYPES = ['Profile Viewed', 'Upvote Received', 'Connection Request', 'Connection Accepted', 'Collateral Request', 'Access Approved', 'New Message', 'Deal Alert'];
@@ -25,7 +25,7 @@ export default function Notifications() {
     return () => { clearInterval(t); window.removeEventListener('app-resumed', tick); };
   }, [filter]);
 
-  if (!data) return <Spinner />;
+  if (!data) return <div className="max-w-2xl mx-auto"><SkeletonList n={6} /></div>;
   const shown = asArray(data.notifications).filter(n => !q || String(n.text || '').toLowerCase().includes(q.toLowerCase()));
 
   return (
