@@ -23,13 +23,19 @@ export default function NativeBridge() {
       const { App } = await import('@capacitor/app');
       if (cancelled) return;
       backSub = await App.addListener('backButton', ({ canGoBack }) => {
-        // Give open overlays (modals, menus) first right of refusal.
+        // Give open overlays (modals, menus, search) first right of refusal.
         const ev = new CustomEvent('app-back', { cancelable: true });
         window.dispatchEvent(ev);
         if (ev.defaultPrevented) return;
-        const roots = ['/', '/discover', '/login'];
-        if (roots.includes(window.location.pathname) || !canGoBack) App.minimizeApp();
-        else window.history.back();
+        const path = window.location.pathname;
+        // Home roots background the app; other bottom tabs step back to Discover
+        // first (standard Android tab behavior), everything else pops history.
+        const homeRoots = ['/', '/discover', '/login'];
+        const tabRoots = ['/network', '/social', '/messages', '/menu'];
+        if (homeRoots.includes(path)) return App.minimizeApp();
+        if (tabRoots.includes(path) && !window.location.search) return nav('/discover');
+        if (!canGoBack) return App.minimizeApp();
+        window.history.back();
       });
       urlSub = await App.addListener('appUrlOpen', ({ url }) => {
         try {

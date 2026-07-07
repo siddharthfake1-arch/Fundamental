@@ -22,8 +22,44 @@ export async function initNative() {
   const { Share } = await import('@capacitor/share');
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
   const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+  const { Keyboard } = await import('@capacitor/keyboard');
   const { Capacitor } = await import('@capacitor/core');
   const isAndroid = Capacitor.getPlatform() === 'android';
+
+  // ---- Keyboard awareness ----
+  // body.kb-open lets CSS react (hide the bottom tab bar, tighten the chat
+  // height); --keyboard-height is exposed for any layout that needs the exact
+  // number. The WebView itself resizes (config resize:'native'), so most
+  // layouts need no work — these hooks handle the chrome.
+  // addListener returns a promise — swallow the rejection where the plugin is
+  // unavailable (web preview, some iPad configurations).
+  Promise.resolve(Keyboard.addListener('keyboardWillShow', (info) => {
+    document.body.classList.add('kb-open');
+    document.documentElement.style.setProperty('--keyboard-height', `${info?.keyboardHeight || 0}px`);
+    // Keep the focused field visible once the viewport settles.
+    setTimeout(() => {
+      const el = document.activeElement;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }, 120);
+  })).catch(() => {});
+  Promise.resolve(Keyboard.addListener('keyboardWillHide', () => {
+    document.body.classList.remove('kb-open');
+    document.documentElement.style.setProperty('--keyboard-height', '0px');
+  })).catch(() => {});
+
+  // Tap anywhere that isn't a form control or button → dismiss the keyboard
+  // (the native-app gesture users expect). Buttons/links are excluded so the
+  // blur never eats their tap, and taps inside a focused field keep focus.
+  document.addEventListener('touchend', (e) => {
+    const el = document.activeElement;
+    if (!el || !/^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
+    const t = e.target;
+    if (el.contains(t)) return; // tapping the field itself
+    if (t.closest && t.closest('input, textarea, select, button, a, label, [contenteditable]')) return;
+    el.blur();
+  }, { passive: true });
 
   // ---- Session restore + persistence ----
   let token = null;

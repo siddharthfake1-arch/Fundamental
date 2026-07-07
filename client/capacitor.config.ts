@@ -20,7 +20,10 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     Keyboard: {
-      resize: 'body',
+      // 'native' resizes the WebView frame itself, so 100dvh shrinks with the
+      // keyboard — composers and sticky footers ride above it with plain CSS.
+      resize: 'native',
+      resizeOnFullScreen: true, // Android fullscreen quirk: still resize
     },
     StatusBar: {
       // Android: keep the WebView BELOW the status bar (env(safe-area-inset-top) is 0
