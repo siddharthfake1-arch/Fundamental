@@ -93,7 +93,7 @@ export default function StartupCard({ s }) {
           className={`relative flex items-center gap-1 text-sm rounded-lg px-2 py-1 transition-colors shrink-0
             ${upvoted ? 'text-gold-300 bg-gold-500/10' : 'text-mist-400'} ${user.role === 'investor' ? 'hover:bg-ink-700' : 'cursor-default'}`}>
           {burst > 0 && <span key={burst} className="upvote-burst absolute inset-0 rounded-lg border-2 border-gold-400" />}
-          <ChevronUp className="w-4 h-4" strokeWidth={upvoted ? 3 : 2} />
+          <span key={upvoted} className={`inline-flex ${upvoted ? 'animate-pop' : ''}`}><ChevronUp className="w-4 h-4" strokeWidth={upvoted ? 3 : 2} /></span>
           <span className="font-semibold tabular-nums">{upvotes}</span>
         </button>
       </div>

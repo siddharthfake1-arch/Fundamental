@@ -5,6 +5,7 @@ import { useAuth } from './AuthContext';
 import Nav from './components/Nav';
 import ErrorBoundary from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
+import BottomNav from './components/BottomNav';
 import { IS_NATIVE } from './config';
 import { Spinner } from './components/ui';
 import Auth from './pages/Auth';
@@ -84,6 +85,7 @@ export default function App() {
     <div className="min-h-screen">
       <OfflineBanner />
       {loc.pathname !== '/onboarding' && <Nav />}
+      {loc.pathname !== '/onboarding' && <BottomNav />}
       {/* Route-scoped boundary: a page render crash is caught here and auto-clears
           when the route changes (resetKey), so one bad page never traps the session.
           Nav stays mounted above it, so the user can always navigate away. */}
@@ -93,7 +95,7 @@ export default function App() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="max-w-7xl mx-auto px-4 py-6 pb-20 safe-bottom">
+          className="max-w-7xl mx-auto px-4 py-6 pb-32 lg:pb-20 safe-bottom">
           <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />

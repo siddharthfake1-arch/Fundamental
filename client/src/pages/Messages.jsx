@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, timeAgo, asArray, asObject } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, FileUpload, Modal, ReportModal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, FileUpload, Modal, ReportModal, Spinner, VerifiedBadge, useToast, SkeletonList } from '../components/ui';
 import { absUrl, nativeBridge } from '../config';
 
 const STAGES = ['Intro', 'Due Diligence', 'Closed', 'Passed'];
@@ -88,7 +88,7 @@ export default function Messages() {
   if (!convos) {
     return listErr
       ? <Empty title="Couldn't load your messages" sub={`${listErr} — retrying automatically.`} />
-      : <Spinner />;
+      : <div className="max-w-lg"><SkeletonList n={5} /></div>;
   }
   const filtered = convos.filter(c => String(c.other?.name || '').toLowerCase().includes(search.toLowerCase()));
 

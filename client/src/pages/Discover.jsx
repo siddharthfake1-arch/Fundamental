@@ -5,7 +5,7 @@ import { Flame } from 'lucide-react';
 import { api, asArray, asObject } from '../api';
 import StartupCard from '../components/StartupCard';
 import Constellation from '../components/Constellation';
-import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast, SkeletonList } from '../components/ui';
 
 function TrendingStrip({ startups }) {
   const trending = [...asArray(startups)].sort((a, b) => b.momentum - a.momentum).slice(0, 5).filter(s => s.momentum > 0);
@@ -178,7 +178,7 @@ export default function Discover() {
         <aside className={`card p-4 lg:sticky lg:top-20 ${filtersOpen ? '' : 'hidden lg:block'}`}>{sidebar}</aside>
         <div className="min-w-0">
           {data && <TrendingStrip startups={items} />}
-          {!data ? <Spinner /> : items.length === 0 ? (
+          {!data ? <SkeletonList kind="card" n={6} /> : items.length === 0 ? (
             <Empty title="No startups match these filters" sub="Widen your criteria, or save this search to be notified when a match lists." />
           ) : (
             <>

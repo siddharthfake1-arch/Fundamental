@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, asArray, fmtMoney } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, Spinner, VerifiedBadge } from '../components/ui';
+import { Avatar, Empty, Spinner, VerifiedBadge, SkeletonList } from '../components/ui';
 
 // Index of all listed startups — a denser, institutional view next to Discover's tiles.
 export default function Startups() {
@@ -17,7 +17,7 @@ export default function Startups() {
     if (user.role === 'founder') api.get('/api/startups/mine').then(d => setMine(d.startup)).catch(() => {});
   }, []);
 
-  if (!data) return <Spinner />;
+  if (!data) return <div className="space-y-3"><SkeletonList n={6} /></div>;
   const list = asArray(data.startups).filter(s => String((s.name || '') + (s.sector || '') + (s.city || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (

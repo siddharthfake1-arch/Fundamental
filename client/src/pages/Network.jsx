@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, asArray } from '../api';
-import { Avatar, Empty, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, Spinner, VerifiedBadge, useToast, SkeletonList } from '../components/ui';
 
 const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer'];
 const STAGES = ['Pre-Seed', 'Seed', 'Series A', 'Series B', 'Growth'];
@@ -75,7 +75,7 @@ export default function Network() {
             </label>
           </div>
 
-          {!users ? <Spinner /> : users.length === 0 ? <Empty title="No one matches these filters" sub="Adjust your filters to widen the search." /> : (
+          {!users ? <SkeletonList kind="card" n={6} /> : users.length === 0 ? <Empty title="No one matches these filters" sub="Adjust your filters to widen the search." /> : (
             <>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {users.map((u, i) => (
