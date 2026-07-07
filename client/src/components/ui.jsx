@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, createContext, useContext, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../api';
 import { absUrl, IS_NATIVE } from '../config';
@@ -166,7 +167,11 @@ export function Modal({ open, onClose, title, children, wide }) {
       if (prevFocus && prevFocus.focus) prevFocus.focus(); // return focus to trigger
     };
   }, [open, onClose]);
-  return (
+  // Portal to <body>: pages render inside a transformed motion.main, and a CSS
+  // transform turns "fixed" into "fixed relative to the page" — the dialog would
+  // sit under the bottom tab bar and mis-position on scroll. The portal escapes
+  // that containing block so the sheet always covers the real viewport.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -190,7 +195,8 @@ export function Modal({ open, onClose, title, children, wide }) {
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 
