@@ -266,7 +266,7 @@ function Post({ p, onChange }) {
 
       {p.media && (
         /\.(mp4|webm|mov)/i.test(p.media)
-          ? <video src={absUrl(p.media)} controls playsInline preload="metadata" className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
+          ? <video src={absUrl(p.media)} controls playsInline preload="metadata" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
           : /\.(png|jpe?g|gif|svg|webp)/i.test(p.media)
             ? <img src={absUrl(p.media)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="mt-3 rounded-xl w-full border border-ink-600/60" />
             : <a href={absUrl(p.media)} target="_blank" rel="noreferrer" className="block mt-3 text-sm text-accent-400 underline">📎 View attachment</a>
