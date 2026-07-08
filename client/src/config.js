@@ -12,6 +12,12 @@ export const API_BASE = import.meta.env.VITE_API_BASE || '';
 // safe at module-eval time and costs the web bundle zero Capacitor imports.
 export const IS_NATIVE = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
 
+// Capture the platform ('ios' | 'android' | '') ONCE at module load — the same
+// moment IS_NATIVE is read. @capacitor/core later replaces window.Capacitor with
+// a runtime that reports 'web' in a browser preview, so any later re-read is
+// unreliable; this snapshot is taken while the native-injected global is intact.
+export const NATIVE_PLATFORM = (typeof window !== 'undefined' && window.Capacitor?.getPlatform?.()) || '';
+
 // API endpoints: '/api/...' → absolute on native, unchanged on web.
 export const apiUrl = (p) => (p && p.startsWith('/') ? API_BASE + p : p);
 
