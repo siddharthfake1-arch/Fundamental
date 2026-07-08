@@ -103,7 +103,7 @@ export default function App() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="max-w-7xl mx-auto px-4 pt-4 sm:pt-6 pb-32 lg:pb-20 safe-bottom">
+          className="max-w-7xl mx-auto px-4 pt-4 sm:pt-6 main-pad-bottom">
           <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />
