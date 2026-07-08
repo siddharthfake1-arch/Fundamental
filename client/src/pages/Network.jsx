@@ -47,7 +47,7 @@ export default function Network() {
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
-          <h1 className="h-display text-2xl">Network</h1>
+          <h1 className="page-title">Network</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Founders, investors, angels, and operators. Messaging opens once a connection is accepted.</p>
         </div>
         <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1">

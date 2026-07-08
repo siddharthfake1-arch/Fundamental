@@ -43,7 +43,7 @@ export default function Profile() {
           </div>
           <div className="flex-1 min-w-0 sm:pt-14">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="h-display text-2xl">{u.name}</h1>
+              <h1 className="page-title">{u.name}</h1>
               {!!u.verified && <VerifiedBadge tier={u.verified} />}
               <span className="chip capitalize">{u.role}</span>
               {d.trust && (

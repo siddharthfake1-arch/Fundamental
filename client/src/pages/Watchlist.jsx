@@ -45,7 +45,7 @@ export default function Watchlist() {
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
-          <h1 className="h-display text-2xl">Pipeline</h1>
+          <h1 className="page-title">Pipeline</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Your deal flow from first look to decision — private to you.</p>
         </div>
         <div className="flex items-center gap-2">

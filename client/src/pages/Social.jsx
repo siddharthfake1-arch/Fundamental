@@ -52,7 +52,7 @@ export default function Social() {
     <div className="max-w-2xl mx-auto fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-5">
         <div>
-          <h1 className="h-display text-2xl">Social</h1>
+          <h1 className="page-title">Social</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Professional updates from the network, capped at 400 characters.</p>
         </div>
         <div className="flex gap-2">
@@ -266,9 +266,9 @@ function Post({ p, onChange }) {
 
       {p.media && (
         /\.(mp4|webm|mov)/i.test(p.media)
-          ? <video src={absUrl(p.media)} controls playsInline preload="metadata" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="mt-3 rounded-xl w-full bg-black border border-ink-600/60" />
+          ? <div className="feed-media aspect-video"><video src={absUrl(p.media)} controls playsInline preload="metadata" onError={(e) => { e.currentTarget.closest('.feed-media').style.display = 'none'; }} className="object-contain bg-black" /></div>
           : /\.(png|jpe?g|gif|svg|webp)/i.test(p.media)
-            ? <img src={absUrl(p.media)} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} className="mt-3 rounded-xl w-full border border-ink-600/60" />
+            ? <div className="feed-media aspect-[16/10]"><img src={absUrl(p.media)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onError={(e) => { e.currentTarget.closest('.feed-media').style.display = 'none'; }} className="object-cover img-fade" /></div>
             : <a href={absUrl(p.media)} target="_blank" rel="noreferrer" className="block mt-3 text-sm text-accent-400 underline">📎 View attachment</a>
       )}
 

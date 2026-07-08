@@ -114,6 +114,12 @@ html.light {
   html.dark .chip-red { @apply text-red-300; }
   .section-title { @apply font-display text-[11px] font-bold uppercase tracking-[0.18em] text-gold-400; }
   .h-display { @apply font-display font-bold text-mist-100 tracking-[-0.02em]; }
+  /* ---- Mobile-first type scale ----
+     One calm scale that scales up on sm+ so headings never dominate a phone.
+     .page-title is the single h1 per screen; .card-title heads a card/section. */
+  .page-title { @apply font-display font-bold text-mist-100 tracking-[-0.02em] text-[19px] leading-tight sm:text-2xl; }
+  .card-title { @apply font-display font-bold text-mist-100 tracking-[-0.01em] text-[15px] sm:text-base; }
+  .meta-text { @apply text-[13px] sm:text-sm text-mist-400 leading-relaxed; }
   .divider { @apply border-t border-ink-700/60; }
   .nav-link { @apply relative px-3 py-2 rounded-lg text-sm font-medium text-mist-400 hover:text-mist-100 hover:bg-ink-800 transition-colors; }
   .nav-link-active { @apply text-gold-300 bg-ink-800; }
@@ -171,6 +177,12 @@ html, body { overscroll-behavior-y: none; }
 /* Images fade in as they decode — no hard pop-in. */
 .img-fade { opacity: 0; transition: opacity .35s ease; }
 .img-fade.loaded { opacity: 1; }
+
+/* Feed media: a reserved aspect box so images/videos never shift the feed as
+   they decode. The box holds its height from first paint; media fades in. */
+.feed-media { margin-top: 0.75rem; border-radius: 0.75rem; overflow: hidden;
+  background: rgb(var(--ink-850)); border: 1px solid rgb(var(--ink-600) / 0.6); position: relative; }
+.feed-media > img, .feed-media > video { width: 100%; height: 100%; display: block; }
 
 /* Bottom tab bar (mobile) */
 .bottomnav-blur { background: rgb(var(--ink-950) / 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }

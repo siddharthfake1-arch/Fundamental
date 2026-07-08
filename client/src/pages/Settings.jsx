@@ -18,7 +18,7 @@ export default function Settings() {
 
   return (
     <div className="max-w-3xl mx-auto fade-in">
-      <h1 className="h-display text-2xl mb-5">Settings</h1>
+      <h1 className="page-title mb-5">Settings</h1>
       <div className="flex gap-1 mb-6 overflow-x-auto no-scrollbar rounded-xl bg-ink-850 border border-ink-600/60 p-1 w-fit max-w-full -mx-1 px-1 sm:mx-0">
         {tabs.map(([t, l]) => (
           <button key={t} onClick={() => setParams({ tab: t })}

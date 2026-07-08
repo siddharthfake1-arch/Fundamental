@@ -33,7 +33,7 @@ export default function Notifications() {
     <div className="max-w-2xl mx-auto fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-5">
         <div>
-          <h1 className="h-display text-2xl">Notifications</h1>
+          <h1 className="page-title">Notifications</h1>
           <p className="text-sm text-mist-400 mt-1">{data.unread ?? 0} unread</p>
         </div>
         <div className="flex gap-2">
