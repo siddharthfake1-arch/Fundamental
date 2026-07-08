@@ -1,4 +1,4 @@
-# Mobile UX QA Checklist (v1.6 native shell)
+# Mobile UX QA Checklist (v1.8 native shell)
 
 Run this on real devices before every store release. Target matrix:
 
@@ -21,6 +21,10 @@ Test **dark and light themes** on every section below.
 - [ ] No web hamburger or desktop link row anywhere
 - [ ] Search icon opens the full-screen search overlay; results navigate and close it
 - [ ] Android back: closes sheet/menu/search first → detail pages pop back → other tabs return to Discover → Discover backgrounds the app
+- [ ] iOS: swipe right from the LEFT EDGE goes back (the screen follows your finger and pops on release); a partial swipe springs back
+- [ ] iOS: a swipe that starts mid-screen does NOT trigger back (carousels, the trending strip, and deal-stage selects still scroll/work)
+- [ ] Type scale reads consistently — page titles ~19px on phones, no oversized web headings, no tiny desktop text; inputs don't zoom on focus
+- [ ] Feeds don't jump as images/videos load (media sits in a reserved box); Discover keeps loading more as you scroll (no tapping "Load more")
 
 ## Keyboard (test EVERY form)
 - [ ] Login / signup / OTP: focused field and the primary button stay visible above the keyboard

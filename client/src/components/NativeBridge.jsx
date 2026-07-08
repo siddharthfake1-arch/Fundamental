@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useToast } from './ui';
+import EdgeSwipeBack from './EdgeSwipeBack';
 
 // Router-coupled native behavior. Lazily rendered (only on device) inside
 // BrowserRouter + ToastProvider, so useNavigate/useToast are available. Renders nothing.
@@ -78,5 +79,6 @@ export default function NativeBridge() {
 
   useEffect(() => { /* keep location observed so back-button state stays fresh */ }, [loc]);
 
-  return null;
+  // iOS interactive edge-swipe-back (inert on Android — it checks the platform).
+  return <EdgeSwipeBack />;
 }
