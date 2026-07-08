@@ -41,7 +41,7 @@ function CommunityIndex() {
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="h-display text-2xl">Communities</h1>
+          <h1 className="page-title">Communities</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Where founders, investors, and operators share what they know.</p>
         </div>
         <div className="flex gap-2">
@@ -261,7 +261,7 @@ function CommunityDetail({ slug }) {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="h-display text-2xl">{c.name}</h1>
+                <h1 className="page-title">{c.name}</h1>
                 <span className="chip capitalize">{c.kind}</span>
               </div>
               <p className="text-sm text-mist-400 mt-1.5 max-w-lg">{c.description}</p>

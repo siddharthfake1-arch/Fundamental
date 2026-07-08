@@ -100,7 +100,7 @@ export default function Messages() {
       {/* On phones an open thread takes the whole screen (real chat app) — the
           page title only shows on the conversation list / desktop split view. */}
       <div className={active ? 'hidden md:block' : ''}>
-        <h1 className="h-display text-2xl mb-1">Messages</h1>
+        <h1 className="page-title mb-1">Messages</h1>
         <p className="text-sm text-mist-400 mb-5 page-sub">Conversations open once a connection is accepted.</p>
       </div>
 

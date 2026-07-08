@@ -17,7 +17,7 @@ export default function Admin() {
   const tabs = [['analytics', 'Platform analytics'], ['users', 'Verify users'], ['startups', 'Verify startups'], ['communities', 'Communities'], ['content', 'Moderate content'], ['reports', 'Reports'], ['audit', 'Audit log'], ['errors', 'Errors']];
   return (
     <div className="fade-in">
-      <h1 className="h-display text-2xl mb-1">Admin</h1>
+      <h1 className="page-title mb-1">Admin</h1>
       <p className="text-sm text-mist-400 mb-5">Verification, moderation, and platform health.</p>
       <div className="flex gap-1 mb-6 overflow-x-auto rounded-xl bg-ink-850 border border-ink-600/60 p-1 w-fit max-w-full">
         {tabs.map(([t, l]) => (

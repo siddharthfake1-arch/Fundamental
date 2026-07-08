@@ -54,7 +54,7 @@ function Shell({ step, total, title, sub, children, completion }) {
           <div key={i} className={`h-1 flex-1 rounded-full ${i <= step ? 'bg-gold-400' : 'bg-ink-700'}`} />
         ))}
       </div>
-      <h1 className="h-display text-2xl">{title}</h1>
+      <h1 className="page-title">{title}</h1>
       <p className="text-sm text-mist-400 mt-1.5 mb-7">{sub}</p>
       <div className="fade-in" key={step}>{children}</div>
     </div>

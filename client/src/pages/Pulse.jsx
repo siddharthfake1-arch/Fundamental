@@ -39,7 +39,7 @@ export default function Pulse() {
     <div className="fade-in space-y-6">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="h-display text-2xl flex items-center gap-2"><Activity className="w-6 h-6 text-gold-400" /> Market Pulse</h1>
+          <h1 className="page-title flex items-center gap-2"><Activity className="w-6 h-6 text-gold-400" /> Market Pulse</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Live signals from across Fundamental — aggregate trends only, never individual startup data.</p>
         </div>
         <input className="input !w-56" aria-label="Search" placeholder="Search sectors…" value={q} onChange={(e) => setQ(e.target.value)} />

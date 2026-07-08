@@ -27,7 +27,7 @@ export default function Startups() {
     <div className="fade-in">
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
-          <h1 className="h-display text-2xl">Startups</h1>
+          <h1 className="page-title">Startups</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Every listed company, ranked by investor conviction.</p>
         </div>
         <input className="input !w-64" aria-label="Search" placeholder="Search by name, sector, or city" value={q} onChange={(e) => setQ(e.target.value)} />

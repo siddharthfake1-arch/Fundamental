@@ -43,7 +43,7 @@ function FounderDash() {
     <div className="fade-in space-y-5">
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <h1 className="h-display text-2xl">Founder dashboard</h1>
+          <h1 className="page-title">Founder dashboard</h1>
           <p className="text-sm text-mist-400 mt-1">{d.startup ? `Tracking ${d.startup.name}` : 'Set up your startup to begin tracking'}</p>
         </div>
         {d.startup && <Link to={`/startup/${d.startup.id}`} className="btn-ghost btn-sm">View public profile</Link>}
@@ -223,7 +223,7 @@ function InvestorDash() {
     <PullToRefresh onRefresh={load}>
     <div className="fade-in space-y-5">
       <div>
-        <h1 className="h-display text-2xl">Investor dashboard</h1>
+        <h1 className="page-title">Investor dashboard</h1>
         <p className="text-sm text-mist-400 mt-1">Your pipeline at a glance.</p>
       </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Flame } from 'lucide-react';
@@ -92,6 +92,24 @@ export default function Discover() {
     } catch (e) { toast(e.message, 'error'); } finally { setLoadingMore(false); }
   };
 
+  // Infinite scroll: auto-load the next page as the sentinel nears the viewport,
+  // so the feed feels continuous. The Load-more button stays as a fallback and
+  // for keyboard users. Refs mirror state so the observer callback stays stable.
+  const sentinelRef = useRef(null);
+  const hasMore = !!data && items.length < data.total;
+  const moreState = useRef({});
+  moreState.current = { hasMore, loadingMore, loadMore };
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      const m = moreState.current;
+      if (entries[0].isIntersecting && m.hasMore && !m.loadingMore) m.loadMore();
+    }, { rootMargin: '600px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [data]);
+
   const loadSaved = () => api.get('/api/startups/saved-searches').then(d => setSaved(asArray(d.searches))).catch(() => {});
 
   const set = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
@@ -159,7 +177,7 @@ export default function Discover() {
             <Constellation count={320} cycleMs={3000} />
           </div>
           <div>
-            <h1 className="h-display text-2xl">Discover</h1>
+            <h1 className="page-title">Discover</h1>
             <p className="text-sm text-mist-400 mt-1 page-sub">Every startup here opens with a 12-minute pitch — watch it before you reach out. <Link to="/startups" className="text-gold-300 hover:text-gold-200">Index view →</Link></p>
           </div>
         </div>
@@ -204,10 +222,15 @@ export default function Discover() {
                   </motion.div>
                 ))}
               </div>
-              {items.length < data.total && (
-                <div className="flex justify-center mt-6">
-                  <button className="btn-ghost" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading…' : `Load more (${data.total - items.length} more)`}</button>
-                </div>
+              {hasMore && (
+                <>
+                  {/* Auto-load trigger — observed off-screen so the next page is
+                      already arriving before the user reaches the bottom. */}
+                  <div ref={sentinelRef} aria-hidden className="h-1" />
+                  <div className="flex justify-center mt-6">
+                    <button className="btn-ghost" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading…' : `Load more (${data.total - items.length} more)`}</button>
+                  </div>
+                </>
               )}
             </>
           )}
