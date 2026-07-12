@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
+import { Link, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import Nav from './components/Nav';
@@ -44,7 +44,7 @@ function NotFound({ homeTo = '/' }) {
         <div className="h-display text-5xl text-mist-500 mb-3">404</div>
         <div className="h-display text-lg">This page doesn't exist</div>
         <p className="text-sm text-mist-400 mt-2 break-all">We couldn't find <code>{loc.pathname}</code>. It may have moved or been removed.</p>
-        <a href={homeTo} className="btn-primary btn-sm inline-flex mt-5">Go home</a>
+        <Link to={homeTo} className="btn-primary btn-sm inline-flex mt-5">Go home</Link>
       </div>
     </div>
   );
@@ -59,7 +59,9 @@ export default function App() {
 
   // A new page must start at the top — without this, navigating from a scrolled
   // feed into a detail page lands mid-page. Search-only changes keep the scroll.
-  useEffect(() => { window.scrollTo(0, 0); }, [loc.pathname]);
+  // 'instant' bypasses the html smooth-scroll behavior: a page change is a cut,
+  // not an animated scroll through the outgoing page.
+  useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: 'instant' }); }, [loc.pathname]);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Spinner /></div>;
 

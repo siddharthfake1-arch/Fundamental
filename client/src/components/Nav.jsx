@@ -63,7 +63,8 @@ export function GlobalSearch({ className = '', autoFocus = false, onNavigate }) 
   return (
     <div ref={boxRef} className={`relative ${className}`}>
       <Search className="w-4 h-4 text-mist-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-      <input aria-label="Search Fundamental" className="input !py-2 !pl-9 !text-sm w-full" placeholder="Search…" autoFocus={autoFocus}
+      <input aria-label="Search Fundamental" role="combobox" aria-expanded={open} aria-autocomplete="list"
+        className="input !py-2 !pl-9 !text-sm w-full" placeholder="Search…" autoFocus={autoFocus}
         value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => results && setOpen(true)} onKeyDown={onKeyNav} />
       {searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-ink-600 border-t-gold-400 animate-spin" aria-hidden />}
       {open && results && (
@@ -183,10 +184,12 @@ export default function Nav() {
         <GlobalSearch className="hidden md:block w-48 xl:w-56" />
 
         <div className="flex items-center gap-2 ml-auto lg:ml-0">
-          <button onClick={toggle} className="nav-link !px-2.5" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+          <button onClick={toggle} className="nav-link !px-2.5" title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
-          <NavLink to="/notifications" className={({ isActive }) => `nav-link !px-2.5 ${isActive ? 'nav-link-active' : ''}`} title="Notifications">
+          <NavLink to="/notifications" className={({ isActive }) => `nav-link !px-2.5 ${isActive ? 'nav-link-active' : ''}`} title="Notifications"
+            aria-label={`Notifications${counts.notifications > 0 ? `, ${counts.notifications} unread` : ''}`}>
             <span className="relative inline-block">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
               {counts.notifications > 0 && <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-gold-400 text-ink-950 text-[10px] font-bold flex items-center justify-center">{counts.notifications}</span>}

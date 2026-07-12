@@ -13,21 +13,36 @@ export default function Dashboard() {
 function AdminRedirect() {
   const nav = useNavigate();
   useEffect(() => { nav('/admin'); }, []);
-  return null;
+  return <Spinner />; // never a blank frame while the redirect lands
 }
 
 function FounderDash() {
   const [d, setD] = useState(null);
   const [an, setAn] = useState(null);
+  const [loadErr, setLoadErr] = useState(null);
   const toast = useToast();
-  const load = () => api.get('/api/dashboard/founder').then(setD).catch(e => toast(e.message, 'error'));
+  const load = () => api.get('/api/dashboard/founder')
+    .then(x => { setLoadErr(null); setD(x); })
+    .catch(e => { if (d) toast(e.message, 'error'); else setLoadErr(e.message); });
   useEffect(() => {
     load();
     api.get('/api/dashboard/founder/analytics').then(setAn).catch(() => {});
   }, []);
+  // Per-row busy set so Approve/Reject/Accept can't double-fire mid-flight.
+  const [busyKeys, setBusyKeys] = useState(() => new Set());
+  if (loadErr && !d) {
+    return <Empty icon="⚠" title="Couldn't load your dashboard" sub={loadErr}
+      action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />;
+  }
   if (!d) return <Spinner />;
 
-  const act = async (fn) => { try { await fn(); load(); } catch (e) { toast(e.message, 'error'); } };
+  const act = async (key, fn) => {
+    if (busyKeys.has(key)) return;
+    setBusyKeys(s => new Set(s).add(key));
+    try { await fn(); await load(); }
+    catch (e) { toast(e.message, 'error'); }
+    finally { setBusyKeys(s => { const n = new Set(s); n.delete(key); return n; }); }
+  };
 
   const connectionRequests = asArray(d.connection_requests);
   const pendingAccess = asArray(d.pending_access);
@@ -50,7 +65,7 @@ function FounderDash() {
       {/* Profile completion */}
       <div className="card p-5">
         <div className="flex items-center justify-between mb-2">
-          <span className="section-title">Profile completion</span>
+          <h2 className="section-title">Profile completion</h2>
           <span className="font-display font-bold text-gold-300 tabular-nums">{d.completion}%</span>
         </div>
         <div className="h-2 bg-ink-700 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-gold-500 to-gold-300 transition-all" style={{ width: d.completion + '%' }} /></div>
@@ -66,14 +81,14 @@ function FounderDash() {
             <Stat label="Video views" value={(d.video_views ?? 0).toLocaleString()} sub="Pitch plays" />
             <Stat label="Followers" value={d.followers ?? 0} sub="Tracking your startup" />
             <Stat label="Interest" value={d.interest_count ?? 0} sub="Interested investors" />
-            <Stat label="Collateral requests" value={d.collateral_requests} />
-            <Stat label="Upvotes" value={d.upvotes} sub="One per investor" />
+            <Stat label="Collateral requests" value={d.collateral_requests ?? 0} />
+            <Stat label="Upvotes" value={d.upvotes ?? 0} sub="One per investor" />
             <Stat label="Connection requests" value={connectionRequests.length} />
           </div>
 
           {interestedInvestors.length > 0 && (
             <div className="card p-5">
-              <span className="section-title">Investors interested in you</span>
+              <h2 className="section-title">Investors interested in you</h2>
               <div className="text-xs text-mist-500 mt-1">These investors signaled interest — reach out while it's fresh.</div>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
                 {interestedInvestors.map(v => (
@@ -94,7 +109,7 @@ function FounderDash() {
 
           {viewsTrend.length > 1 && (
             <div className="card p-5">
-              <span className="section-title">Views — last 14 days</span>
+              <h2 className="section-title">Views — last 14 days</h2>
               <div className="mt-3"><LineChart data={viewsTrend} xKey="d" yKey="c" height={120} format={(v) => v} /></div>
             </div>
           )}
@@ -102,7 +117,7 @@ function FounderDash() {
           <div className="grid lg:grid-cols-2 gap-5">
             {/* Raise progress tracker */}
             <div className="card p-5">
-              <span className="section-title">Raise progress</span>
+              <h2 className="section-title">Raise progress</h2>
               <div className="mt-4 flex items-center gap-3">
                 <span className={raise.status === 'Actively Raising' ? 'chip-green' : raise.status === 'Round Closing' ? 'chip-gold' : 'chip'}>{raise.status}</span>
                 {raise.amount && <span className="font-display font-bold text-mist-100">{raise.amount}</span>}
@@ -124,15 +139,15 @@ function FounderDash() {
 
             {/* Pending access requests */}
             <div className="card p-5">
-              <span className="section-title">Pending data room requests</span>
+              <h2 className="section-title">Pending data room requests</h2>
               {pendingAccess.length === 0 ? <div className="text-sm text-mist-500 mt-3">No pending requests.</div> : (
                 <div className="space-y-2 mt-3">
                   {pendingAccess.map(r => (
                     <div key={r.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl px-3.5 py-2.5">
                       <Link to={`/profile/${r.investor_id}`} className="text-sm font-medium text-mist-100 hover:text-gold-300 truncate">{r.investor_name}</Link>
                       <span className="text-xs text-mist-500 flex-1 truncate">→ {r.title}</span>
-                      <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/startups/access-requests/${r.id}/approve`))}>Approve</button>
-                      <button className="btn-danger btn-sm" onClick={() => act(() => api.post(`/api/startups/access-requests/${r.id}/reject`))}>Reject</button>
+                      <button className="btn-primary btn-sm" disabled={busyKeys.has(`a${r.id}`)} onClick={() => act(`a${r.id}`, () => api.post(`/api/startups/access-requests/${r.id}/approve`))}>Approve</button>
+                      <button className="btn-danger btn-sm" disabled={busyKeys.has(`a${r.id}`)} onClick={() => act(`a${r.id}`, () => api.post(`/api/startups/access-requests/${r.id}/reject`))}>Reject</button>
                     </div>
                   ))}
                 </div>
@@ -144,7 +159,7 @@ function FounderDash() {
           {an && (viewers.length > 0 || docs.length > 0) && (
             <div className="grid lg:grid-cols-2 gap-5">
               <div className="card p-5">
-                <span className="section-title">Investors looking at you</span>
+                <h2 className="section-title">Investors looking at you</h2>
                 <div className="text-xs text-mist-500 mt-1">Investors who recently viewed your profile.</div>
                 {viewers.length === 0 ? <div className="text-sm text-mist-500 mt-3">No investor views yet.</div> : (
                   <div className="space-y-2 mt-3">
@@ -164,7 +179,7 @@ function FounderDash() {
                 )}
               </div>
               <div className="card p-5">
-                <span className="section-title">Data room engagement</span>
+                <h2 className="section-title">Data room engagement</h2>
                 <div className="text-xs text-mist-500 mt-1">Which documents investors are opening.</div>
                 {docs.length === 0 ? <div className="text-sm text-mist-500 mt-3">No documents yet.</div> : (
                   <div className="space-y-2 mt-3">
@@ -184,7 +199,7 @@ function FounderDash() {
           {/* Connection requests */}
           {connectionRequests.length > 0 && (
             <div className="card p-5">
-              <span className="section-title">Connection requests</span>
+              <h2 className="section-title">Connection requests</h2>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
                 {connectionRequests.map(p => (
                   <div key={p.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/60 rounded-xl p-3">
@@ -193,7 +208,7 @@ function FounderDash() {
                       <Link to={`/profile/${p.user_id}`} className="text-sm font-semibold text-mist-100 hover:text-gold-300">{p.name}</Link>
                       <div className="text-xs text-mist-400 truncate">{p.headline}</div>
                     </div>
-                    <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${p.id}/accept`))}>Accept</button>
+                    <button className="btn-primary btn-sm" disabled={busyKeys.has(`c${p.id}`)} onClick={() => act(`c${p.id}`, () => api.post(`/api/users/connections/${p.id}/accept`))}>Accept</button>
                   </div>
                 ))}
               </div>
@@ -207,8 +222,13 @@ function FounderDash() {
 
 function InvestorDash() {
   const [d, setD] = useState(null);
-  const toast = useToast();
-  useEffect(() => { api.get('/api/dashboard/investor').then(setD).catch(e => toast(e.message, 'error')); }, []);
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/dashboard/investor').then(x => { setLoadErr(null); setD(x); }).catch(e => setLoadErr(e.message));
+  useEffect(() => { load(); }, []);
+  if (loadErr && !d) {
+    return <Empty icon="⚠" title="Couldn't load your dashboard" sub={loadErr}
+      action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />;
+  }
   if (!d) return <Spinner />;
 
   const watchlist = asArray(d.watchlist);
@@ -226,7 +246,7 @@ function InvestorDash() {
         <Stat label="Saved startups" value={watchlist.length} sub="In your pipeline" />
         <Stat label="Requested access" value={requested.length} sub="Data room requests" />
         <Stat label="Approved" value={requested.filter(r => r.status === 'approved').length} sub="Data rooms unlocked" />
-        <Stat label="Active conversations" value={d.active_conversations} />
+        <Stat label="Active conversations" value={d.active_conversations ?? 0} />
         <Stat label="Interests sent" value={d.interests_count ?? 0} sub="Founders notified" />
         <Stat label="Shared with you" value={d.shared_count ?? 0} sub="By co-investors" />
       </div>
@@ -237,7 +257,7 @@ function InvestorDash() {
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="card p-5">
           <div className="flex items-center justify-between">
-            <span className="section-title">Watchlist</span>
+            <h2 className="section-title">Watchlist</h2>
             <Link to="/watchlist" className="text-xs text-gold-300 hover:text-gold-200">Open pipeline →</Link>
           </div>
           {watchlist.length === 0 ? <div className="text-sm text-mist-500 mt-3">Save startups from Discover to track them here.</div> : (
@@ -257,7 +277,7 @@ function InvestorDash() {
         </div>
 
         <div className="card p-5">
-          <span className="section-title">Requested access</span>
+          <h2 className="section-title">Requested access</h2>
           {requested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No data room requests yet.</div> : (
             <div className="space-y-2 mt-3">
               {requested.slice(0, 6).map((r, i) => (
@@ -276,7 +296,7 @@ function InvestorDash() {
       </div>
 
       <div className="card p-5">
-        <span className="section-title">Suggested startups</span>
+        <h2 className="section-title">Suggested startups</h2>
         <div className="text-xs text-mist-500 mt-1">Matched to your sector and stage focus.</div>
         {suggested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No new suggestions right now.</div> : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">

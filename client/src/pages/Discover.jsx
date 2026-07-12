@@ -15,7 +15,7 @@ function TrendingStrip({ startups }) {
     <div className="mb-6">
       <div className="flex items-center gap-2 mb-3">
         <Flame className="w-4 h-4 text-orange-400" />
-        <span className="section-title !text-orange-400">Trending this week</span>
+        <h2 className="section-title !text-orange-400">Trending this week</h2>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
         {trending.map((s, i) => (
@@ -62,6 +62,8 @@ export default function Discover() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [loadErr, setLoadErr] = useState(null);
+  const [retryTick, setRetryTick] = useState(0);
   const toast = useToast();
 
   const qs = useMemo(() => {
@@ -79,10 +81,14 @@ export default function Discover() {
   useEffect(() => { setParams(new URLSearchParams(qs), { replace: true }); }, [qs]);
   useEffect(() => {
     let alive = true;
-    setData(null);
-    api.get(`/api/startups?${qs}&limit=${PAGE}&offset=0`).then(d => { if (alive) { setData(d); setItems(asArray(d.startups)); } }).catch(e => toast(e.message, 'error'));
+    setData(null); setLoadErr(null);
+    // A failed first load must paint an error state with a retry — not skeletons
+    // shimmering forever after the toast fades.
+    api.get(`/api/startups?${qs}&limit=${PAGE}&offset=0`)
+      .then(d => { if (alive) { setData(d); setItems(asArray(d.startups)); } })
+      .catch(e => { if (alive) setLoadErr(e.message); });
     return () => { alive = false; };
-  }, [qs]);
+  }, [qs, retryTick]);
 
   const loadMore = async () => {
     setLoadingMore(true);
@@ -158,7 +164,11 @@ export default function Discover() {
                   onClick={() => { setFilters({ ...EMPTY_FILTERS, ...asObject(asObject(s.params).filters) }); setSort(asObject(s.params).sort || 'recent'); setFiltersOpen(false); }}>
                   {s.name}
                 </button>
-                <button className="text-mist-500 hover:text-red-400 text-xs" aria-label={`Delete saved search ${s.name}`} onClick={async () => { await api.del(`/api/startups/saved-searches/${s.id}`); loadSaved(); }}>✕</button>
+                <button className="text-mist-500 hover:text-red-400 text-xs p-1.5 -m-1" aria-label={`Delete saved search ${s.name}`}
+                  onClick={async () => {
+                    try { await api.del(`/api/startups/saved-searches/${s.id}`); loadSaved(); }
+                    catch (e) { toast(e.message, 'error'); }
+                  }}>✕</button>
               </div>
             ))}
           </div>
@@ -182,9 +192,9 @@ export default function Discover() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="lg:hidden btn-ghost btn-sm" onClick={() => setFiltersOpen(o => !o)}>Filters{active ? ` (${active})` : ''}</button>
-          <span className="text-xs text-mist-500 hidden sm:block">Sort</span>
-          <select className="input !w-auto !py-2" value={sort} onChange={(e) => setSort(e.target.value)}>
+          <button className="lg:hidden btn-ghost btn-sm" aria-expanded={filtersOpen} onClick={() => setFiltersOpen(o => !o)}>Filters{active ? ` (${active})` : ''}</button>
+          <span className="text-xs text-mist-500 hidden sm:block" aria-hidden>Sort</span>
+          <select className="input !w-auto !py-2" aria-label="Sort startups" value={sort} onChange={(e) => setSort(e.target.value)}>
             <option value="recent">Recent</option>
             <option value="upvoted">Most upvoted</option>
             <option value="viewed">Most viewed</option>
@@ -206,7 +216,10 @@ export default function Discover() {
         </Modal>
         <div className="min-w-0">
           {data && <TrendingStrip startups={items} />}
-          {!data ? <SkeletonList kind="card" n={6} /> : items.length === 0 ? (
+          {loadErr ? (
+            <Empty icon="⚠" title="Couldn't load startups" sub={loadErr}
+              action={<button className="btn-primary btn-sm" onClick={() => setRetryTick(t => t + 1)}>Try again</button>} />
+          ) : !data ? <SkeletonList kind="card" n={6} /> : items.length === 0 ? (
             <Empty title="No startups match these filters" sub="Widen your criteria, or save this search to be notified when a match lists." />
           ) : (
             <>

@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, StickyNote, Tag } from 'lucide-react';
 import { api, timeAgo, asArray } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useToast } from '../components/ui';
+import { Avatar, Empty, Modal, Spinner, VerifiedBadge, useConfirm, useToast } from '../components/ui';
 
 const STAGES = ['Tracking', 'Intro Call Done', 'Due Diligence', 'Term Sheet', 'Passed'];
 const STAGE_TINT = {
@@ -23,13 +23,20 @@ export default function Watchlist() {
   const toast = useToast();
   const isInvestor = user.role === 'investor';
 
-  const load = () => api.get('/api/watchlist').then(d => setList(asArray(d.watchlist))).catch(e => toast(e.message, 'error'));
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/watchlist')
+    .then(d => { setLoadErr(null); setList(asArray(d.watchlist)); })
+    .catch(e => { if (list) toast(e.message, 'error'); else setLoadErr(e.message); });
   const loadShared = () => api.get('/api/startups/shared-with-me').then(d => setShared(asArray(d.shared))).catch(() => {});
   useEffect(() => { if (isInvestor) { load(); loadShared(); } }, [isInvestor]);
 
   const moveBusy = useRef(false);
 
   if (!isInvestor) return <Navigate to="/dashboard" replace />;
+  if (loadErr && !list) {
+    return <Empty icon="⚠" title="Couldn't load your pipeline" sub={loadErr}
+      action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />;
+  }
   if (!list) return <Spinner />;
 
   const move = async (s, dir) => {
@@ -49,14 +56,14 @@ export default function Watchlist() {
           <p className="text-sm text-mist-400 mt-1 page-sub">Your deal flow from first look to decision — private to you.</p>
         </div>
         <div className="flex items-center gap-2">
-          <input className="input !w-56 !py-2" aria-label="Search" placeholder="Search pipeline…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input !w-56 !py-2" aria-label="Search pipeline" placeholder="Search pipeline…" value={q} onChange={(e) => setQ(e.target.value)} />
           <Link to="/discover" className="btn-ghost btn-sm whitespace-nowrap">+ Add deal</Link>
         </div>
       </div>
 
       {shared.length > 0 && (
         <div className="card p-4 mb-6">
-          <div className="section-title mb-3">Shared by co-investors</div>
+          <h2 className="section-title mb-3">Shared by co-investors</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {shared.map(sd => (
               <Link key={sd.id} to={`/startup/${sd.startup_id}`} className="bg-ink-850 border border-ink-700/50 rounded-xl p-3 hover:border-gold-500/40 transition-colors">
@@ -115,23 +122,25 @@ export default function Watchlist() {
                       )}
                       <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-ink-700/40">
                         <div className="flex items-center gap-2">
-                          <button onClick={() => setNotesFor(s)}
-                            className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors">
+                          <button onClick={() => setNotesFor(s)} aria-label={`Notes for ${s.name}`}
+                            className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors min-h-[36px]">
                             <StickyNote className="w-3 h-3" /> {asArray(s.notes).length} note{asArray(s.notes).length !== 1 ? 's' : ''}
                           </button>
-                          <button onClick={() => setTagsFor(s)}
-                            className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors">
+                          <button onClick={() => setTagsFor(s)} aria-label={`Tags for ${s.name}`}
+                            className="flex items-center gap-1 text-[11px] text-mist-500 hover:text-gold-300 transition-colors min-h-[36px]">
                             <Tag className="w-3 h-3" /> {s.tags?.length || 0}
                           </button>
                         </div>
                         <div className="flex gap-0.5">
                           <button onClick={() => move(s, -1)} disabled={STAGES.indexOf(s.status) === 0}
-                            className="p-2.5 rounded-lg text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Move back">
-                            <ChevronLeft className="w-3.5 h-3.5" />
+                            className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors"
+                            title="Move back a stage" aria-label={`Move ${s.name} back a stage`}>
+                            <ChevronLeft className="w-4 h-4" />
                           </button>
                           <button onClick={() => move(s, 1)} disabled={STAGES.indexOf(s.status) === STAGES.length - 1}
-                            className="p-2.5 rounded-lg text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors" title="Advance">
-                            <ChevronRight className="w-3.5 h-3.5" />
+                            className="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-lg text-mist-500 hover:text-mist-100 hover:bg-ink-700 disabled:opacity-25 transition-colors"
+                            title="Advance a stage" aria-label={`Advance ${s.name} a stage`}>
+                            <ChevronRight className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -153,6 +162,7 @@ export default function Watchlist() {
 function TagsModal({ s, onClose, onChange }) {
   const [tags, setTags] = useState([]);
   const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
   useEffect(() => { if (s) setTags(s.tags || []); }, [s]);
   if (!s) return null;
@@ -162,8 +172,10 @@ function TagsModal({ s, onClose, onChange }) {
     setInput('');
   };
   const save = async () => {
+    if (busy) return;
+    setBusy(true);
     try { await api.post(`/api/startups/${s.id}/watchlist-tags`, { tags }); onChange(); onClose(); toast('Tags saved', 'success'); }
-    catch (e) { toast(e.message, 'error'); }
+    catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   };
   return (
     <Modal open={!!s} onClose={onClose} title={`Deal tags — ${s.name}`}>
@@ -177,10 +189,10 @@ function TagsModal({ s, onClose, onChange }) {
           ))}
           {tags.length === 0 && <span className="text-xs text-mist-500">No tags yet.</span>}
         </div>
-        <input className="input !py-2" placeholder="Type a tag, then press Enter" value={input}
+        <input className="input !py-2" aria-label="New tag" placeholder="Type a tag, then press Enter" value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(input); } }} />
-        <button className="btn-primary w-full" onClick={save}>Save tags</button>
+        <button className="btn-primary w-full" disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save tags'}</button>
       </div>
     </Modal>
   );
@@ -188,8 +200,16 @@ function TagsModal({ s, onClose, onChange }) {
 
 function NotesModal({ s, onClose, onChange }) {
   const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const confirm = useConfirm();
   if (!s) return null;
+  const saveNote = async () => {
+    if (!note.trim() || busy) return;
+    setBusy(true);
+    try { await api.post(`/api/startups/${s.id}/notes`, { text: note }); setNote(''); onChange(); onClose(); toast('Note saved', 'success'); }
+    catch (er) { toast(er.message, 'error'); } finally { setBusy(false); }
+  };
   return (
     <Modal open={!!s} onClose={onClose} title={`Private notes — ${s.name}`}>
       <div className="space-y-3">
@@ -197,23 +217,21 @@ function NotesModal({ s, onClose, onChange }) {
         {asArray(s.notes).map(n => (
           <div key={n.id} className="flex gap-3 bg-gold-500/5 border border-gold-500/20 rounded-xl px-3.5 py-2.5">
             <div className="flex-1">
-              <p className="text-sm text-mist-200">{n.text}</p>
+              <p className="text-sm text-mist-200 break-words">{n.text}</p>
               <div className="text-[10px] text-mist-500 mt-0.5">{timeAgo(n.created_at)}</div>
             </div>
-            <button className="text-mist-500 hover:text-red-400 text-xs" onClick={async () => {
-              await api.del(`/api/startups/notes/${n.id}`); onChange(); onClose();
+            <button className="text-mist-500 hover:text-red-400 text-xs p-1.5 -m-1 self-start" aria-label="Delete note" onClick={async () => {
+              if (!await confirm({ title: 'Delete this note?', body: 'This cannot be undone.', danger: true })) return;
+              try { await api.del(`/api/startups/notes/${n.id}`); onChange(); onClose(); }
+              catch (er) { toast(er.message, 'error'); }
             }}>✕</button>
           </div>
         ))}
         <div className="flex gap-2">
-          <input className="input !py-2" placeholder="Add a note — press Enter to save" value={note} autoFocus
+          <input className="input !py-2" aria-label="New note" placeholder="Add a note — press Enter to save" value={note} autoFocus
             onChange={(e) => setNote(e.target.value)}
-            onKeyDown={async (e) => {
-              if (e.key === 'Enter' && note.trim()) {
-                try { await api.post(`/api/startups/${s.id}/notes`, { text: note }); setNote(''); onChange(); onClose(); toast('Note saved', 'success'); }
-                catch (er) { toast(er.message, 'error'); }
-              }
-            }} />
+            onKeyDown={(e) => { if (e.key === 'Enter') saveNote(); }} />
+          <button className="btn-primary btn-sm shrink-0" disabled={!note.trim() || busy} onClick={saveNote}>{busy ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
     </Modal>

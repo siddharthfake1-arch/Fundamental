@@ -28,7 +28,7 @@ const TIERS = {
 export const VerifiedBadge = ({ small, tier = 1 }) => {
   const t = TIERS[Math.min(3, Math.max(1, Number(tier) || 1))];
   return (
-    <span title={t.label} className={`inline-flex items-center justify-center rounded-full ${t.bg} text-white shrink-0 ${small ? 'w-3.5 h-3.5' : 'w-[18px] h-[18px]'}`}>
+    <span title={t.label} role="img" aria-label={t.label} className={`inline-flex items-center justify-center rounded-full ${t.bg} text-white shrink-0 ${small ? 'w-3.5 h-3.5' : 'w-[18px] h-[18px]'}`}>
       <svg viewBox="0 0 24 24" fill="none" className={small ? 'w-2.5 h-2.5' : 'w-3 h-3'}><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
     </span>
   );
@@ -124,16 +124,19 @@ export const SkeletonList = ({ n = 4, kind = 'row' }) => {
 };
 
 export const Spinner = ({ className = '' }) => (
-  <div className={`flex justify-center py-12 ${className}`}>
+  <div role="status" aria-label="Loading" className={`flex justify-center py-12 ${className}`}>
     <div className="w-7 h-7 rounded-full border-2 border-ink-600 border-t-gold-400 animate-spin" />
   </div>
 );
 
-export const Empty = ({ icon = '◇', title, sub }) => (
+// `action` renders below the copy — a retry button on error states, a CTA on
+// genuinely empty ones — so dead ends always offer a way forward.
+export const Empty = ({ icon = '◇', title, sub, action }) => (
   <div className="card p-10 text-center fade-in">
-    <div className="text-3xl mb-3 text-mist-500">{icon}</div>
+    <div className="text-3xl mb-3 text-mist-500" aria-hidden>{icon}</div>
     <div className="h-display text-base">{title}</div>
     {sub && <div className="text-sm text-mist-400 mt-1.5 max-w-sm mx-auto">{sub}</div>}
+    {action && <div className="mt-4">{action}</div>}
   </div>
 );
 
@@ -207,7 +210,8 @@ export function ToastProvider({ children }) {
   const toast = useCallback((msg, kind = 'info') => {
     const id = Math.random();
     setToasts(t => [...t, { id, msg, kind }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200);
+    // Errors carry instructions the user may need to act on — give them longer.
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), kind === 'error' ? 6500 : 4200);
   }, []);
   return (
     <ToastCtx.Provider value={toast}>
@@ -325,10 +329,10 @@ export function CityInput({ value, onChange, placeholder = 'Search city…', cla
           else if (e.key === 'Escape') setOpen(false);
         }} />
       {open && results.length > 0 && (
-        <ul className="absolute z-30 mt-1 w-full max-h-60 overflow-auto rounded-xl bg-ink-850 border border-ink-600/70 shadow-lift py-1">
+        <ul role="listbox" aria-label="City suggestions" className="absolute z-30 mt-1 w-full max-h-60 overflow-auto rounded-xl bg-ink-850 border border-ink-600/70 shadow-lift py-1">
           {results.map((c, i) => (
-            <li key={c}>
-              <button type="button" onMouseEnter={() => setActive(i)} onClick={() => choose(c)}
+            <li key={c} role="option" aria-selected={i === active}>
+              <button type="button" tabIndex={-1} onMouseEnter={() => setActive(i)} onClick={() => choose(c)}
                 className={`w-full text-left px-3 py-2 text-sm ${i === active ? 'bg-ink-700 text-mist-100' : 'text-mist-300 hover:bg-ink-800'}`}>{c}</button>
             </li>
           ))}

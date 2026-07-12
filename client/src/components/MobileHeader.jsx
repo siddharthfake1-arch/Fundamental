@@ -106,7 +106,8 @@ export default function MobileHeader() {
             aria-label="Search" className="p-2.5 rounded-xl active:bg-ink-800 text-mist-300">
             <Search className="w-[22px] h-[22px]" />
           </button>
-          <Link to="/notifications" aria-label="Notifications" className="relative p-2.5 rounded-xl active:bg-ink-800 text-mist-300">
+          <Link to="/notifications" aria-label={`Notifications${counts.notifications > 0 ? `, ${counts.notifications} unread` : ''}`}
+            className="relative p-2.5 rounded-xl active:bg-ink-800 text-mist-300">
             <Bell className="w-[22px] h-[22px]" />
             {counts.notifications > 0 && (
               <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-gold-400 text-ink-950 text-[10px] font-bold flex items-center justify-center">

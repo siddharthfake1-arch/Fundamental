@@ -16,6 +16,9 @@ export function ThemeProvider({ children }) {
     root.classList.add(theme);
     writeTheme(theme);
     window.__setNativeTheme?.(theme); // native: keep the status bar style in sync
+    // Keep the browser chrome (mobile address bar / PWA title bar) on-theme too.
+    document.querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'light' ? '#f6f7f9' : '#000000');
   }, [theme]);
 
   const toggle = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'));

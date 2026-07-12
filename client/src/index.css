@@ -75,7 +75,10 @@ html.light {
   a, button, input, select, textarea, .card, .card-hover, .nav-link, .chip, .btn {
     transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   }
-  :focus-visible { outline: 2px solid rgb(var(--acc-500) / 0.55); outline-offset: 2px; border-radius: 4px; }
+  /* No border-radius here: that would mutate an element's own radius on keyboard
+     focus (a rounded-full control would visibly square off). Outlines follow the
+     element's border-radius in modern browsers anyway. */
+  :focus-visible { outline: 2px solid rgb(var(--acc-500) / 0.55); outline-offset: 2px; }
 }
 
 /* Respect users who prefer reduced motion — collapse long animations to a blink. */

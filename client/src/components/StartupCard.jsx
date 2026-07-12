@@ -43,8 +43,12 @@ export default function StartupCard({ s }) {
   const hot = s.momentum >= 40;
   const scoreColor = s.score >= 75 ? 'text-emerald-400' : s.score >= 50 ? 'text-gold-300' : 'text-mist-400';
 
+  // The whole card navigates via a stretched link overlay — NOT by nesting the
+  // save/upvote <button>s inside an anchor (invalid HTML, unreliable for AT and
+  // keyboard users). Buttons sit above the overlay with position + z-index.
   return (
-    <Link to={`/startup/${s.id}`} className="card card-hover p-5 flex flex-col gap-3.5 h-full group relative">
+    <div className="card card-hover p-5 flex flex-col gap-3.5 h-full group relative">
+      <Link to={`/startup/${s.id}`} aria-label={`${s.name} — view startup`} className="absolute inset-0 z-0 rounded-2xl" />
       <div className="flex items-start gap-3.5">
         <Avatar src={s.logo} name={s.name} size={12} square />
         <div className="min-w-0 flex-1">
@@ -56,7 +60,8 @@ export default function StartupCard({ s }) {
           <div className="text-xs text-mist-400 mt-0.5 truncate">{s.sector} · {s.stage} · {s.city}</div>
         </div>
         <button onClick={toggleSave} title={saved ? 'Remove from pipeline' : 'Save to pipeline'}
-          className={`p-2.5 -m-2 rounded-lg transition-colors ${saved ? 'text-gold-400' : 'text-mist-500 hover:text-mist-200'}`}>
+          aria-label={saved ? 'Remove from pipeline' : 'Save to pipeline'} aria-pressed={!!saved}
+          className={`relative z-10 p-3 -m-2.5 rounded-lg transition-colors ${saved ? 'text-gold-400' : 'text-mist-500 hover:text-mist-200'}`}>
           <Bookmark className="w-[18px] h-[18px]" fill={saved ? 'currentColor' : 'none'} />
         </button>
       </div>
@@ -80,7 +85,7 @@ export default function StartupCard({ s }) {
             {s.arr ? fmtMoney(s.arr) : s.mrr ? fmtMoney(s.mrr) : 'Pre-rev'}
             <span className="text-mist-500 font-normal text-[10px] ml-1">{s.arr ? 'ARR' : s.mrr ? 'MRR' : ''}</span>
           </span>
-          <span className={`font-bold tabular-nums ${scoreColor}`} title="Fundamental Score">◉ {s.score}</span>
+          {s.score != null && <span className={`font-bold tabular-nums ${scoreColor}`} title="Fundamental Score">◉ {s.score}</span>}
           {s.fit != null && s.fit >= 60 && (
             <span className="flex items-center gap-1 text-gold-300 font-semibold shrink-0" title="Match with your thesis">
               <Target className="w-3 h-3" /> {s.fit}% fit
@@ -88,15 +93,18 @@ export default function StartupCard({ s }) {
           )}
           {s.raising_status === 'Actively Raising' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Actively raising" />}
         </div>
-        <button onClick={user.role === 'investor' ? toggleUpvote : (e) => e.preventDefault()}
+        <button onClick={user.role === 'investor' ? toggleUpvote : undefined}
           title={user.role === 'investor' ? 'One upvote per investor' : 'Only investors can upvote'}
-          className={`relative flex items-center gap-1 text-sm rounded-lg px-2 py-1 transition-colors shrink-0
+          aria-label={`${upvotes} upvotes${user.role === 'investor' ? '' : ' — only investors can upvote'}`}
+          aria-pressed={user.role === 'investor' ? !!upvoted : undefined}
+          aria-disabled={user.role !== 'investor' || undefined}
+          className={`relative z-10 flex items-center gap-1 text-sm rounded-lg px-2.5 py-1.5 -my-1 transition-colors shrink-0
             ${upvoted ? 'text-gold-300 bg-gold-500/10' : 'text-mist-400'} ${user.role === 'investor' ? 'hover:bg-ink-700' : 'cursor-default'}`}>
           {burst > 0 && <span key={burst} className="upvote-burst absolute inset-0 rounded-lg border-2 border-gold-400" />}
-          <span key={upvoted} className={`inline-flex ${upvoted ? 'animate-pop' : ''}`}><ChevronUp className="w-4 h-4" strokeWidth={upvoted ? 3 : 2} /></span>
+          <span key={upvoted} className={`inline-flex ${upvoted ? 'animate-pop' : ''}`} aria-hidden><ChevronUp className="w-4 h-4" strokeWidth={upvoted ? 3 : 2} /></span>
           <span className="font-semibold tabular-nums">{upvotes}</span>
         </button>
       </div>
-    </Link>
+    </div>
   );
 }

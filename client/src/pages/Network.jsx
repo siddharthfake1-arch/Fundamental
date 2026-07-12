@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, asArray } from '../api';
-import { Avatar, Empty, Spinner, VerifiedBadge, useToast, SkeletonList } from '../components/ui';
+import { Avatar, Empty, VerifiedBadge, useToast, SkeletonList } from '../components/ui';
 import PullToRefresh from '../components/PullToRefresh';
 
 const SECTORS = ['Fintech', 'Healthtech', 'Edtech', 'Logistics', 'Marketplace', 'SaaS', 'Climate', 'Insurtech', 'Deeptech', 'Consumer'];
@@ -24,8 +24,11 @@ export default function Network() {
     return p.toString();
   }, [filters]);
 
+  const [loadErr, setLoadErr] = useState(null);
   const load = () => {
-    api.get('/api/users/network?' + qs).then(d => { setUsers(asArray(d.users)); setTotal(d.total || 0); }).catch(e => toast(e.message, 'error'));
+    api.get('/api/users/network?' + qs)
+      .then(d => { setLoadErr(null); setUsers(asArray(d.users)); setTotal(d.total || 0); })
+      .catch(e => { if (users) toast(e.message, 'error'); else setLoadErr(e.message); });
     api.get('/api/users/connections').then(d => setConns({ pending: asArray(d.pending), accepted: asArray(d.accepted) })).catch(() => {});
   };
   useEffect(() => { load(); }, [qs]);
@@ -40,7 +43,16 @@ export default function Network() {
   };
 
   const set = (k) => (e) => setFilters(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
-  const act = async (fn, ok) => { try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } };
+  // Per-row busy set: a tapped Connect/Accept must not double-fire while in
+  // flight, and each row disables independently (not the whole grid).
+  const [busyKeys, setBusyKeys] = useState(() => new Set());
+  const act = async (key, fn, ok) => {
+    if (busyKeys.has(key)) return;
+    setBusyKeys(s => new Set(s).add(key));
+    try { await fn(); ok && toast(ok, 'success'); await load(); }
+    catch (e) { toast(e.message, 'error'); }
+    finally { setBusyKeys(s => { const n = new Set(s); n.delete(key); return n; }); }
+  };
 
   return (
     <PullToRefresh onRefresh={load}>
@@ -50,9 +62,9 @@ export default function Network() {
           <h1 className="page-title">Network</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Founders, investors, angels, and operators. Messaging opens once a connection is accepted.</p>
         </div>
-        <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1">
+        <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1" role="tablist" aria-label="Network views">
           {[['directory', 'Directory'], ['requests', `Requests${conns?.pending.length ? ` (${conns.pending.length})` : ''}`], ['connections', 'Connections']].map(([t, l]) => (
-            <button key={t} onClick={() => setParams({ tab: t })}
+            <button key={t} onClick={() => setParams({ tab: t })} role="tab" aria-selected={tab === t}
               className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
           ))}
         </div>
@@ -77,7 +89,10 @@ export default function Network() {
             </label>
           </div>
 
-          {!users ? <SkeletonList kind="card" n={6} /> : users.length === 0 ? <Empty title="No one matches these filters" sub="Adjust your filters to widen the search." /> : (
+          {loadErr && !users ? (
+            <Empty icon="⚠" title="Couldn't load the directory" sub={loadErr}
+              action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />
+          ) : !users ? <SkeletonList kind="card" n={6} /> : users.length === 0 ? <Empty title="No one matches these filters" sub="Adjust your filters to widen the search." /> : (
             <>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {users.map((u, i) => (
@@ -97,14 +112,16 @@ export default function Network() {
                     {u.connection === 'accepted' ? <span className="chip-green flex-1 justify-center !py-1.5">✓ Connected</span>
                       : u.connection === 'pending' && u.connection_direction === 'incoming' ? (
                         <>
-                          <button className="btn-primary btn-sm flex-1" onClick={() => act(() => api.post(`/api/users/connections/${u.connection_id}/accept`), 'Connected')}>Accept</button>
-                          <button className="btn-danger btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${u.connection_id}/reject`))}>Reject</button>
+                          <button className="btn-primary btn-sm flex-1" disabled={busyKeys.has(`c${u.id}`)} onClick={() => act(`c${u.id}`, () => api.post(`/api/users/connections/${u.connection_id}/accept`), 'Connected')}>Accept</button>
+                          <button className="btn-danger btn-sm" disabled={busyKeys.has(`c${u.id}`)} onClick={() => act(`c${u.id}`, () => api.post(`/api/users/connections/${u.connection_id}/reject`), 'Request declined')}>Reject</button>
                         </>
                       ) : u.connection === 'pending' ? <span className="chip flex-1 justify-center !py-1.5">Pending</span>
-                        : u.connection === 'rejected' ? <button className="btn-ghost btn-sm flex-1" onClick={() => act(() => api.post(`/api/users/connect/${u.id}`), 'Connection request sent')}>Connect again</button>
-                          : <button className="btn-primary btn-sm flex-1" onClick={() => act(() => api.post(`/api/users/connect/${u.id}`), 'Connection request sent')}>Connect</button>}
+                        : u.connection === 'rejected' ? <button className="btn-ghost btn-sm flex-1" disabled={busyKeys.has(`c${u.id}`)} onClick={() => act(`c${u.id}`, () => api.post(`/api/users/connect/${u.id}`), 'Connection request sent')}>Connect again</button>
+                          : <button className="btn-primary btn-sm flex-1" disabled={busyKeys.has(`c${u.id}`)} onClick={() => act(`c${u.id}`, () => api.post(`/api/users/connect/${u.id}`), 'Connection request sent')}>Connect</button>}
                     <button className={`btn-ghost btn-sm ${u.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
-                      onClick={() => act(() => api.post(`/api/users/follow/${u.id}`))}>{u.following ? '✓' : 'Follow'}</button>
+                      disabled={busyKeys.has(`f${u.id}`)} aria-pressed={!!u.following}
+                      aria-label={u.following ? `Unfollow ${u.name}` : `Follow ${u.name}`}
+                      onClick={() => act(`f${u.id}`, () => api.post(`/api/users/follow/${u.id}`))}>{u.following ? '✓' : 'Follow'}</button>
                   </div>
                 </motion.div>
               ))}
@@ -112,7 +129,7 @@ export default function Network() {
             {users.length < total && (
               <div className="text-center mt-6">
                 <button className="btn-ghost" onClick={loadMore} disabled={loadingMore}>
-                  {loadingMore ? 'Loading…' : `Load more (${users.length} of ${total})`}
+                  {loadingMore ? 'Loading…' : `Load more (${total - users.length} more)`}
                 </button>
               </div>
             )}
@@ -121,7 +138,7 @@ export default function Network() {
         </>
       )}
 
-      {tab === 'requests' && (!conns ? <Spinner /> : conns.pending.length === 0 ? (
+      {tab === 'requests' && (!conns ? <div className="max-w-2xl"><SkeletonList n={3} /></div> : conns.pending.length === 0 ? (
         <Empty title="No pending requests" sub="Connection requests appear here. Accepting opens messaging both ways." />
       ) : (
         <div className="max-w-2xl space-y-3">
@@ -132,14 +149,14 @@ export default function Network() {
                 <Link to={`/profile/${p.user_id}`} className="flex items-center gap-1.5 font-semibold text-mist-100 hover:text-gold-300">{p.name}{!!p.verified && <VerifiedBadge small />}</Link>
                 <div className="text-xs text-mist-400 capitalize">{p.role}{p.headline && ` — ${p.headline}`}</div>
               </div>
-              <button className="btn-primary btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${p.id}/accept`), 'Connected — messaging is now open')}>Accept</button>
-              <button className="btn-danger btn-sm" onClick={() => act(() => api.post(`/api/users/connections/${p.id}/reject`))}>Reject</button>
+              <button className="btn-primary btn-sm" disabled={busyKeys.has(`r${p.id}`)} onClick={() => act(`r${p.id}`, () => api.post(`/api/users/connections/${p.id}/accept`), 'Connected — messaging is now open')}>Accept</button>
+              <button className="btn-danger btn-sm" disabled={busyKeys.has(`r${p.id}`)} onClick={() => act(`r${p.id}`, () => api.post(`/api/users/connections/${p.id}/reject`), 'Request declined')}>Reject</button>
             </div>
           ))}
         </div>
       ))}
 
-      {tab === 'connections' && (!conns ? <Spinner /> : conns.accepted.length === 0 ? (
+      {tab === 'connections' && (!conns ? <SkeletonList n={6} /> : conns.accepted.length === 0 ? (
         <Empty title="No connections yet" sub="Browse the directory and start building your network." />
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">

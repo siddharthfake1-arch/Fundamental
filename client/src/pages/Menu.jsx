@@ -33,7 +33,7 @@ export default function Menu() {
         </span>
         <span className={`flex-1 ${danger ? 'text-red-300' : ''}`}>{label}</span>
         {badge > 0 && (
-          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-gold-400 text-ink-950 text-[11px] font-bold flex items-center justify-center">
+          <span aria-label={`${badge} unread`} className="min-w-[20px] h-5 px-1.5 rounded-full bg-gold-400 text-ink-950 text-[11px] font-bold flex items-center justify-center">
             {badge > 99 ? '99+' : badge}
           </span>
         )}
@@ -52,13 +52,14 @@ export default function Menu() {
 
   return (
     <div className="max-w-md mx-auto fade-in">
+      <h1 className="sr-only">Menu</h1>
       {/* Profile card — tap through to the public profile */}
       {!isAdmin ? (
         <Link to={`/profile/${user.id}`} className="card flex items-center gap-4 p-4 mb-5 active:bg-ink-800 transition-colors"
           onClick={() => nativeBridge.haptic?.('light')}>
           <Avatar src={user.photo} name={user.name} size={14} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 font-display font-bold text-mist-100">{user.name}{!!user.verified && <VerifiedBadge small />}</div>
+            <div className="flex items-center gap-1.5 font-display font-bold text-mist-100"><span className="truncate">{user.name}</span>{!!user.verified && <VerifiedBadge small />}</div>
             <div className="text-xs text-mist-400 capitalize mt-0.5">{user.role}{user.city ? ` · ${user.city}` : ''}</div>
             <div className="text-xs text-gold-300 mt-1">View profile →</div>
           </div>

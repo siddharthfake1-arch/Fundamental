@@ -45,7 +45,7 @@ export default function PublicStartup() {
             <Avatar src={s.logo} name={s.name} size={18} square />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="h-display text-3xl">{s.name}</h1>
+                <h1 className="h-display text-2xl sm:text-3xl break-words min-w-0">{s.name}</h1>
                 {s.verified && <VerifiedBadge />}
               </div>
               <div className="flex items-center gap-2 flex-wrap mt-2 text-sm text-mist-400">
@@ -58,16 +58,28 @@ export default function PublicStartup() {
                 <span className="chip-gold">▲ {s.upvotes} investor upvotes</span>
               </div>
             </div>
-            <ScoreRing score={s.score} size={72} label="Fundamental Score" />
+            {s.score != null && (
+              <div className="flex flex-col items-center shrink-0">
+                <ScoreRing score={s.score} size={72} label="Fundamental Score" />
+                {/* Same disclaimer the authenticated view carries — it matters most here. */}
+                <span className="text-[9px] text-mist-500 mt-1 text-center max-w-[90px] leading-tight">Informational only — not investment advice</span>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="card p-5 sm:p-6">
           <div className="flex items-center gap-2 mb-4">
             <PlayCircle className="w-4 h-4 text-gold-400" />
-            <span className="section-title">The 12-minute pitch</span>
+            <h2 className="section-title">The 12-minute pitch</h2>
           </div>
-          <video src={absUrl(s.video_url)} controls playsInline preload="metadata" className="w-full aspect-video rounded-xl bg-black border border-ink-600/50" />
+          {s.video_url ? (
+            <video src={absUrl(s.video_url)} controls playsInline preload="metadata" aria-label={`${s.name} pitch video`} className="w-full aspect-video rounded-xl bg-black border border-ink-600/50" />
+          ) : (
+            <div className="w-full aspect-video rounded-xl bg-ink-850 border border-ink-600/50 flex items-center justify-center text-sm text-mist-500">
+              The pitch video isn't available yet.
+            </div>
+          )}
           {founder && (
             <div className="flex items-center gap-2 mt-4 text-sm text-mist-400">
               Pitched by <span className="font-semibold text-mist-100">{founder.name}</span>

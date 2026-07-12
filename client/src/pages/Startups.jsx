@@ -2,21 +2,31 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, asArray, fmtMoney } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, Spinner, VerifiedBadge, SkeletonList } from '../components/ui';
+import { Avatar, Empty, VerifiedBadge, SkeletonList } from '../components/ui';
 
 // Index of all listed startups — a denser, institutional view next to Discover's tiles.
 export default function Startups() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
+  const [loadErr, setLoadErr] = useState(null);
   const [mine, setMine] = useState(null);
   const [q, setQ] = useState('');
   const nav = useNavigate();
 
+  // A failed load must NOT masquerade as "no startups" — that reads like the
+  // marketplace is empty when the network is what actually failed.
+  const load = () => api.get('/api/startups?sort=upvoted')
+    .then(d => { setLoadErr(null); setData(d); })
+    .catch(e => setLoadErr(e.message));
   useEffect(() => {
-    api.get('/api/startups?sort=upvoted').then(setData).catch(() => setData({ startups: [] }));
+    load();
     if (user.role === 'founder') api.get('/api/startups/mine').then(d => setMine(d.startup)).catch(() => {});
   }, []);
 
+  if (loadErr && !data) {
+    return <Empty icon="⚠" title="Couldn't load startups" sub={loadErr}
+      action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />;
+  }
   if (!data) return <div className="space-y-3"><SkeletonList n={6} /></div>;
   const list = asArray(data.startups).filter(s => String((s.name || '') + (s.sector || '') + (s.city || '')).toLowerCase().includes(q.toLowerCase()));
 
@@ -27,7 +37,7 @@ export default function Startups() {
           <h1 className="page-title">Startups</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Every listed company, ranked by investor conviction.</p>
         </div>
-        <input className="input !w-64" aria-label="Search" placeholder="Search by name, sector, or city" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input !w-64" aria-label="Search startups" placeholder="Search by name, sector, or city" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       {user.role === 'founder' && (
@@ -51,7 +61,11 @@ export default function Startups() {
         </div>
       )}
 
-      {list.length === 0 ? <Empty title="No startups found" /> : (
+      {list.length === 0 ? (
+        q ? <Empty title="No startups match" sub={`Nothing matches “${q}”. Try a name, sector, or city.`}
+              action={<button className="btn-ghost btn-sm" onClick={() => setQ('')}>Clear search</button>} />
+          : <Empty title="No startups listed yet" sub="New companies appear here as they join and publish their pitch." />
+      ) : (
         <div className="card overflow-hidden">
           <div className="hidden md:grid grid-cols-[1fr_120px_110px_110px_90px_80px] gap-3 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-mist-500 border-b border-ink-700/60">
             <span>Startup</span><span>Sector</span><span>Stage</span><span>Revenue</span><span>Status</span><span className="text-right">Upvotes</span>

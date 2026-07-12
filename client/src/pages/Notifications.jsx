@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, timeAgo, asArray } from '../api';
-import { Empty, Spinner, useToast, SkeletonList } from '../components/ui';
+import { Empty, useToast, SkeletonList } from '../components/ui';
 import PullToRefresh from '../components/PullToRefresh';
 
 const TYPES = ['Profile Viewed', 'Upvote Received', 'Connection Request', 'Connection Accepted', 'Collateral Request', 'Access Approved', 'New Message', 'Deal Alert'];
@@ -11,6 +11,7 @@ export default function Notifications() {
   const [data, setData] = useState(null);
   const [filter, setFilter] = useState('');
   const [q, setQ] = useState('');
+  const [markBusy, setMarkBusy] = useState(false);
   const toast = useToast();
   const nav = useNavigate();
 
@@ -37,18 +38,27 @@ export default function Notifications() {
           <p className="text-sm text-mist-400 mt-1">{data.unread ?? 0} unread</p>
         </div>
         <div className="flex gap-2">
-          <input className="input !w-40 !py-2 !text-xs" aria-label="Search" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select className="input !w-auto !py-2 !text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <input className="input !w-40 !py-2 !text-sm" aria-label="Search notifications" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <select className="input !w-auto !py-2 !text-sm" aria-label="Filter by type" value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All types</option>
             {TYPES.map(t => <option key={t}>{t}</option>)}
           </select>
-          <button className="btn-ghost btn-sm" disabled={!data.unread}
-            onClick={async () => { await api.post('/api/notifications/read'); load(); window.dispatchEvent(new Event('badge-refresh')); }}>Mark all as read</button>
+          <button className="btn-ghost btn-sm" disabled={!data.unread || markBusy}
+            onClick={async () => {
+              setMarkBusy(true);
+              try { await api.post('/api/notifications/read'); await load(); window.dispatchEvent(new Event('badge-refresh')); }
+              catch (e) { toast(e.message, 'error'); } finally { setMarkBusy(false); }
+            }}>Mark all as read</button>
         </div>
       </div>
 
       {shown.length === 0 ? (
-        <Empty title="No notifications yet" sub="Profile views, upvotes, connections, and data room activity appear here." />
+        (q || filter) ? (
+          <Empty title="No notifications match" sub="Try a different search or type."
+            action={<button className="btn-ghost btn-sm" onClick={() => { setQ(''); setFilter(''); }}>Clear filters</button>} />
+        ) : (
+          <Empty title="No notifications yet" sub="Profile views, upvotes, connections, and data room activity appear here." />
+        )
       ) : (
         <div className="card overflow-hidden">
           {shown.map(n => (

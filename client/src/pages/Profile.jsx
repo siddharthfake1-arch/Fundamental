@@ -12,6 +12,7 @@ export default function Profile() {
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
   const [reporting, setReporting] = useState(false);
+  const [actBusy, setActBusy] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
   const nav = useNavigate();
@@ -19,7 +20,10 @@ export default function Profile() {
   const load = () => api.get(`/api/users/profile/${id}`).then(setD).catch(e => setErr(e.message));
   useEffect(() => { setD(null); setErr(null); load(); }, [id]);
 
-  if (err) return <Empty title={err} />;
+  if (err) {
+    return <Empty icon="⚠" title="Couldn't load this profile" sub={err}
+      action={<button className="btn-primary btn-sm" onClick={() => { setErr(null); load(); }}>Try again</button>} />;
+  }
   if (!d) return <Spinner />;
   const u = d.user;
   const self = u.id === me.id;
@@ -31,7 +35,13 @@ export default function Profile() {
   const startups = asArray(d.startups);
   const portfolioStartups = asArray(d.portfolio_startups);
 
-  const act = async (fn, ok) => { try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } };
+  const act = async (fn, ok) => {
+    if (actBusy) return; // header actions must not double-fire mid-flight
+    setActBusy(true);
+    try { await fn(); ok && toast(ok, 'success'); await load(); }
+    catch (e) { toast(e.message, 'error'); }
+    finally { setActBusy(false); }
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -43,7 +53,7 @@ export default function Profile() {
           </div>
           <div className="flex-1 min-w-0 sm:pt-14">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="page-title">{u.name}</h1>
+              <h1 className="page-title break-words min-w-0">{u.name}</h1>
               {!!u.verified && <VerifiedBadge tier={u.verified} />}
               <span className="chip capitalize">{u.role}</span>
               {d.trust && (
@@ -83,6 +93,7 @@ export default function Profile() {
               </button>
             )}
             <button className={`btn-ghost btn-sm ${d.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
+              disabled={actBusy} aria-pressed={!!d.following}
               onClick={() => act(() => api.post(`/api/users/follow/${u.id}`))}>{d.following ? '✓ Following' : 'Follow'}</button>
             {u.linkedin && <a href={u.linkedin} target="_blank" rel="noreferrer" className="btn-ghost btn-sm">LinkedIn ↗</a>}
             <div className="ml-auto flex gap-2">
@@ -231,7 +242,7 @@ export default function Profile() {
             {activity.map(a => (
               <div key={'a' + a.id} className="flex gap-3 items-start">
                 <span className="chip-gold shrink-0 mt-0.5">{a.type}</span>
-                <div><div className="text-sm text-mist-200">{a.text}</div><div className="text-[11px] text-mist-500">{a.startup_name} · {timeAgo(a.created_at)}</div></div>
+                <div className="min-w-0"><div className="text-sm text-mist-200 break-words">{a.text}</div><div className="text-[11px] text-mist-500">{a.startup_name} · {timeAgo(a.created_at)}</div></div>
               </div>
             ))}
             {posts.map(p => (

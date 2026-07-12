@@ -149,7 +149,7 @@ export default function Messages() {
             return (
             <>
               <div className="flex items-center gap-3 px-4 py-3 border-b border-ink-700/60">
-                <button className="md:hidden btn-ghost btn-sm !px-2" onClick={() => setParams({})}>←</button>
+                <button className="md:hidden btn-ghost btn-sm !px-2.5 !py-2" aria-label="Back to conversations" onClick={() => setParams({})}>←</button>
                 <Avatar src={tOther.photo} name={tOther.name} size={9} />
                 <Link to={`/profile/${tOther.id}`} className="flex items-center gap-1.5 font-semibold text-mist-100 text-sm hover:text-gold-300">
                   {tOther.name}{!!tOther.verified && <VerifiedBadge small />}
@@ -157,7 +157,7 @@ export default function Messages() {
                 <div className="ml-auto flex items-center gap-1.5">
                   <button className="btn-ghost btn-sm !text-mist-500 hidden sm:block" onClick={() => setReporting(true)}>Report</button>
                   <span className="text-[10px] uppercase tracking-wider text-mist-500 hidden sm:block">Deal stage</span>
-                  <select className="input !w-auto !py-1.5 !text-xs" value={tConversation.deal_stage || ''} onChange={(e) => setStage(e.target.value)}>
+                  <select className="input !w-auto !py-1.5 !text-xs" aria-label="Deal stage" value={tConversation.deal_stage || ''} onChange={(e) => setStage(e.target.value)}>
                     <option value="">—</option>
                     {STAGES.map(s => <option key={s}>{s}</option>)}
                   </select>
@@ -169,7 +169,7 @@ export default function Messages() {
                   const mine = m.sender_id === user.id;
                   return (
                     <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${mine ? 'bg-gold-500/15 border border-gold-500/25 text-mist-100' : 'bg-ink-800 border border-ink-600/60 text-mist-200'}`}>
+                      <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words min-w-0 ${mine ? 'bg-gold-500/15 border border-gold-500/25 text-mist-100' : 'bg-ink-800 border border-ink-600/60 text-mist-200'}`}>
                         {m.ref_startup && (
                           <Link to={`/startup/${m.ref_startup.id}`} className="flex items-center gap-2.5 bg-ink-900/70 border border-ink-600/60 rounded-xl p-2.5 mb-2 hover:border-gold-500/40 transition-colors">
                             <Avatar src={m.ref_startup.logo} name={m.ref_startup.name} size={8} square />
@@ -210,7 +210,7 @@ export default function Messages() {
                     }} />📎
                   </label>
                   <button className="btn-ghost btn-sm !px-3 !py-2.5" title="Reference a startup" aria-label="Reference a startup" onClick={openRef}>◳</button>
-                  <textarea className="input flex-1 !py-2.5 resize-none" rows={1} placeholder="Write a message…" enterKeyHint="send" value={text}
+                  <textarea className="input flex-1 !py-2.5 resize-none" rows={1} aria-label="Message" placeholder="Write a message…" enterKeyHint="send" value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
                   <button className="btn-primary btn-sm !py-2.5" disabled={sending || uploadPct !== null} onClick={() => send()}>{sending ? '…' : 'Send'}</button>

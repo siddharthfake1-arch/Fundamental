@@ -1,23 +1,35 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Flame, TrendingUp, Activity, Building2 } from 'lucide-react';
 import { api, asArray, asObject } from '../api';
-import { Spinner, Stat, useToast } from '../components/ui';
+import { Empty, Spinner, Stat } from '../components/ui';
 
-const Bar = ({ pct, color = 'rgb(var(--acc-500))' }) => (
-  <div className="h-1.5 bg-ink-700/70 rounded-full overflow-hidden flex-1">
-    <motion.div initial={{ width: 0 }} whileInView={{ width: `${pct}%` }} viewport={{ once: true }}
-      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }} className="h-full rounded-full" style={{ background: color }} />
-  </div>
-);
+const Bar = ({ pct, color = 'rgb(var(--acc-500))' }) => {
+  // Width is a layout animation the CSS reduced-motion rule can't reach — with
+  // dozens of bars on screen, honor the preference here in JS.
+  const reduced = useReducedMotion();
+  return (
+    <div className="h-1.5 bg-ink-700/70 rounded-full overflow-hidden flex-1">
+      <motion.div initial={reduced ? false : { width: 0 }} whileInView={{ width: `${pct}%` }} viewport={{ once: true }}
+        transition={{ duration: reduced ? 0 : 0.8, ease: [0.22, 1, 0.36, 1] }} className="h-full rounded-full" style={{ background: color }} />
+    </div>
+  );
+};
 
 // Market Pulse — aggregate ecosystem intelligence. No confidential startup data.
 export default function Pulse() {
   const [d, setD] = useState(null);
+  const [loadErr, setLoadErr] = useState(null);
   const [q, setQ] = useState('');
-  const toast = useToast();
-  useEffect(() => { api.get('/api/pulse').then(setD).catch(e => toast(e.message, 'error')); }, []);
+  // A failed load must end in a retryable error state — not a spinner that
+  // keeps spinning long after the toast has faded.
+  const load = () => api.get('/api/pulse').then(x => { setLoadErr(null); setD(x); }).catch(e => setLoadErr(e.message));
+  useEffect(() => { load(); }, []);
+  if (loadErr && !d) {
+    return <Empty icon="⚠" title="Couldn't load Market Pulse" sub={loadErr}
+      action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />;
+  }
   if (!d) return <Spinner />;
   const match = (name) => !q || String(name || '').toLowerCase().includes(q.toLowerCase());
 
@@ -39,15 +51,15 @@ export default function Pulse() {
           <h1 className="page-title flex items-center gap-2"><Activity className="w-6 h-6 text-gold-400" /> Market Pulse</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Live signals from across Fundamental — aggregate trends only, never individual startup data.</p>
         </div>
-        <input className="input !w-56" aria-label="Search" placeholder="Search sectors…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input !w-56" aria-label="Search sectors" placeholder="Search sectors…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <Stat label="Listed Startups" value={totals.startups} />
-        <Stat label="Open Rounds" value={totals.open_rounds} sub="Actively raising" />
-        <Stat label="Active Investors" value={totals.investors} />
-        <Stat label="Connections · 30d" value={totals.connections_30d} />
-        <Stat label="Founder Updates · 30d" value={totals.updates_30d} />
+        <Stat label="Listed Startups" value={totals.startups ?? 0} />
+        <Stat label="Open Rounds" value={totals.open_rounds ?? 0} sub="Actively raising" />
+        <Stat label="Active Investors" value={totals.investors ?? 0} />
+        <Stat label="Connections · 30d" value={totals.connections_30d ?? 0} />
+        <Stat label="Founder Updates · 30d" value={totals.updates_30d ?? 0} />
       </div>
 
       <div className="grid lg:grid-cols-5 gap-5">
@@ -55,10 +67,13 @@ export default function Pulse() {
         <div className="card p-5 lg:col-span-3">
           <div className="flex items-center gap-2 mb-1">
             <Flame className="w-4 h-4 text-orange-400" />
-            <span className="section-title !text-orange-400">Sector Heat</span>
+            <h2 className="section-title !text-orange-400">Sector Heat</h2>
           </div>
           <p className="text-xs text-mist-500 mb-4">A composite of investor conviction, pipeline adds, views, and open rounds.</p>
           <div className="space-y-3.5">
+            {q && sectors.filter(s => match(s.sector)).length === 0 && (
+              <p className="text-sm text-mist-500 py-2">No sectors match “{q}”.</p>
+            )}
             {sectors.filter(s => match(s.sector)).map((s, i) => (
               <div key={s.sector} className="flex items-center gap-3">
                 <span className="w-6 text-xs font-bold text-mist-500 tabular-nums">{i + 1}</span>
@@ -76,7 +91,7 @@ export default function Pulse() {
         <div className="card p-5 lg:col-span-2">
           <div className="flex items-center gap-2 mb-1">
             <TrendingUp className="w-4 h-4 text-emerald-400" />
-            <span className="section-title !text-emerald-400">Emerging Themes</span>
+            <h2 className="section-title !text-emerald-400">Emerging Themes</h2>
           </div>
           <p className="text-xs text-mist-500 mb-4">Sectors with the fastest-growing startups right now.</p>
           <div className="space-y-3">
@@ -93,7 +108,7 @@ export default function Pulse() {
       <div className="grid lg:grid-cols-3 gap-5">
         {/* Investor interest */}
         <div className="card p-5">
-          <span className="section-title">Investor Interest · 30d</span>
+          <h2 className="section-title">Investor Interest · 30d</h2>
           <p className="text-xs text-mist-500 mt-1 mb-4">Conviction votes and pipeline adds by sector.</p>
           <div className="space-y-3">
             {[...sectors].filter(s => match(s.sector)).sort((a, b) => (b.pipeline_adds_30d + b.upvotes_30d) - (a.pipeline_adds_30d + a.upvotes_30d)).slice(0, 6).map(s => (
@@ -108,7 +123,7 @@ export default function Pulse() {
 
         {/* Stage composition */}
         <div className="card p-5">
-          <span className="section-title">Stage Composition</span>
+          <h2 className="section-title">Stage Composition</h2>
           <p className="text-xs text-mist-500 mt-1 mb-4">Where the ecosystem sits across the funding lifecycle.</p>
           <div className="space-y-3">
             {stages.map(s => (
@@ -125,7 +140,7 @@ export default function Pulse() {
         <div className="card p-5">
           <div className="flex items-center gap-2">
             <Building2 className="w-4 h-4 text-gold-400" />
-            <span className="section-title">Geography</span>
+            <h2 className="section-title">Geography</h2>
           </div>
           <p className="text-xs text-mist-500 mt-1 mb-4">Where listed startups are based.</p>
           <div className="space-y-3">

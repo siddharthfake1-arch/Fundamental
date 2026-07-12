@@ -23,10 +23,14 @@ export default function Social() {
   const [format, setFormat] = useState('all');
   const [q, setQ] = useState('');
   const [composer, setComposer] = useState(false);
+  const [loadErr, setLoadErr] = useState(null);
   const toast = useToast();
 
+  // First-load failures paint a retryable error state; refresh failures (posts
+  // already on screen) just toast without wiping the feed.
   const load = () => api.get('/api/social' + (filter ? `?type=${encodeURIComponent(filter)}` : ''))
-    .then(d => setPosts(asArray(d.posts))).catch(e => toast(e.message, 'error'));
+    .then(d => { setLoadErr(null); setPosts(asArray(d.posts)); })
+    .catch(e => { if (posts) toast(e.message, 'error'); else setLoadErr(e.message); });
   useEffect(() => { load(); }, [filter]);
 
   // Deep link: /social?post=ID scrolls to and briefly highlights the shared post.
@@ -36,7 +40,8 @@ export default function Social() {
     if (!pid || !posts) return;
     const el = document.getElementById(`post-${pid}`);
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
       el.classList.add('ring-2', 'ring-gold-400/50');
       setTimeout(() => el.classList.remove('ring-2', 'ring-gold-400/50'), 3000);
     }
@@ -56,8 +61,8 @@ export default function Social() {
           <p className="text-sm text-mist-400 mt-1 page-sub">Professional updates from the network, capped at 400 characters.</p>
         </div>
         <div className="flex gap-2">
-          <input className="input !w-44 !py-2 !text-xs" aria-label="Search" placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select className="input !w-auto !py-2 !text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <input className="input !w-44 !py-2 !text-sm" aria-label="Search posts" placeholder="Search posts…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <select className="input !w-auto !py-2 !text-sm" aria-label="Filter by category" value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All categories</option>
             {types.types.map(t => <option key={t}>{t}</option>)}
           </select>
@@ -66,7 +71,7 @@ export default function Social() {
 
       <div className="flex rounded-xl bg-ink-850 border border-ink-600/50 p-1 mb-5 w-fit">
         {FORMATS.map(([v, l]) => (
-          <button key={v} onClick={() => setFormat(v)}
+          <button key={v} onClick={() => setFormat(v)} aria-pressed={format === v}
             className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${format === v ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
         ))}
       </div>
@@ -84,7 +89,19 @@ export default function Social() {
         </div>
       )}
 
-      {!posts ? <SkeletonList kind="post" n={3} /> : visible.length === 0 ? <Empty title="No posts yet" sub="Updates from the network appear here." /> : (
+      {loadErr && !posts ? (
+        <Empty icon="⚠" title="Couldn't load the feed" sub={loadErr}
+          action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />
+      ) : !posts ? <SkeletonList kind="post" n={3} /> : visible.length === 0 ? (
+        // "Nothing matches your filters" and "nothing has been posted" are
+        // different situations — say which one this is, and offer the way out.
+        posts.length > 0 || filter || q ? (
+          <Empty title="No posts match" sub="Try a different search, category, or format."
+            action={<button className="btn-ghost btn-sm" onClick={() => { setQ(''); setFilter(''); setFormat('all'); }}>Clear filters</button>} />
+        ) : (
+          <Empty title="No posts yet" sub="Updates from the network appear here." />
+        )
+      ) : (
         <div className="space-y-4">
           {visible.map(p => <Post key={p.id} p={p} onChange={load} />)}
         </div>
@@ -115,15 +132,19 @@ function Composer({ allowed, onDone, onCancel }) {
         <span className="label">Post type — required</span>
         <div className="flex flex-wrap gap-2">
           {allowed.map(t => (
-            <button key={t} onClick={() => setType(t)}
+            <button key={t} onClick={() => setType(t)} aria-pressed={type === t}
               className={type === t ? 'chip-gold !py-1.5 !px-3 !text-xs' : 'chip !py-1.5 !px-3 !text-xs hover:border-ink-400'}>{t}</button>
           ))}
         </div>
       </div>
       <div>
         <textarea className="input min-h-[110px]" maxLength={400} value={text} onChange={(e) => setText(e.target.value)}
-          placeholder="Share a clear, specific update — numbers, names, and dates carry the most weight." />
-        <div className={`text-right text-[11px] mt-1 tabular-nums ${text.length > 360 ? 'text-amber-400' : 'text-mist-500'}`}>{text.length}/400</div>
+          aria-label="Post text" placeholder="Share a clear, specific update — numbers, names, and dates carry the most weight." />
+        <div className="flex items-center justify-between mt-1 text-[11px]">
+          {/* The 10-char minimum otherwise reads as a mysteriously dead button. */}
+          <span className="text-mist-500">{text.trim().length > 0 && text.trim().length < 10 ? 'At least 10 characters to publish.' : ''}</span>
+          <span className={`tabular-nums ${text.length > 360 ? 'text-amber-400' : 'text-mist-500'}`}>{text.length}/400</span>
+        </div>
       </div>
       <div className="grid sm:grid-cols-3 gap-3 items-end">
         <div>
@@ -150,7 +171,7 @@ function Composer({ allowed, onDone, onCancel }) {
           setBusy(true);
           try { await api.post('/api/social', { type, text, startup_id: startupId || null, media }); onDone(); toast('Posted', 'success'); }
           catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
-        }}>Publish post</button>
+        }}>{busy ? 'Publishing…' : 'Publish post'}</button>
       </div>
     </div>
   );
@@ -261,12 +282,12 @@ function Post({ p, onChange }) {
           </div>
         </div>
       ) : (
-        <p className="text-[15px] text-mist-200 leading-relaxed mt-4 whitespace-pre-wrap">{p.text}</p>
+        <p className="text-[15px] text-mist-200 leading-relaxed mt-4 whitespace-pre-wrap break-words">{p.text}</p>
       )}
 
       {p.media && (
         /\.(mp4|webm|mov)/i.test(p.media)
-          ? <div className="feed-media aspect-video"><video src={absUrl(p.media)} controls playsInline preload="metadata" onError={(e) => { e.currentTarget.closest('.feed-media').style.display = 'none'; }} className="object-contain bg-black" /></div>
+          ? <div className="feed-media aspect-video"><video src={absUrl(p.media)} controls playsInline preload="metadata" aria-label={`Video posted by ${p.author?.name || 'a member'}`} onError={(e) => { e.currentTarget.closest('.feed-media').style.display = 'none'; }} className="object-contain bg-black" /></div>
           : /\.(png|jpe?g|gif|svg|webp)/i.test(p.media)
             ? <div className="feed-media aspect-[16/10]"><img src={absUrl(p.media)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onError={(e) => { e.currentTarget.closest('.feed-media').style.display = 'none'; }} className="object-cover img-fade" /></div>
             : <a href={absUrl(p.media)} target="_blank" rel="noreferrer" className="block mt-3 text-sm text-accent-400 underline">📎 View attachment</a>
@@ -285,7 +306,7 @@ function Post({ p, onChange }) {
           className={`btn-ghost btn-sm !border-0 ${likeState.liked ? '!text-gold-300' : ''}`}>
           <span key={likeState.liked} className={`inline-block ${likeState.liked ? 'animate-pop' : ''}`}>{likeState.liked ? '♥' : '♡'}</span> {likeState.likes}
         </button>
-        <button onClick={() => setShowComments(s => !s)} aria-label="Comments" className="btn-ghost btn-sm !border-0">💬 {comments.length}</button>
+        <button onClick={() => setShowComments(s => !s)} aria-label={`Comments, ${comments.length}`} aria-expanded={showComments} className="btn-ghost btn-sm !border-0">💬 {comments.length}</button>
         <button onClick={share} aria-label="Copy link to this post" className="btn-ghost btn-sm !border-0">↗ Share</button>
         {!p.can_edit && (
           <button className="btn-ghost btn-sm !border-0 ml-auto !text-mist-500" onClick={() => setReporting({ type: 'post', id: p.id, label: 'post' })}>Report</button>
@@ -314,19 +335,19 @@ function Post({ p, onChange }) {
                 </div>
                 {c.can_edit && editComment === c.id ? (
                   <div className="flex gap-2 mt-1.5">
-                    <input className="input !py-1.5 !text-sm" value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)}
+                    <input className="input !py-1.5 !text-sm" aria-label="Edit comment" value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter' && editCommentText.trim()) saveComment(c); }} />
                     <button className="btn-primary btn-sm" disabled={!editCommentText.trim()} onClick={() => saveComment(c)}>Save</button>
                     <button className="btn-ghost btn-sm" onClick={() => setEditComment(null)}>Cancel</button>
                   </div>
                 ) : (
-                  <div className="text-sm text-mist-200 mt-0.5">{c.text}</div>
+                  <div className="text-sm text-mist-200 mt-0.5 break-words">{c.text}</div>
                 )}
               </div>
             </div>
           ))}
           <div className="flex gap-2">
-            <input className="input !py-2" placeholder="Add a comment…" value={comment} disabled={commentBusy}
+            <input className="input !py-2" aria-label="Add a comment" placeholder="Add a comment…" value={comment} disabled={commentBusy}
               onChange={(e) => setComment(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') postComment(); }} />
             <button className="btn-primary btn-sm shrink-0" disabled={!comment.trim() || commentBusy} onClick={postComment}>

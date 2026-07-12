@@ -45,7 +45,8 @@ export default function BottomNav() {
           return (
             <NavLink key={to} to={to} onClick={() => nativeBridge.haptic?.('light')}
               className="relative flex flex-col items-center justify-center gap-0.5 pt-2 pb-1.5 min-h-[54px]"
-              aria-current={active ? 'page' : undefined}>
+              aria-current={active ? 'page' : undefined}
+              aria-label={badge && counts[badge] > 0 ? `${label}, ${counts[badge]} unread` : undefined}>
               {active && (
                 <motion.span layoutId="bottomnav-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }}
                   className="absolute top-0 h-0.5 w-10 rounded-full bg-gold-400" />
