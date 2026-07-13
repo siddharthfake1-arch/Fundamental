@@ -69,10 +69,10 @@ export default function Social() {
         </div>
       </div>
 
-      <div className="flex rounded-xl bg-ink-850 border border-ink-600/50 p-1 mb-5 w-fit">
+      <div className="flex rounded-xl bg-ink-850 border border-ink-600/50 p-1 mb-5 w-fit max-w-full overflow-x-auto no-scrollbar">
         {FORMATS.map(([v, l]) => (
           <button key={v} onClick={() => setFormat(v)} aria-pressed={format === v}
-            className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${format === v ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
+            className={`rounded-lg px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors ${format === v ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
         ))}
       </div>
 
