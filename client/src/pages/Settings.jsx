@@ -9,6 +9,23 @@ import { absUrl, IS_NATIVE } from '../config';
 
 const Field = ({ label, children }) => <label className="block"><span className="label">{label}</span>{children}</label>;
 
+// Password field with a Show/Hide visibility toggle. Local to this page —
+// forwards value/onChange untouched so form state stays exactly as before.
+function PasswordInput({ value, onChange, placeholder, autoComplete }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input type={show ? 'text' : 'password'} className="input !pr-11" value={value} onChange={onChange}
+        placeholder={placeholder} autoComplete={autoComplete} />
+      <button type="button" aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}
+        onClick={() => setShow(s => !s)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-mist-500 hover:text-mist-200 text-xs font-semibold">
+        {show ? 'Hide' : 'Show'}
+      </button>
+    </div>
+  );
+}
+
 export default function Settings() {
   const { user, refresh } = useAuth();
   const [params, setParams] = useSearchParams();
@@ -22,7 +39,7 @@ export default function Settings() {
       <div className="flex gap-1 mb-6 overflow-x-auto no-scrollbar rounded-xl bg-ink-850 border border-ink-600/60 p-1 w-fit max-w-full -mx-1 px-1 sm:mx-0">
         {tabs.map(([t, l]) => (
           <button key={t} onClick={() => setParams({ tab: t })}
-            className={`rounded-lg px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors min-h-[42px] ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors min-h-[44px] ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
         ))}
       </div>
       {/* Form tabs stay MOUNTED (hidden, not unmounted) so switching tabs never
@@ -122,7 +139,10 @@ function StartupSettings() {
             </select></Field>
           <Field label="Raising amount"><input className="input" value={s.raising_amount || ''} onChange={set('raising_amount')} /></Field>
         </div>
-        <Field label="One-line description"><input className="input" maxLength={140} value={s.one_liner || ''} onChange={set('one_liner')} /></Field>
+        <Field label="One-line description">
+          <input className="input" maxLength={140} value={s.one_liner || ''} onChange={set('one_liner')} />
+          <div className="text-right text-[11px] mt-1 tabular-nums text-mist-500">{(s.one_liner || '').length}/140</div>
+        </Field>
         <div className="grid sm:grid-cols-2 gap-4">
           <FileUpload label="Logo" accept="image/*" currentUrl={s.logo} onUploaded={(d) => setS(x => ({ ...x, logo: d.url }))} />
           <FileUpload label="Cover banner" accept="image/*" currentUrl={s.cover} onUploaded={(d) => setS(x => ({ ...x, cover: d.url }))} />
@@ -379,18 +399,19 @@ function Security({ user }) {
   const [next, setNext] = useState('');
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const changePassword = async () => {
+    setBusy(true);
+    try { await api.post('/api/auth/change-password', { current: cur, next }); setCur(''); setNext(''); toast('Password changed', 'success'); }
+    catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
+  };
   return (
     <div className="space-y-5 max-w-md">
-      <div className="card p-6 space-y-4">
+      <form className="card p-6 space-y-4" onSubmit={(e) => { e.preventDefault(); changePassword(); }}>
         <h2 className="section-title">Change password</h2>
-        <Field label="Current password"><input type="password" className="input" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
-        <Field label="New password"><input type="password" className="input" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Letters and numbers, 8+ characters" /></Field>
-        <button className="btn-primary w-full" disabled={busy || !cur || next.length < 8} onClick={async () => {
-          setBusy(true);
-          try { await api.post('/api/auth/change-password', { current: cur, next }); setCur(''); setNext(''); toast('Password changed', 'success'); }
-          catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
-        }}>{busy ? 'Updating…' : 'Update password'}</button>
-      </div>
+        <Field label="Current password"><PasswordInput autoComplete="current-password" value={cur} onChange={(e) => setCur(e.target.value)} /></Field>
+        <Field label="New password"><PasswordInput autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Letters and numbers, 8+ characters" /></Field>
+        <button type="submit" className="btn-primary w-full" disabled={busy || !cur || next.length < 8}>{busy ? 'Updating…' : 'Update password'}</button>
+      </form>
       <ChangeEmail user={user} />
       <BlockedMembers />
       <div className="card p-6">
@@ -427,29 +448,29 @@ function ChangeEmail({ user }) {
     } catch (e) { toast(e.message, 'error'); } finally { setBusy(false); }
   };
   return (
-    <div className="card p-6 space-y-4">
+    <form className="card p-6 space-y-4" onSubmit={(e) => { e.preventDefault(); if (f.sent) submit(); }}>
       <h2 className="section-title">Change email</h2>
       <p className="text-xs text-mist-500 -mt-2">Your email is how you sign in. We verify the new address with a code before switching.</p>
       <div className="flex gap-2">
-        <input className="input flex-1" type="email" placeholder="New email address" value={f.email}
+        <input className="input flex-1" type="email" autoComplete="email" placeholder="New email address" value={f.email}
           onChange={(e) => setF(x => ({ ...x, email: e.target.value, sent: false }))} />
-        <button className="btn-ghost shrink-0" disabled={busy || !f.email} onClick={sendCode}>{f.sent ? 'Resend code' : 'Send code'}</button>
+        <button type="button" className="btn-ghost shrink-0" disabled={busy || !f.email} onClick={sendCode}>{f.sent ? 'Resend code' : 'Send code'}</button>
       </div>
       {f.sent && (
         <>
           {f.demo && <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">Demo mode — your code is <code className="font-bold">{f.demo}</code></div>}
           <div className="grid sm:grid-cols-2 gap-3">
-            <Field label="6-digit code"><input className="input tracking-[0.4em]" inputMode="numeric" maxLength={6} value={f.code}
+            <Field label="6-digit code"><input className="input tracking-[0.4em]" autoComplete="one-time-code" inputMode="numeric" maxLength={6} value={f.code}
               onChange={(e) => setF(x => ({ ...x, code: e.target.value.replace(/\D/g, '') }))} /></Field>
-            <Field label="Current password"><input type="password" className="input" value={f.password}
+            <Field label="Current password"><PasswordInput autoComplete="current-password" value={f.password}
               onChange={(e) => setF(x => ({ ...x, password: e.target.value }))} /></Field>
           </div>
-          <button className="btn-primary w-full" disabled={busy || f.code.length < 6 || !f.password} onClick={submit}>
+          <button type="submit" className="btn-primary w-full" disabled={busy || f.code.length < 6 || !f.password}>
             {busy ? 'Updating…' : 'Update email'}
           </button>
         </>
       )}
-    </div>
+    </form>
   );
 }
 
@@ -485,7 +506,9 @@ function PrivacyControls({ user }) {
   const toast = useToast();
   const confirm = useConfirm();
   const { setUser } = useAuth();
+  const [exporting, setExporting] = useState(false);
   const exportData = async () => {
+    setExporting(true);
     try {
       const res = await fetch('/api/users/me/export', { credentials: 'include' });
       if (!res.ok) throw new Error('Export failed');
@@ -495,7 +518,7 @@ function PrivacyControls({ user }) {
       a.download = 'fundamental-data-export.json';
       a.click();
       URL.revokeObjectURL(a.href);
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e.message, 'error'); } finally { setExporting(false); }
   };
   const deleteAccount = async () => {
     const ok = await confirm({
@@ -523,7 +546,7 @@ function PrivacyControls({ user }) {
       <h2 className="section-title">Your data</h2>
       <p className="text-xs text-mist-500">Download a copy of your data, or permanently delete your account.</p>
       <div className="flex gap-2">
-        <button className="btn-ghost btn-sm flex-1" onClick={exportData}>Export my data</button>
+        <button className="btn-ghost btn-sm flex-1" disabled={exporting} onClick={exportData}>{exporting ? 'Preparing export…' : 'Export my data'}</button>
         {user.role !== 'admin' && <button className="btn-danger btn-sm flex-1" onClick={deleteAccount}>Delete account</button>}
       </div>
     </div>

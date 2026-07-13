@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { Logo } from '../components/ui';
+import { Empty, Logo } from '../components/ui';
 
 // Lightweight legal/compliance pages. These are baseline templates — have counsel
 // review and localise them for your operating jurisdictions before launch.
@@ -48,7 +48,31 @@ const DOCS = {
 
 export default function Legal() {
   const { doc } = useParams();
-  const d = DOCS[doc] || DOCS.terms;
+  const d = DOCS[doc];
+  if (!d) {
+    // Honest not-found for unknown slugs instead of silently showing Terms.
+    return (
+      <div className="min-h-screen bg-ink-950 safe-top safe-bottom">
+        <header className="max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
+          <Link to="/"><Logo className="h-[40px]" /></Link>
+          <Link to="/" className="btn-ghost btn-sm">Back to Fundamental</Link>
+        </header>
+        <main className="max-w-3xl mx-auto px-4 pb-20">
+          <Empty
+            title="That document doesn't exist"
+            sub="The page you followed points to a legal document we don't publish. Here are the ones we do:"
+            action={
+              <div className="flex justify-center gap-3 text-xs flex-wrap">
+                {Object.entries(DOCS).map(([k, v]) => (
+                  <Link key={k} to={`/legal/${k}`} className="text-mist-400 hover:text-gold-300">{v.title}</Link>
+                ))}
+              </div>
+            }
+          />
+        </main>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-ink-950 safe-top safe-bottom">
       <header className="max-w-3xl mx-auto px-4 py-5 flex items-center justify-between">
@@ -60,7 +84,7 @@ export default function Legal() {
         <p className="text-xs text-mist-500 mt-1 mb-2">Last updated {d.updated}</p>
         <div className="flex gap-3 text-xs mb-8">
           {Object.entries(DOCS).map(([k, v]) => (
-            <Link key={k} to={`/legal/${k}`} className={`hover:text-gold-300 ${k === doc ? 'text-gold-300' : 'text-mist-400'}`}>{v.title}</Link>
+            <Link key={k} to={`/legal/${k}`} aria-current={k === doc ? 'page' : undefined} className={`hover:text-gold-300 ${k === doc ? 'text-gold-300' : 'text-mist-400'}`}>{v.title}</Link>
           ))}
         </div>
         <div className="space-y-6">

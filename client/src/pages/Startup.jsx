@@ -30,6 +30,8 @@ export default function Startup() {
   const [err, setErr] = useState(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [actBusy, setActBusy] = useState(false);
   const [noteDoc, setNoteDoc] = useState(null);
   const [memo, setMemo] = useState(null);
   const [memoOpen, setMemoOpen] = useState(false);
@@ -81,7 +83,9 @@ export default function Startup() {
   const scoreBreakdown = asObject(score.breakdown);
 
   const act = async (fn, ok) => {
-    try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); }
+    if (actBusy) return;
+    setActBusy(true);
+    try { await fn(); ok && toast(ok, 'success'); load(); } catch (e) { toast(e.message, 'error'); } finally { setActBusy(false); }
   };
 
   const connectFounder = () => act(async () => {
@@ -136,7 +140,7 @@ export default function Startup() {
           </motion.div>
           <div className="flex-1 min-w-0 sm:pt-14">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="h-display text-2xl sm:text-3xl">{s.name}</h1>
+              <h1 className="h-display text-2xl sm:text-3xl break-words min-w-0">{s.name}</h1>
               {!!s.verified && <VerifiedBadge tier={s.verified} />}
             </div>
             <div className="flex items-center gap-2 flex-wrap mt-2 text-sm text-mist-400">
@@ -167,26 +171,26 @@ export default function Startup() {
             </button>
           )}
           {user.role === 'investor' && !is_owner && (
-            <button className={`btn-ghost btn-sm ${s.interested ? '!text-emerald-300 !border-emerald-500/40' : ''}`}
+            <button className={`btn-ghost btn-sm ${s.interested ? '!text-emerald-300 !border-emerald-500/40' : ''}`} disabled={actBusy}
               onClick={() => act(() => api.post(`/api/startups/${s.id}/interest`), s.interested ? null : 'Interest sent — the founder has been notified')}
               title="Signal to the founder that you're interested">
               {s.interested ? '✓ Interested' : '☆ Express interest'}
             </button>
           )}
           {user.role === 'investor' && (
-            <button className={`btn-ghost btn-sm ${s.upvoted ? '!text-gold-300 !border-gold-500/40' : ''}`}
+            <button className={`btn-ghost btn-sm ${s.upvoted ? '!text-gold-300 !border-gold-500/40' : ''}`} disabled={actBusy}
               onClick={() => act(() => api.post(`/api/startups/${s.id}/upvote`))} title="One upvote per investor, per startup">
               ▲ {s.upvoted ? 'Upvoted' : 'Upvote'} · {s.upvotes}
             </button>
           )}
           {!is_owner && (
-            <button className={`btn-ghost btn-sm ${s.following ? '!text-gold-300 !border-gold-500/40' : ''}`}
+            <button className={`btn-ghost btn-sm ${s.following ? '!text-gold-300 !border-gold-500/40' : ''}`} disabled={actBusy}
               onClick={() => act(() => api.post(`/api/startups/${s.id}/follow`))}
               title="Follow this startup for updates and milestones">
               {s.following ? '✓ Following' : '+ Follow'}{s.followers > 0 ? ` · ${s.followers}` : ''}
             </button>
           )}
-          <button className={`btn-ghost btn-sm ${s.saved ? '!text-gold-300 !border-gold-500/40' : ''}`}
+          <button className={`btn-ghost btn-sm ${s.saved ? '!text-gold-300 !border-gold-500/40' : ''}`} disabled={actBusy}
             onClick={() => act(() => api.post(`/api/startups/${s.id}/save`))}>
             {s.saved ? '✓ Saved' : 'Save'}
           </button>
@@ -208,7 +212,6 @@ export default function Startup() {
               {is_owner && <button className="btn-ghost btn-sm" onClick={disableShare}>Make private</button>}
             </>
           )}
-          {!is_owner && !s.public_share && user.role === 'investor' && null}
           {is_owner && <Link to="/settings?tab=startup" className="btn-ghost btn-sm ml-auto">Edit startup</Link>}
         </div>
         {intro && !intro.direct && asArray(intro.connectors).length > 0 && (
@@ -474,13 +477,17 @@ export default function Startup() {
       <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title={noteDoc ? `Private note — ${noteDoc.title}` : 'Add private note'}>
         <div className="space-y-3">
           <div className="text-xs text-mist-400">Visible only to you. Founders never see private notes.</div>
-          <textarea className="input min-h-[110px]" autoFocus value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Diligence thoughts, follow-ups, reference checks" />
-          <button className="btn-primary w-full" disabled={!noteText.trim()} onClick={async () => {
+          <div>
+            <textarea className="input min-h-[110px]" autoFocus maxLength={2000} value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Diligence thoughts, follow-ups, reference checks" />
+            <div className={`text-right text-[11px] mt-1 tabular-nums ${noteText.length > 1800 ? 'text-amber-400' : 'text-mist-500'}`}>{noteText.length}/2000</div>
+          </div>
+          <button className="btn-primary w-full" disabled={!noteText.trim() || saveBusy} onClick={async () => {
+            setSaveBusy(true);
             try {
               await api.post(`/api/startups/${s.id}/notes`, { text: noteText, collateral_id: noteDoc?.id });
               setNoteOpen(false); setNoteText(''); toast('Note saved', 'success'); load();
-            } catch (e) { toast(e.message, 'error'); }
-          }}>Save note</button>
+            } catch (e) { toast(e.message, 'error'); } finally { setSaveBusy(false); }
+          }}>{saveBusy ? 'Saving…' : 'Save note'}</button>
         </div>
       </Modal>
     </div>
@@ -527,6 +534,7 @@ function AccessManager({ startupId, onChange }) {
 function NoteRow({ n, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(n.text);
+  const [saveBusy, setSaveBusy] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
   return (
@@ -536,10 +544,11 @@ function NoteRow({ n, onChanged }) {
           <div className="space-y-2">
             <textarea className="input min-h-[60px]" value={text} onChange={(e) => setText(e.target.value)} />
             <div className="flex gap-2">
-              <button className="btn-primary btn-sm" disabled={!text.trim()} onClick={async () => {
+              <button className="btn-primary btn-sm" disabled={!text.trim() || saveBusy} onClick={async () => {
+                setSaveBusy(true);
                 try { await api.put(`/api/startups/notes/${n.id}`, { text }); setEditing(false); onChanged(); toast('Note updated', 'success'); }
-                catch (e) { toast(e.message, 'error'); }
-              }}>Save</button>
+                catch (e) { toast(e.message, 'error'); } finally { setSaveBusy(false); }
+              }}>{saveBusy ? 'Saving…' : 'Save'}</button>
               <button className="btn-ghost btn-sm" onClick={() => { setText(n.text); setEditing(false); }}>Cancel</button>
             </div>
           </div>
@@ -571,6 +580,7 @@ const SIGNAL_TYPES = ['Round Opened', 'Round Closed', 'Milestone Achieved', 'Hir
 function ActivityRow({ a, isOwner, onChanged }) {
   const [editing, setEditing] = useState(false);
   const [f, setF] = useState({ type: a.type, text: a.text });
+  const [saveBusy, setSaveBusy] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
   if (editing) {
@@ -581,10 +591,11 @@ function ActivityRow({ a, isOwner, onChanged }) {
         </select>
         <textarea className="input min-h-[52px]" value={f.text} onChange={(e) => setF(x => ({ ...x, text: e.target.value }))} />
         <div className="flex gap-2">
-          <button className="btn-primary btn-sm" disabled={!f.text.trim()} onClick={async () => {
+          <button className="btn-primary btn-sm" disabled={!f.text.trim() || saveBusy} onClick={async () => {
+            setSaveBusy(true);
             try { await api.put(`/api/startups/activity/${a.id}`, f); setEditing(false); onChanged(); toast('Signal updated', 'success'); }
-            catch (e) { toast(e.message, 'error'); }
-          }}>Save</button>
+            catch (e) { toast(e.message, 'error'); } finally { setSaveBusy(false); }
+          }}>{saveBusy ? 'Saving…' : 'Save'}</button>
           <button className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
         </div>
       </li>
@@ -615,6 +626,7 @@ function ActivityRow({ a, isOwner, onChanged }) {
 function UpdateRow({ u, isOwner, onChanged, onReact }) {
   const [editing, setEditing] = useState(false);
   const [f, setF] = useState({ headline: u.headline, body: u.body, arr: u.arr ?? '', mrr: u.mrr ?? '', growth: u.growth ?? '' });
+  const [saveBusy, setSaveBusy] = useState(false);
   const toast = useToast();
   const confirm = useConfirm();
   if (editing) {
@@ -628,12 +640,13 @@ function UpdateRow({ u, isOwner, onChanged, onReact }) {
           <input type="number" inputMode="decimal" className="input" placeholder="Growth %" value={f.growth} onChange={(e) => setF(x => ({ ...x, growth: e.target.value }))} />
         </div>
         <div className="flex gap-2">
-          <button className="btn-primary btn-sm" disabled={!f.headline.trim() || !f.body.trim()} onClick={async () => {
+          <button className="btn-primary btn-sm" disabled={!f.headline.trim() || !f.body.trim() || saveBusy} onClick={async () => {
+            setSaveBusy(true);
             try {
               await api.put(`/api/startups/updates/${u.id}`, { headline: f.headline, body: f.body, arr: f.arr !== '' ? Number(f.arr) : null, mrr: f.mrr !== '' ? Number(f.mrr) : null, growth: f.growth !== '' ? Number(f.growth) : null });
               setEditing(false); onChanged(); toast('Update saved', 'success');
-            } catch (e) { toast(e.message, 'error'); }
-          }}>Save</button>
+            } catch (e) { toast(e.message, 'error'); } finally { setSaveBusy(false); }
+          }}>{saveBusy ? 'Saving…' : 'Save'}</button>
           <button className="btn-ghost btn-sm" onClick={() => setEditing(false)}>Cancel</button>
         </div>
       </div>
@@ -672,6 +685,7 @@ function UpdateRow({ u, isOwner, onChanged, onReact }) {
 function UpdateComposer({ startupId, onPosted }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ headline: '', body: '', arr: '', mrr: '', growth: '' });
+  const [saveBusy, setSaveBusy] = useState(false);
   const toast = useToast();
   const set = (k) => (e) => setF(x => ({ ...x, [k]: e.target.value }));
   return (
@@ -690,7 +704,8 @@ function UpdateComposer({ startupId, onPosted }) {
             <input type="number" inputMode="decimal" className="input" placeholder="Growth %" value={f.growth} onChange={set('growth')} />
           </div>
           <div className="flex gap-2">
-            <button className="btn-primary btn-sm" disabled={!f.headline.trim() || !f.body.trim()} onClick={async () => {
+            <button className="btn-primary btn-sm" disabled={!f.headline.trim() || !f.body.trim() || saveBusy} onClick={async () => {
+              setSaveBusy(true);
               try {
                 await api.post(`/api/startups/${startupId}/updates`, {
                   headline: f.headline, body: f.body,
@@ -698,8 +713,8 @@ function UpdateComposer({ startupId, onPosted }) {
                 });
                 setOpen(false); setF({ headline: '', body: '', arr: '', mrr: '', growth: '' });
                 onPosted(); toast('Update published — your followers have been notified', 'success');
-              } catch (e) { toast(e.message, 'error'); }
-            }}>Publish update</button>
+              } catch (e) { toast(e.message, 'error'); } finally { setSaveBusy(false); }
+            }}>{saveBusy ? 'Publishing…' : 'Publish update'}</button>
             <button className="btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
           </div>
         </div>
@@ -772,6 +787,7 @@ function PostSignal({ startupId, onPosted }) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState('Milestone Achieved');
   const [text, setText] = useState('');
+  const [saveBusy, setSaveBusy] = useState(false);
   const toast = useToast();
   return (
     <div className="mt-5">
@@ -782,10 +798,11 @@ function PostSignal({ startupId, onPosted }) {
           </select>
           <textarea className="input min-h-[80px]" value={text} onChange={(e) => setText(e.target.value)} placeholder="What happened?" />
           <div className="flex gap-2">
-            <button className="btn-primary btn-sm" disabled={!text.trim()} onClick={async () => {
+            <button className="btn-primary btn-sm" disabled={!text.trim() || saveBusy} onClick={async () => {
+              setSaveBusy(true);
               try { await api.post(`/api/startups/${startupId}/activity`, { type, text }); setOpen(false); setText(''); onPosted(); toast('Signal posted', 'success'); }
-              catch (e) { toast(e.message, 'error'); }
-            }}>Post</button>
+              catch (e) { toast(e.message, 'error'); } finally { setSaveBusy(false); }
+            }}>{saveBusy ? 'Posting…' : 'Post'}</button>
             <button className="btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
           </div>
         </div>

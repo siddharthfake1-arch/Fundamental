@@ -21,8 +21,15 @@ function CommunityIndex() {
   const toast = useToast();
   const confirm = useConfirm();
   const [joinBusy, setJoinBusy] = useState(null);
-  const load = () => api.get('/api/communities').then(d => { setList(asArray(d.communities)); setPending(asArray(d.pending)); }).catch(e => toast(e.message, 'error'));
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/communities')
+    .then(d => { setLoadErr(null); setList(asArray(d.communities)); setPending(asArray(d.pending)); })
+    .catch(e => { if (list) toast(e.message, 'error'); else setLoadErr(e.message); });
   useEffect(() => { load(); }, []);
+  if (loadErr && !list) {
+    return <Empty icon="⚠" title="Couldn't load communities" sub={loadErr}
+      action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />;
+  }
   if (!list) return <Spinner />;
 
   const join = async (slug) => {
@@ -50,7 +57,7 @@ function CommunityIndex() {
 
       {pending.length > 0 && (
         <div className="card p-4 mt-5 border-gold-500/30 bg-gold-500/[0.04]">
-          <div className="section-title mb-2">Your submissions</div>
+          <h2 className="section-title mb-2">Your submissions</h2>
           <div className="space-y-2">
             {pending.map(c => (
               <div key={c.id} className="flex items-center gap-3 flex-wrap">
@@ -75,7 +82,7 @@ function CommunityIndex() {
       {kinds.length === 0 && <Empty title="No communities match your search" sub="Try a different term." />}
       {kinds.map(kind => (
         <div key={kind} className="mb-8">
-          <div className="section-title mb-3">{KIND_LABEL[kind]}</div>
+          <h2 className="section-title mb-3">{KIND_LABEL[kind]}</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {filtered.filter(c => c.kind === kind).map((c, i) => (
               <motion.div key={c.id} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
@@ -90,7 +97,8 @@ function CommunityIndex() {
                     <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {c.members}</span>
                     <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {c.posts}</span>
                   </span>
-                  <button onClick={() => join(c.slug)}
+                  <button onClick={() => join(c.slug)} disabled={joinBusy === c.slug}
+                    aria-pressed={!!c.joined} title={c.joined ? 'Leave community' : 'Join community'}
                     className={c.joined ? 'chip-green !cursor-pointer' : 'btn-ghost btn-sm !py-1'}>
                     {c.joined ? '✓ Joined' : 'Join'}
                   </button>
@@ -123,7 +131,10 @@ function CreateCommunityModal({ open, onClose, onCreated }) {
       <div className="space-y-4">
         <p className="text-sm text-mist-400">Anyone can start a community. An admin reviews it once, then it goes live for people to join, post, and discuss.</p>
         <label className="block"><span className="label">Name</span>
-          <input className="input" maxLength={60} value={f.name} placeholder="e.g. Climate Founders" onChange={(e) => setF(x => ({ ...x, name: e.target.value }))} /></label>
+          <input className="input" maxLength={60} value={f.name} placeholder="e.g. Climate Founders"
+            aria-invalid={(f.name.trim().length > 0 && f.name.trim().length < 3) || undefined}
+            onChange={(e) => setF(x => ({ ...x, name: e.target.value }))} />
+          {f.name.trim().length > 0 && f.name.trim().length < 3 && <p className="text-xs text-amber-400 mt-1">At least 3 characters.</p>}</label>
         <div>
           <span className="label">Type</span>
           <div className="grid sm:grid-cols-3 gap-2">
@@ -150,17 +161,21 @@ function CreateCommunityModal({ open, onClose, onCreated }) {
 // In-community networking: see who's here, view profiles, and connect.
 function MembersPanel({ slug }) {
   const [members, setMembers] = useState(null);
+  const [busyIds, setBusyIds] = useState(() => new Set());
   const toast = useToast();
   const load = () => api.get(`/api/communities/${slug}/members`).then(d => setMembers(asArray(d.members))).catch(() => setMembers([]));
   useEffect(() => { load(); }, [slug]);
   const connect = async (id) => {
+    if (busyIds.has(id)) return;
+    setBusyIds(s => new Set(s).add(id));
     try { await api.post(`/api/users/connect/${id}`); toast('Connection request sent', 'success'); load(); }
     catch (e) { toast(e.message, 'error'); }
+    finally { setBusyIds(s => { const n = new Set(s); n.delete(id); return n; }); }
   };
   if (!members) return <div className="card p-4 mb-5"><Spinner /></div>;
   return (
     <div className="card p-4 mb-5">
-      <div className="section-title mb-3">Members</div>
+      <h2 className="section-title mb-3">Members</h2>
       <div className="grid sm:grid-cols-2 gap-2">
         {members.map(m => (
           <div key={m.id} className="flex items-center gap-3 bg-ink-850 border border-ink-700/50 rounded-xl px-3 py-2">
@@ -174,7 +189,7 @@ function MembersPanel({ slug }) {
             {!m.is_me && (
               m.connection === 'accepted' ? <span className="chip-green shrink-0">Connected</span>
               : m.connection === 'pending' ? <span className="chip shrink-0">Pending</span>
-              : <button className="btn-ghost btn-sm shrink-0" onClick={() => connect(m.id)}>Connect</button>
+              : <button className="btn-ghost btn-sm shrink-0" disabled={busyIds.has(m.id)} onClick={() => connect(m.id)}>Connect</button>
             )}
           </div>
         ))}
@@ -193,8 +208,15 @@ function CommunityDetail({ slug }) {
   const [memberBusy, setMemberBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [ef, setEf] = useState({ name: '', description: '', kind: 'topic' });
-  const load = () => api.get(`/api/communities/${slug}`).then(setD).catch(e => toast(e.message, 'error'));
-  useEffect(() => { setD(null); load(); }, [slug]);
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get(`/api/communities/${slug}`)
+    .then(x => { setLoadErr(null); setD(x); })
+    .catch(e => { if (d) toast(e.message, 'error'); else setLoadErr(e.message); });
+  useEffect(() => { setD(null); setLoadErr(null); load(); }, [slug]);
+  if (loadErr && !d) {
+    return <Empty icon="⚠" title="Couldn't load this community" sub={loadErr}
+      action={<button className="btn-primary btn-sm" onClick={load}>Try again</button>} />;
+  }
   if (!d) return <Spinner />;
   const c = asObject(d.community);
   const posts = asArray(d.posts);
@@ -222,7 +244,7 @@ function CommunityDetail({ slug }) {
       <div className="card p-6 mb-5">
         {editing ? (
           <div className="space-y-3">
-            <div className="section-title">Edit community</div>
+            <h2 className="section-title">Edit community</h2>
             {canEditName ? (
               <label className="block"><span className="label">Name</span>
                 <input className="input" maxLength={60} value={ef.name} onChange={(e) => setEf(x => ({ ...x, name: e.target.value }))} /></label>
@@ -263,7 +285,7 @@ function CommunityDetail({ slug }) {
               </div>
               <p className="text-sm text-mist-400 mt-1.5 max-w-lg">{c.description}</p>
               <div className="flex items-center gap-4 mt-3 text-xs text-mist-500">
-                <button className="flex items-center gap-1 hover:text-mist-300" onClick={() => setShowMembers(s => !s)}><Users className="w-3.5 h-3.5" /> {c.members} members</button>
+                <button className="flex items-center gap-1 hover:text-mist-300" aria-expanded={showMembers} onClick={() => setShowMembers(s => !s)}><Users className="w-3.5 h-3.5" /> {c.members} members</button>
                 <span className="flex items-center gap-1"><MessageSquare className="w-3.5 h-3.5" /> {c.posts} discussions</span>
               </div>
             </div>
@@ -396,7 +418,7 @@ function Thread({ p, onChanged }) {
       <h3 className="font-display font-bold text-mist-100">{p.title}</h3>
       <p className="text-sm text-mist-300 leading-relaxed mt-1.5 whitespace-pre-wrap">{p.body}</p>
       </>)}
-      <button className="text-xs font-semibold text-gold-300 hover:text-gold-200 mt-3"
+      <button className="text-xs font-semibold text-gold-300 hover:text-gold-200 mt-3" aria-expanded={open}
         onClick={() => { setOpen(o => !o); if (!replies) loadReplies(); }}>
         {open ? 'Hide replies' : `${p.replies} repl${p.replies === 1 ? 'y' : 'ies'} — view & respond`}
       </button>
@@ -420,7 +442,7 @@ function Thread({ p, onChanged }) {
                 </div>
                 {editReply === r.id ? (
                   <div className="mt-2 space-y-2">
-                    <input className="input !py-2" value={erBody} onChange={(e) => setErBody(e.target.value)} />
+                    <input className="input !py-2" maxLength={2000} aria-label="Edit reply" value={erBody} onChange={(e) => setErBody(e.target.value)} />
                     <div className="flex justify-end gap-2">
                       <button className="btn-ghost btn-sm" onClick={() => setEditReply(null)}>Cancel</button>
                       <button className="btn-primary btn-sm" disabled={!erBody.trim()} onClick={() => saveEditReply(r)}>Save</button>
@@ -436,7 +458,7 @@ function Thread({ p, onChanged }) {
             <input className="input !py-2" placeholder="Write a reply — press Enter to post" value={reply} disabled={replyBusy}
               onChange={(e) => setReply(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') postReply(); }} />
-            <button className="btn-primary btn-sm shrink-0" disabled={!reply.trim() || replyBusy} onClick={postReply}>{replyBusy ? '…' : 'Reply'}</button>
+            <button className="btn-primary btn-sm shrink-0" disabled={!reply.trim() || replyBusy} onClick={postReply}>{replyBusy ? 'Posting…' : 'Reply'}</button>
           </div>
         </div>
       )}

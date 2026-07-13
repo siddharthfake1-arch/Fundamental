@@ -127,6 +127,7 @@ function FounderFlow({ user, refresh }) {
   const draftKey = `onb_founder_${user.id}`;
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [me, setMe] = useState(meFromUser(user));
   const [s, setS] = useState(emptyStartup());
@@ -149,7 +150,7 @@ function FounderFlow({ user, refresh }) {
           next.team = Array.isArray(startup.team) ? startup.team : [];
           setS(next);
         }
-      } catch { /* no draft yet */ }
+      } catch (e) { if (e.status && e.status !== 404) toast('Could not load your draft — your previous answers may not appear. ' + e.message, 'error'); }
       try {
         const local = JSON.parse(safeStorage.get(draftKey) || '{}');
         if (local.step) setStep(Math.min(local.step, 6));
@@ -169,6 +170,8 @@ function FounderFlow({ user, refresh }) {
   const saveTeam = async () => { if (Array.isArray(s.team)) await api.put('/api/startups/mine/team', { team: s.team }); };
 
   const saveDraft = async (silent = false) => {
+    if (saving) return;
+    setSaving(true);
     try {
       await api.put('/api/users/me', normalizeMe(me));
       if (s.name) { await api.post('/api/startups/mine', startupPayload()); await saveTeam(); }
@@ -176,14 +179,14 @@ function FounderFlow({ user, refresh }) {
       if (!silent) toast(s.name
         ? 'Progress saved. Sign out any time — you\'ll pick up where you left off.'
         : 'Profile saved. Add a startup name to save your startup draft too.', 'success');
-    } catch (e) { if (!silent) toast(e.message, 'error'); }
+    } catch (e) { if (!silent) toast(e.message, 'error'); } finally { setSaving(false); }
   };
 
   const finish = async () => {
     // A video is NOT required to finish — the startup is saved as a non-public draft
     // and goes live automatically once a pitch video is added (enforced server-side).
-    if (!s.name.trim()) return toast('Add a startup name to continue.', 'error');
-    if (!s.one_liner.trim()) return toast('Add a one-line description — it\'s how investors find you.', 'error');
+    if (!s.name.trim()) { setStep(1); return toast('Add a startup name to continue.', 'error'); }
+    if (!s.one_liner.trim()) { setStep(1); return toast('Add a one-line description — it\'s how investors find you.', 'error'); }
     setBusy(true);
     try {
       await api.put('/api/users/me', normalizeMe(me));
@@ -223,7 +226,10 @@ function FounderFlow({ user, refresh }) {
       body: (
         <div className="space-y-4">
           <Field label="Startup name"><input className="input" value={s.name} onChange={set('name')} placeholder="e.g. PayLane" /></Field>
-          <Field label="One-line description" hint="required"><input className="input" maxLength={140} value={s.one_liner} onChange={set('one_liner')} placeholder="What you do, in one sentence" /></Field>
+          <Field label="One-line description" hint="required">
+            <input className="input" maxLength={140} value={s.one_liner} onChange={set('one_liner')} placeholder="What you do, in one sentence" />
+            <div className="text-right text-[11px] mt-1 tabular-nums text-mist-500">{s.one_liner.length}/140</div>
+          </Field>
           <div className="grid grid-cols-2 gap-4">
             <Field label={<>Sector<Optional /></>}>
               <select className="input" value={s.sector} onChange={set('sector')}><option value="">Select…</option>{SECTORS.map(x => <option key={x}>{x}</option>)}</select>
@@ -333,8 +339,8 @@ function FounderFlow({ user, refresh }) {
           ? <button className="btn-primary flex-1" disabled={!cur.valid} onClick={() => { setStep(step + 1); saveDraft(true); }}>Continue</button>
           : <button className="btn-primary flex-1" disabled={busy} onClick={finish}>{busy ? 'Launching…' : 'Launch my startup'}</button>}
       </div>
-      <button className="btn-ghost w-full mt-3 !text-mist-400" onClick={() => saveDraft()}>
-        Save and finish later
+      <button className="btn-ghost w-full mt-3 !text-mist-400" disabled={saving} onClick={() => saveDraft()}>
+        {saving ? 'Saving…' : 'Save and finish later'}
       </button>
       <p className="text-[11px] text-mist-500 text-center mt-2">Only the one-line description is required. Your startup goes live once you add a pitch video — you can do that any time from Settings.</p>
     </Shell>
@@ -407,6 +413,7 @@ function InvestorFlow({ user, refresh }) {
   const draftKey = `onb_investor_${user.id}`;
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [me, setMe] = useState(meFromUser(user));
   const [f, setF] = useState({
     fund_name: user.investor?.fund_name || '',
@@ -434,11 +441,13 @@ function InvestorFlow({ user, refresh }) {
   });
 
   const saveDraft = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await api.put('/api/users/me', payload());
       safeStorage.set(draftKey, JSON.stringify({ step }));
       toast('Progress saved — you can sign out and continue any time.', 'success');
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(e.message, 'error'); } finally { setSaving(false); }
   };
 
   const finish = async () => {
@@ -505,8 +514,8 @@ function InvestorFlow({ user, refresh }) {
           ? <button className="btn-primary flex-1" onClick={() => setStep(step + 1)}>Continue</button>
           : <button className="btn-primary flex-1" disabled={busy} onClick={finish}>{busy ? 'Saving…' : 'Enter Fundamental'}</button>}
       </div>
-      <button className="btn-ghost w-full mt-3 !text-mist-400" onClick={saveDraft}>
-        Save progress & finish later
+      <button className="btn-ghost w-full mt-3 !text-mist-400" disabled={saving} onClick={saveDraft}>
+        {saving ? 'Saving…' : 'Save progress & finish later'}
       </button>
       <p className="text-[11px] text-mist-500 text-center mt-2">Nothing here is compulsory — you can complete your profile any time from Settings.</p>
     </Shell>

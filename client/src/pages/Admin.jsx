@@ -22,7 +22,7 @@ export default function Admin() {
       <div className="flex gap-1 mb-6 overflow-x-auto rounded-xl bg-ink-850 border border-ink-600/60 p-1 w-fit max-w-full">
         {tabs.map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
+            className={`rounded-lg px-4 py-2 min-h-[44px] text-sm font-semibold whitespace-nowrap transition-colors ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
         ))}
       </div>
       {tab === 'analytics' && <Analytics />}
@@ -57,7 +57,7 @@ function Analytics() {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat label="Total users" value={d.users} sub={`${d.founders} founders · ${d.investors} investors`} />
+        <Stat label="Total users" value={d.users} sub={`${d.founders ?? 0} founders · ${d.investors ?? 0} investors`} />
         <Stat label="Startups listed" value={d.startups} />
         <Stat label="Connections made" value={d.connections} />
         <Stat label="Open reports" value={d.open_reports} />
@@ -81,6 +81,7 @@ function Users() {
   const toast = useToast();
   const confirm = useConfirm();
   const [loadErr, setLoadErr] = useState(null);
+  const run = async (fn) => { try { await fn(); } catch (e) { toast(e.message, 'error'); } };
   const load = () => api.get('/api/admin/users').then(d => { setLoadErr(null); setUsers(asArray(d.users)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
   if (loadErr && !users) return <LoadError msg={loadErr} onRetry={load} />;
@@ -113,18 +114,18 @@ function Users() {
               <td className="px-4 py-3">
                 <div className="flex gap-2 flex-wrap">
                   <button className="btn-ghost btn-sm" title="Cycle: None → Verified → Enhanced → Institution"
-                    onClick={async () => { await api.post(`/api/admin/verify-user/${u.id}`); load(); toast('Verification tier updated', 'success'); }}>
+                    onClick={() => run(async () => { await api.post(`/api/admin/verify-user/${u.id}`); load(); toast('Verification tier updated', 'success'); })}>
                     Tier ↻
                   </button>
                   {u.role === 'investor' && (
-                    <button className="btn-ghost btn-sm" onClick={async () => { const r = await api.post(`/api/admin/approve-investor/${u.id}`); load(); toast(r.investor_approved ? 'Investor approved' : 'Approval revoked', 'success'); }}>
+                    <button className="btn-ghost btn-sm" onClick={() => run(async () => { const r = await api.post(`/api/admin/approve-investor/${u.id}`); load(); toast(r.investor_approved ? 'Investor approved' : 'Approval revoked', 'success'); })}>
                       {u.investor_approved ? 'Revoke' : 'Approve'}
                     </button>
                   )}
-                  <button className="btn-ghost btn-sm" onClick={async () => { if (u.status !== 'suspended' && !await confirm({ title: `Suspend ${u.name}?`, body: 'They will be signed out immediately and blocked until reinstated. Their startup and content disappear from the platform.', danger: true, confirmLabel: 'Suspend' })) return; const r = await api.post(`/api/admin/suspend-user/${u.id}`); load(); toast(r.status === 'suspended' ? 'Account suspended' : 'Account reinstated', 'success'); }}>
+                  <button className="btn-ghost btn-sm" onClick={() => run(async () => { if (u.status !== 'suspended' && !await confirm({ title: `Suspend ${u.name}?`, body: 'They will be signed out immediately and blocked until reinstated. Their startup and content disappear from the platform.', danger: true, confirmLabel: 'Suspend' })) return; const r = await api.post(`/api/admin/suspend-user/${u.id}`); load(); toast(r.status === 'suspended' ? 'Account suspended' : 'Account reinstated', 'success'); })}>
                     {u.status === 'suspended' ? 'Reinstate' : 'Suspend'}
                   </button>
-                  <button className="btn-danger btn-sm" onClick={async () => { if (!u.flagged && !await confirm({ title: `Flag ${u.name} as fraudulent?`, body: 'They will be blocked from the platform until unflagged.', danger: true, confirmLabel: 'Flag' })) return; await api.post(`/api/admin/flag-user/${u.id}`); load(); }}>
+                  <button className="btn-danger btn-sm" onClick={() => run(async () => { if (!u.flagged && !await confirm({ title: `Flag ${u.name} as fraudulent?`, body: 'They will be blocked from the platform until unflagged.', danger: true, confirmLabel: 'Flag' })) return; await api.post(`/api/admin/flag-user/${u.id}`); load(); })}>
                     {u.flagged ? 'Unflag' : 'Flag'}
                   </button>
                 </div>
@@ -144,6 +145,7 @@ function StartupsAdmin() {
   const toast = useToast();
   const confirm = useConfirm();
   const [loadErr, setLoadErr] = useState(null);
+  const run = async (fn) => { try { await fn(); } catch (e) { toast(e.message, 'error'); } };
   const load = () => api.get('/api/admin/startups').then(d => { setLoadErr(null); setList(asArray(d.startups)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
   if (loadErr && !list) return <LoadError msg={loadErr} onRetry={load} />;
@@ -164,7 +166,7 @@ function StartupsAdmin() {
               <td className="px-4 py-3 text-mist-300">{s.sector}</td>
               <td className="px-4 py-3 text-mist-300">{s.stage}</td>
               <td className="px-4 py-3">{s.video_url ? <span className="chip-green">✓ Uploaded</span> : <span className="chip-red">Missing — unlisted</span>}</td>
-              <td className="px-4 py-3 text-mist-400 tabular-nums">{s.views}</td>
+              <td className="px-4 py-3 text-mist-400 tabular-nums">{s.views ?? 0}</td>
               <td className="px-4 py-3">
                 {s.verified === 0 && <span className="chip">Unverified</span>}
                 {s.verified === 1 && <span className="chip-blue">Verified</span>}
@@ -175,10 +177,10 @@ function StartupsAdmin() {
               <td className="px-4 py-3">
                 <div className="flex gap-2">
                   <button className="btn-ghost btn-sm" title="Cycle verification tier"
-                    onClick={async () => { await api.post(`/api/admin/verify-startup/${s.id}`); load(); toast('Tier updated', 'success'); }}>
+                    onClick={() => run(async () => { await api.post(`/api/admin/verify-startup/${s.id}`); load(); toast('Tier updated', 'success'); })}>
                     Tier ↻
                   </button>
-                  <button className="btn-ghost btn-sm" onClick={async () => { if (!s.hidden && !await confirm({ title: `Hide ${s.name}?`, body: 'It and its documents will be removed from the marketplace until restored.', danger: true, confirmLabel: 'Hide' })) return; const r = await api.post(`/api/admin/hide-startup/${s.id}`); load(); toast(r.hidden ? 'Startup hidden' : 'Startup restored', 'success'); }}>
+                  <button className="btn-ghost btn-sm" onClick={() => run(async () => { if (!s.hidden && !await confirm({ title: `Hide ${s.name}?`, body: 'It and its documents will be removed from the marketplace until restored.', danger: true, confirmLabel: 'Hide' })) return; const r = await api.post(`/api/admin/hide-startup/${s.id}`); load(); toast(r.hidden ? 'Startup hidden' : 'Startup restored', 'success'); })}>
                     {s.hidden ? 'Unhide' : 'Hide'}
                   </button>
                 </div>
@@ -197,6 +199,7 @@ function Content() {
   const toast = useToast();
   const confirm = useConfirm();
   const [loadErr, setLoadErr] = useState(null);
+  const run = async (fn) => { try { await fn(); } catch (e) { toast(e.message, 'error'); } };
   const load = () => api.get('/api/admin/posts').then(d => { setLoadErr(null); setPosts(asArray(d.posts)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
   if (loadErr && !posts) return <LoadError msg={loadErr} onRetry={load} />;
@@ -215,7 +218,7 @@ function Content() {
             <p className="text-sm text-mist-300 mt-1.5 line-clamp-3">{p.text}</p>
           </div>
           <button className={p.removed ? 'btn-ghost btn-sm' : 'btn-danger btn-sm'}
-            onClick={async () => { if (!p.removed && !await confirm({ title: 'Remove this post from the feed?', danger: true, confirmLabel: 'Remove' })) return; await api.post(`/api/admin/posts/${p.id}/remove`); load(); toast(p.removed ? 'Post restored' : 'Post removed', 'success'); }}>
+            onClick={() => run(async () => { if (!p.removed && !await confirm({ title: 'Remove this post from the feed?', danger: true, confirmLabel: 'Remove' })) return; await api.post(`/api/admin/posts/${p.id}/remove`); load(); toast(p.removed ? 'Post restored' : 'Post removed', 'success'); })}>
             {p.removed ? 'Restore' : 'Remove'}
           </button>
         </div>
@@ -228,6 +231,7 @@ function Reports() {
   const [reports, setReports] = useState(null);
   const toast = useToast();
   const [loadErr, setLoadErr] = useState(null);
+  const run = async (fn) => { try { await fn(); } catch (e) { toast(e.message, 'error'); } };
   const load = () => api.get('/api/admin/reports').then(d => { setLoadErr(null); setReports(asArray(d.reports)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
   if (loadErr && !reports) return <LoadError msg={loadErr} onRetry={load} />;
@@ -246,8 +250,8 @@ function Reports() {
           </div>
           {r.status === 'open' && (
             <div className="flex gap-2">
-              <button className="btn-primary btn-sm" onClick={async () => { await api.post(`/api/admin/reports/${r.id}/resolve`); load(); toast('Resolved', 'success'); }}>Resolve</button>
-              <button className="btn-ghost btn-sm" onClick={async () => { await api.post(`/api/admin/reports/${r.id}/dismiss`); load(); }}>Dismiss</button>
+              <button className="btn-primary btn-sm" onClick={() => run(async () => { await api.post(`/api/admin/reports/${r.id}/resolve`); load(); toast('Resolved', 'success'); })}>Resolve</button>
+              <button className="btn-ghost btn-sm" onClick={() => run(async () => { await api.post(`/api/admin/reports/${r.id}/dismiss`); load(); })}>Dismiss</button>
             </div>
           )}
         </div>
@@ -261,6 +265,7 @@ function CommunitiesAdmin() {
   const toast = useToast();
   const confirm = useConfirm();
   const [loadErr, setLoadErr] = useState(null);
+  const run = async (fn) => { try { await fn(); } catch (e) { toast(e.message, 'error'); } };
   const load = () => api.get('/api/admin/communities').then(d => { setLoadErr(null); setList(asArray(d.communities)); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, []);
   if (loadErr && !list) return <LoadError msg={loadErr} onRetry={load} />;
@@ -288,12 +293,12 @@ function CommunitiesAdmin() {
               <td className="px-4 py-3">
                 <div className="flex gap-2">
                   {c.status === 'pending' && (
-                    <button className="btn-primary btn-sm" onClick={async () => { await api.post(`/api/admin/communities/${c.id}/approve`); load(); toast('Community approved — now live', 'success'); }}>Approve</button>
+                    <button className="btn-primary btn-sm" onClick={() => run(async () => { await api.post(`/api/admin/communities/${c.id}/approve`); load(); toast('Community approved — now live', 'success'); })}>Approve</button>
                   )}
-                  <button className="btn-danger btn-sm" onClick={async () => {
+                  <button className="btn-danger btn-sm" onClick={() => run(async () => {
                     if (!await confirm({ title: `${c.status === 'pending' ? 'Decline' : 'Delete'} "${c.name}"?`, body: c.status === 'pending' ? 'The creator will be notified.' : 'This removes the community and all its discussions.', danger: true, confirmLabel: c.status === 'pending' ? 'Decline' : 'Delete' })) return;
                     await api.post(`/api/admin/communities/${c.id}/delete`); load(); toast(c.status === 'pending' ? 'Community declined' : 'Community deleted', 'success');
-                  }}>{c.status === 'pending' ? 'Decline' : 'Delete'}</button>
+                  })}>{c.status === 'pending' ? 'Decline' : 'Delete'}</button>
                 </div>
               </td>
             </tr>
@@ -308,7 +313,10 @@ function CommunitiesAdmin() {
 function ClientErrors() {
   const [d, setD] = useState(null);
   const [open, setOpen] = useState(null); // id of the expanded row
-  useEffect(() => { api.get('/api/admin/client-errors').then(setD).catch(() => setD({ errors: [], total: 0 })); }, []);
+  const [loadErr, setLoadErr] = useState(null);
+  const load = () => api.get('/api/admin/client-errors').then(x => { setLoadErr(null); setD(x); }).catch(e => setLoadErr(e.message));
+  useEffect(() => { load(); }, []);
+  if (loadErr && !d) return <LoadError msg={loadErr} onRetry={load} />;
   if (!d) return <Spinner />;
   const errors = asArray(d.errors);
   return errors.length === 0 ? <Empty title="No client errors" sub="Render crashes captured from users' browsers will appear here." /> : (
@@ -348,9 +356,11 @@ function ClientErrors() {
 function AuditLog() {
   const [d, setD] = useState(null);
   const [action, setAction] = useState('');
+  const [loadErr, setLoadErr] = useState(null);
   const load = (a = action) => api.get(`/api/admin/audit-logs${a ? `?action=${encodeURIComponent(a)}` : ''}`)
-    .then(setD).catch(() => setD({ logs: [], total: 0, actions: [] }));
+    .then(x => { setLoadErr(null); setD(x); }).catch(e => setLoadErr(e.message));
   useEffect(() => { load(); }, [action]);
+  if (loadErr && !d) return <LoadError msg={loadErr} onRetry={() => load()} />;
   if (!d) return <Spinner />;
   const logs = asArray(d.logs);
   return (

@@ -40,6 +40,23 @@ function RotatingTitle() {
   );
 }
 
+// Password field with a Show/Hide visibility toggle. Local to this page —
+// forwards value/onChange untouched so form state stays exactly as before.
+function PasswordInput({ value, onChange, placeholder, autoComplete, ariaLabel, autoFocus, required }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <input type={show ? 'text' : 'password'} className="input !pr-11" value={value} onChange={onChange}
+        placeholder={placeholder} autoComplete={autoComplete} aria-label={ariaLabel} autoFocus={autoFocus} required={required} />
+      <button type="button" aria-label={show ? 'Hide password' : 'Show password'} aria-pressed={show}
+        onClick={() => setShow(s => !s)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-mist-500 hover:text-mist-200 text-xs font-semibold">
+        {show ? 'Hide' : 'Show'}
+      </button>
+    </div>
+  );
+}
+
 const FEATURES = [
   { icon: PlayCircle, t: '12-min pitch', s: 'A video pitch on every startup' },
   { icon: FolderLock, t: 'Data rooms', s: 'Permissioned diligence materials' },
@@ -61,6 +78,7 @@ export default function Auth() {
   const [accepted, setAccepted] = useState(false);
   const [cfg, setCfg] = useState({ demo: false, google_enabled: false });
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const { setUser } = useAuth();
   const toast = useToast();
   const nav = useNavigate();
@@ -118,7 +136,7 @@ export default function Auth() {
       const d = await api.post('/api/auth/send-otp', { channel: 'email', identifier: form.email });
       setOtp(o => ({ ...o, sent: true, demo_code: d.demo_code || '', code: '' }));
       setStep('verify');
-      toast(d.demo ? 'Demo mode — your code is shown below' : 'We sent a 6-digit code to your email', 'success');
+      toast(d.demo_code ? 'Demo mode — your code is shown below' : 'We sent a 6-digit code to your email', 'success');
     } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
   };
 
@@ -138,7 +156,7 @@ export default function Auth() {
     try {
       const d = await api.post('/api/auth/send-otp', { channel: 'email', identifier: form.email });
       setOtp(o => ({ ...o, sent: true, sending: false, demo_code: d.demo_code || '' }));
-      toast(d.demo ? 'New code generated below' : 'A new code is on its way', 'success');
+      toast(d.demo_code ? 'New code generated below' : 'A new code is on its way', 'success');
     } catch (err) {
       setOtp(o => ({ ...o, sending: false }));
       toast(err.message, 'error');
@@ -156,7 +174,8 @@ export default function Auth() {
   };
 
   const google = async () => {
-    try { await api.post('/api/auth/google'); } catch (err) { toast(err.message, 'error'); }
+    setGoogleBusy(true);
+    try { await api.post('/api/auth/google'); } catch (err) { toast(err.message, 'error'); } finally { setGoogleBusy(false); }
   };
 
   return (
@@ -205,7 +224,7 @@ export default function Auth() {
                 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.35 + i * 0.08 }}
                 className="card ring-gradient p-3.5">
-                <Icon className="w-4.5 h-4.5 w-[18px] h-[18px] text-gold-400 mb-2" />
+                <Icon className="w-[18px] h-[18px] text-gold-400 mb-2" />
                 <div className="font-display font-bold text-mist-100 text-sm">{t}</div>
                 <div className="text-[11px] text-mist-400 mt-0.5 leading-snug">{s}</div>
               </motion.div>
@@ -227,6 +246,9 @@ export default function Auth() {
 
       {/* Form panel */}
       <div className="order-1 lg:order-2 flex-1 flex flex-col items-center justify-start lg:justify-center p-6 lg:p-14 relative kb-pad">
+        {/* On native the brand panel (and its h1) never renders, so give the page
+            its one h1 here for screen readers. On web the brand panel's h1 exists. */}
+        {IS_NATIVE && <h1 className="sr-only">Sign in to Fundamental</h1>}
         {/* Native / mobile: a compact brand header above the form instead of the full panel */}
         <div className={`w-full max-w-md mb-6 mt-2 ${IS_NATIVE ? '' : 'lg:hidden'}`}>
           <Logo className="h-[52px] mx-auto" />
@@ -235,10 +257,10 @@ export default function Auth() {
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.15 }}
           className="w-full max-w-md">
-          <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1 mb-7">
+          <div role="tablist" aria-label="Sign in or create account" className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1 mb-7">
             {['login', 'signup'].map(m => (
-              <button key={m} onClick={() => switchMode(m)}
-                className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${mode === m ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>
+              <button key={m} role="tab" aria-selected={mode === m} onClick={() => switchMode(m)}
+                className={`flex-1 rounded-lg py-2 min-h-[44px] text-sm font-semibold transition-colors ${mode === m ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>
                 {m === 'login' ? 'Sign in' : 'Create account'}
               </button>
             ))}
@@ -261,9 +283,9 @@ export default function Auth() {
                 <div>
                   <div className="flex items-center justify-between">
                     <span className="label !mb-0">Password</span>
-                    <button type="button" className="text-xs text-gold-300 hover:text-gold-200 mb-1.5" onClick={() => setForgot(f => ({ ...f, on: true, step: 'request' }))}>Forgot password?</button>
+                    <button type="button" className="text-xs text-gold-300 hover:text-gold-200 !py-2 -mt-2 -mb-0.5" onClick={() => setForgot(f => ({ ...f, on: true, step: 'request' }))}>Forgot password?</button>
                   </div>
-                  <input aria-label="Password" type="password" autoComplete="current-password" className="input" value={form.password} onChange={set('password')} placeholder="••••••••" required />
+                  <PasswordInput ariaLabel="Password" autoComplete="current-password" value={form.password} onChange={set('password')} placeholder="••••••••" required />
                 </div>
               </>
             )}
@@ -283,9 +305,9 @@ export default function Auth() {
                 ) : (
                   <>
                     <p className="text-xs text-mist-400 leading-relaxed">Enter the code we sent to <span className="text-mist-200 font-medium">{form.email}</span> and choose a new password.</p>
-                    <input aria-label="Reset code" className="input text-center tracking-[0.5em] text-lg" inputMode="numeric" maxLength={6} value={forgot.code}
+                    <input aria-label="Reset code" className="input text-center tracking-[0.5em] text-lg" autoComplete="one-time-code" inputMode="numeric" maxLength={6} value={forgot.code}
                       onChange={(e) => setForgot(f => ({ ...f, code: e.target.value.replace(/\D/g, '') }))} placeholder="••••••" />
-                    <input aria-label="New password" type="password" autoComplete="new-password" className="input" value={forgot.password} onChange={(e) => setForgot(f => ({ ...f, password: e.target.value }))} placeholder="New password — letters and numbers, 8+ chars" />
+                    <PasswordInput ariaLabel="New password" autoComplete="new-password" value={forgot.password} onChange={(e) => setForgot(f => ({ ...f, password: e.target.value }))} placeholder="New password — letters and numbers, 8+ chars" />
                     <button type="button" className="text-xs text-gold-300 hover:text-gold-200" onClick={requestReset} disabled={busy}>Resend code</button>
                     {forgot.demo_code && (
                       <div className="text-xs text-gold-300 bg-gold-500/10 border border-gold-500/30 rounded-lg px-3 py-2">
@@ -312,11 +334,11 @@ export default function Auth() {
                     ))}
                   </div>
                 </div>
-                <div><span className="label">Full name</span><input aria-label="Full name" className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
+                <div><span className="label">Full name</span><input aria-label="Full name" autoComplete="name" className="input" value={form.name} onChange={set('name')} placeholder="Your full name" required /></div>
                 <div><span className="label">Email</span><input aria-label="Email" type="email" autoComplete="email" inputMode="email" className="input" value={form.email} onChange={set('email')} placeholder="you@firm.com" required /></div>
-                <div><span className="label">Password</span><input aria-label="Password" type="password" autoComplete="new-password" className="input" value={form.password} onChange={set('password')} placeholder="Minimum 8 characters" required /></div>
+                <div><span className="label">Password</span><PasswordInput ariaLabel="Password" autoComplete="new-password" value={form.password} onChange={set('password')} placeholder="Minimum 8 characters" required /></div>
                 <div><span className="label">City</span><input aria-label="City" className="input" value={form.city} onChange={set('city')} placeholder="e.g. Bengaluru, Mumbai, London…" /></div>
-                <div><span className="label">Phone <span className="normal-case font-normal text-mist-500">(optional)</span></span><input aria-label="Phone" className="input" type="tel" value={form.phone} onChange={set('phone')} placeholder="With country code, e.g. +966 5x xxx xxxx" /></div>
+                <div><span className="label">Phone <span className="normal-case font-normal text-mist-500">(optional)</span></span><input aria-label="Phone" className="input" type="tel" autoComplete="tel" value={form.phone} onChange={set('phone')} placeholder="With country code, e.g. +966 5x xxx xxxx" /></div>
                 <label className="flex items-start gap-2.5 cursor-pointer text-xs text-mist-400 leading-relaxed">
                   <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="accent-gold-400 w-4 h-4 mt-0.5 shrink-0" />
                   <span>I agree to Fundamental's <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:text-gold-200">Terms of Service</a> and <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" className="text-gold-300 hover:text-gold-200">Privacy Policy</a>, and understand that information on the platform is not investment advice.</span>
@@ -330,7 +352,7 @@ export default function Auth() {
                 <div className="card p-5 space-y-3">
                   <span className="text-sm font-semibold text-mist-100">Verify your email</span>
                   <p className="text-xs text-mist-400 leading-relaxed">We sent a 6-digit code to <span className="text-mist-200 font-medium">{form.email}</span>. Enter it below to confirm your account.</p>
-                  <input aria-label="6-digit verification code" className="input text-center tracking-[0.5em] text-lg" inputMode="numeric" maxLength={6} autoFocus value={otp.code}
+                  <input aria-label="6-digit verification code" className="input text-center tracking-[0.5em] text-lg" autoComplete="one-time-code" inputMode="numeric" maxLength={6} autoFocus value={otp.code}
                     onChange={(e) => setOtp(o => ({ ...o, code: e.target.value.replace(/\D/g, '') }))}
                     placeholder="••••••" />
                   <div className="flex items-center justify-between text-xs">
@@ -363,9 +385,9 @@ export default function Auth() {
               <div className="flex items-center gap-3 my-5 text-[11px] text-mist-500 uppercase tracking-widest">
                 <div className="divider flex-1" />or<div className="divider flex-1" />
               </div>
-              <button onClick={google} className="btn-ghost w-full !py-3">
+              <button onClick={google} disabled={googleBusy} className="btn-ghost w-full !py-3">
                 <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18A10.97 10.97 0 001 12c0 1.77.43 3.45 1.18 4.94l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/></svg>
-                Sign in with Google
+                {googleBusy ? 'Connecting…' : 'Sign in with Google'}
               </button>
             </>
           )}
