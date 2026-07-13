@@ -55,8 +55,8 @@ export default function Watchlist() {
           <h1 className="page-title">Pipeline</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Your deal flow from first look to decision — private to you.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <input className="input !w-56 !py-2" aria-label="Search pipeline" placeholder="Search pipeline…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="flex items-center flex-wrap gap-2 max-w-full">
+          <input className="input !w-56 max-w-full !py-2" aria-label="Search pipeline" placeholder="Search pipeline…" value={q} onChange={(e) => setQ(e.target.value)} />
           <Link to="/discover" className="btn-ghost btn-sm whitespace-nowrap">+ Add deal</Link>
         </div>
       </div>

@@ -77,9 +77,9 @@ export default function Pulse() {
             {sectors.filter(s => match(s.sector)).map((s, i) => (
               <div key={s.sector} className="flex items-center gap-3">
                 <span className="w-6 text-xs font-bold text-mist-500 tabular-nums">{i + 1}</span>
-                <Link to={`/discover?sector=${encodeURIComponent(s.sector)}`} className="w-28 text-sm font-semibold text-mist-100 hover:text-gold-300 truncate">{s.sector}</Link>
+                <Link to={`/discover?sector=${encodeURIComponent(s.sector)}`} className="w-20 sm:w-28 shrink-0 text-sm font-semibold text-mist-100 hover:text-gold-300 truncate">{s.sector}</Link>
                 <Bar pct={(s.heat / maxHeat) * 100} color={i === 0 ? '#fb923c' : undefined} />
-                <span className="text-[11px] text-mist-400 tabular-nums w-32 text-right shrink-0">
+                <span className="text-[11px] text-mist-400 tabular-nums w-24 sm:w-32 text-right shrink-0 leading-tight">
                   {s.startups} listed · {s.raising} raising
                 </span>
               </div>
@@ -96,9 +96,9 @@ export default function Pulse() {
           <p className="text-xs text-mist-500 mb-4">Sectors with the fastest-growing startups right now.</p>
           <div className="space-y-3">
             {emerging.filter(s => match(s.sector)).map(s => (
-              <div key={s.sector} className="flex items-center justify-between bg-ink-850 border border-ink-700/50 rounded-xl px-4 py-3">
-                <span className="text-sm font-semibold text-mist-100">{s.sector}</span>
-                <span className="text-sm font-bold text-emerald-400 tabular-nums">+{s.avg_growth}% avg MoM</span>
+              <div key={s.sector} className="flex items-center justify-between gap-2 bg-ink-850 border border-ink-700/50 rounded-xl px-4 py-3">
+                <span className="text-sm font-semibold text-mist-100 truncate min-w-0">{s.sector}</span>
+                <span className="text-sm font-bold text-emerald-400 tabular-nums shrink-0">+{s.avg_growth}% avg MoM</span>
               </div>
             ))}
           </div>

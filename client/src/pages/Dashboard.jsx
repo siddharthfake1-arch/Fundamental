@@ -63,7 +63,7 @@ function FounderDash() {
       </div>
 
       {/* Profile completion */}
-      <div className="card p-5">
+      <div className="card p-5 min-w-0">
         <div className="flex items-center justify-between mb-2">
           <h2 className="section-title">Profile completion</h2>
           <span className="font-display font-bold text-gold-300 tabular-nums">{d.completion}%</span>
@@ -87,7 +87,7 @@ function FounderDash() {
           </div>
 
           {interestedInvestors.length > 0 && (
-            <div className="card p-5">
+            <div className="card p-5 min-w-0">
               <h2 className="section-title">Investors interested in you</h2>
               <div className="text-xs text-mist-500 mt-1">These investors signaled interest — reach out while it's fresh.</div>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
@@ -108,7 +108,7 @@ function FounderDash() {
           )}
 
           {viewsTrend.length > 1 && (
-            <div className="card p-5">
+            <div className="card p-5 min-w-0">
               <h2 className="section-title">Views — last 14 days</h2>
               <div className="mt-3"><LineChart data={viewsTrend} xKey="d" yKey="c" height={120} format={(v) => v} /></div>
             </div>
@@ -116,7 +116,7 @@ function FounderDash() {
 
           <div className="grid lg:grid-cols-2 gap-5">
             {/* Raise progress tracker */}
-            <div className="card p-5">
+            <div className="card p-5 min-w-0">
               <h2 className="section-title">Raise progress</h2>
               <div className="mt-4 flex items-center gap-3">
                 <span className={raise.status === 'Actively Raising' ? 'chip-green' : raise.status === 'Round Closing' ? 'chip-gold' : 'chip'}>{raise.status}</span>
@@ -138,7 +138,7 @@ function FounderDash() {
             </div>
 
             {/* Pending access requests */}
-            <div className="card p-5">
+            <div className="card p-5 min-w-0">
               <h2 className="section-title">Pending data room requests</h2>
               {pendingAccess.length === 0 ? <div className="text-sm text-mist-500 mt-3">No pending requests.</div> : (
                 <div className="space-y-2 mt-3">
@@ -158,7 +158,7 @@ function FounderDash() {
           {/* Founder analytics: who's looking + data room engagement */}
           {an && (viewers.length > 0 || docs.length > 0) && (
             <div className="grid lg:grid-cols-2 gap-5">
-              <div className="card p-5">
+              <div className="card p-5 min-w-0">
                 <h2 className="section-title">Investors looking at you</h2>
                 <div className="text-xs text-mist-500 mt-1">Investors who recently viewed your profile.</div>
                 {viewers.length === 0 ? <div className="text-sm text-mist-500 mt-3">No investor views yet.</div> : (
@@ -178,7 +178,7 @@ function FounderDash() {
                   </div>
                 )}
               </div>
-              <div className="card p-5">
+              <div className="card p-5 min-w-0">
                 <h2 className="section-title">Data room engagement</h2>
                 <div className="text-xs text-mist-500 mt-1">Which documents investors are opening.</div>
                 {docs.length === 0 ? <div className="text-sm text-mist-500 mt-3">No documents yet.</div> : (
@@ -198,7 +198,7 @@ function FounderDash() {
 
           {/* Connection requests */}
           {connectionRequests.length > 0 && (
-            <div className="card p-5">
+            <div className="card p-5 min-w-0">
               <h2 className="section-title">Connection requests</h2>
               <div className="grid sm:grid-cols-2 gap-3 mt-3">
                 {connectionRequests.map(p => (
@@ -255,7 +255,7 @@ function InvestorDash() {
       )}
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <div className="card p-5">
+        <div className="card p-5 min-w-0">
           <div className="flex items-center justify-between">
             <h2 className="section-title">Watchlist</h2>
             <Link to="/watchlist" className="text-xs text-gold-300 hover:text-gold-200">Open pipeline →</Link>
@@ -276,7 +276,7 @@ function InvestorDash() {
           )}
         </div>
 
-        <div className="card p-5">
+        <div className="card p-5 min-w-0">
           <h2 className="section-title">Requested access</h2>
           {requested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No data room requests yet.</div> : (
             <div className="space-y-2 mt-3">
@@ -295,7 +295,7 @@ function InvestorDash() {
         </div>
       </div>
 
-      <div className="card p-5">
+      <div className="card p-5 min-w-0">
         <h2 className="section-title">Suggested startups</h2>
         <div className="text-xs text-mist-500 mt-1">Matched to your sector and stage focus.</div>
         {suggested.length === 0 ? <div className="text-sm text-mist-500 mt-3">No new suggestions right now.</div> : (

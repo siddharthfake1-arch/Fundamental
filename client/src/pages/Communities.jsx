@@ -49,8 +49,8 @@ function CommunityIndex() {
           <h1 className="page-title">Communities</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Where founders, investors, and operators share what they know.</p>
         </div>
-        <div className="flex gap-2">
-          <input className="input !w-56" aria-label="Search" placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div className="flex flex-wrap gap-2 max-w-full">
+          <input className="input !w-56 max-w-full" aria-label="Search communities" placeholder="Search communities…" value={q} onChange={(e) => setQ(e.target.value)} />
           <button className="btn-primary whitespace-nowrap" onClick={() => setCreating(true)}><Plus className="w-4 h-4" /> New community</button>
         </div>
       </div>

@@ -37,9 +37,9 @@ export default function Notifications() {
           <h1 className="page-title">Notifications</h1>
           <p className="text-sm text-mist-400 mt-1">{data.unread ?? 0} unread</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 max-w-full">
           <input className="input !w-40 !py-2 !text-sm" aria-label="Search notifications" placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select className="input !w-auto !py-2 !text-sm" aria-label="Filter by type" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <select className="input !w-auto max-w-full !py-2 !text-sm" aria-label="Filter by type" value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All types</option>
             {TYPES.map(t => <option key={t}>{t}</option>)}
           </select>

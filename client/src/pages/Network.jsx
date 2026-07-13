@@ -62,10 +62,10 @@ export default function Network() {
           <h1 className="page-title">Network</h1>
           <p className="text-sm text-mist-400 mt-1 page-sub">Founders, investors, angels, and operators. Messaging opens once a connection is accepted.</p>
         </div>
-        <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1" role="tablist" aria-label="Network views">
+        <div className="flex rounded-xl bg-ink-850 border border-ink-600/60 p-1 max-w-full overflow-x-auto no-scrollbar" role="tablist" aria-label="Network views">
           {[['directory', 'Directory'], ['requests', `Requests${conns?.pending.length ? ` (${conns.pending.length})` : ''}`], ['connections', 'Connections']].map(([t, l]) => (
             <button key={t} onClick={() => setParams({ tab: t })} role="tab" aria-selected={tab === t}
-              className={`rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
+              className={`rounded-lg px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors ${tab === t ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
           ))}
         </div>
       </div>
