@@ -25,7 +25,19 @@ function privateExists(key) {
 // Stream a private file to the response. Returns false if the file is missing.
 // Supports HTTP Range requests so large documents/videos in the data room can be
 // resumed and video collateral can be seeked instead of force-downloading whole.
-function streamPrivate(res, key, downloadName) {
+// Media types that may render inline (in-chat previews). A strict whitelist:
+// images and videos only — never HTML, SVG, or PDF, which can execute script or
+// phish when opened in a browsing context. Everything else stays a download.
+const INLINE_TYPES = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp',
+  '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+};
+function inlineTypeFor(key) {
+  return INLINE_TYPES[path.extname(String(key || '')).toLowerCase()] || null;
+}
+
+function streamPrivate(res, key, downloadName, { inline = false } = {}) {
   const p = privatePath(key);
   if (!p || !fs.existsSync(p)) return false;
   const { size } = fs.statSync(p);
@@ -33,8 +45,14 @@ function streamPrivate(res, key, downloadName) {
   res.setHeader('Content-Security-Policy', "default-src 'none'");
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('Accept-Ranges', 'bytes');
-  if (downloadName) {
-    const safeName = String(downloadName).replace(/[^\w.\- ]/g, '_').slice(0, 120) || 'file';
+  // Inline is opt-in per request AND gated on the whitelist — a .docx asked for
+  // inline still arrives as a download.
+  const inlineType = inline ? inlineTypeFor(key) : null;
+  if (inlineType) res.setHeader('Content-Type', inlineType);
+  const safeName = String(downloadName || '').replace(/[^\w.\- ]/g, '_').slice(0, 120) || 'file';
+  if (inlineType) {
+    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+  } else if (downloadName) {
     res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
   }
   const range = res.req && res.req.headers.range;
@@ -62,4 +80,4 @@ function deletePrivate(key) {
   try { const p = privatePath(key); if (p && fs.existsSync(p)) fs.unlinkSync(p); } catch { /* best effort */ }
 }
 
-module.exports = { PRIVATE_DIR, privatePath, privateExists, streamPrivate, deletePrivate };
+module.exports = { PRIVATE_DIR, privatePath, privateExists, streamPrivate, deletePrivate, inlineTypeFor };

@@ -203,6 +203,54 @@ export function Modal({ open, onClose, title, children, wide }) {
   );
 }
 
+// ---- Lightbox (full-screen image viewer) ----
+// WhatsApp-style: tap a chat image to view it full screen on a dimmed backdrop.
+// Escape, the Android back button, or a backdrop tap dismisses it.
+export function Lightbox({ src, alt = '', onClose, onDownload }) {
+  useEffect(() => {
+    if (!src) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onBack = (e) => { e.preventDefault(); onClose(); };
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('app-back', onBack);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('app-back', onBack);
+      document.body.style.overflow = '';
+    };
+  }, [src, onClose]);
+  return createPortal(
+    <AnimatePresence>
+      {src && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}
+          className="fixed inset-0 z-[70] bg-black/92 backdrop-blur-sm flex items-center justify-center p-3 sm:p-8"
+          role="dialog" aria-modal="true" aria-label={alt || 'Image viewer'}
+          onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+          <motion.img src={src} alt={alt}
+            initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.12 } }}
+            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            className="max-h-full max-w-full object-contain rounded-lg select-none shadow-lift" draggable={false} />
+          <div className="absolute top-0 inset-x-0 safe-top flex items-center justify-end gap-1 p-3">
+            {onDownload && (
+              <button onClick={onDownload} aria-label="Download image"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-black/50 text-white/90 hover:bg-black/70 hover:text-white transition-colors text-sm font-semibold px-3.5">
+                ↓ Save
+              </button>
+            )}
+            <button onClick={onClose} aria-label="Close image viewer"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-black/50 text-white/90 hover:bg-black/70 hover:text-white transition-colors text-xl leading-none">
+              ×
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
+  );
+}
+
 // ---- Toast system ----
 const ToastCtx = createContext(() => {});
 export function ToastProvider({ children }) {

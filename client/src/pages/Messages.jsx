@@ -1,13 +1,89 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { api, timeAgo, asArray, asObject } from '../api';
+import { api, getAuthToken, timeAgo, asArray, asObject } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, FileUpload, Modal, ReportModal, Spinner, VerifiedBadge, useToast, SkeletonList } from '../components/ui';
-import { absUrl, nativeBridge } from '../config';
+import { Avatar, Empty, FileUpload, Lightbox, Modal, ReportModal, Spinner, VerifiedBadge, useToast, SkeletonList } from '../components/ui';
+import { absUrl, apiUrl, IS_NATIVE, nativeBridge } from '../config';
 import PullToRefresh from '../components/PullToRefresh';
 
 const STAGES = ['Intro', 'Due Diligence', 'Closed', 'Passed'];
 const STAGE_STYLE = { 'Intro': 'chip-blue', 'Due Diligence': 'chip-gold', 'Closed': 'chip-green', 'Passed': 'chip-red' };
+
+// ---- Chat time helpers ----
+const parseTs = (iso) => new Date(String(iso || '').replace(' ', 'T') + (String(iso || '').includes('Z') ? '' : 'Z'));
+const dayKey = (iso) => { const d = parseTs(iso); return Number.isNaN(+d) ? '' : d.toDateString(); };
+const dayLabel = (iso) => {
+  const d = parseTs(iso);
+  if (Number.isNaN(+d)) return '';
+  const today = new Date(); const yest = new Date(today); yest.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yest.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) });
+};
+const clockTime = (iso) => { const d = parseTs(iso); return Number.isNaN(+d) ? '' : d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); };
+const minutesApart = (a, b) => Math.abs(parseTs(a) - parseTs(b)) / 60000;
+
+// Conversation-list preview line: media messages read as what they are.
+const lastPreview = (lm) => {
+  if (!lm) return 'New conversation';
+  if (lm.text) return lm.text;
+  const n = String(lm.attachment_name || lm.attachment || '');
+  if (/\.(png|jpe?g|gif|webp)$/i.test(n)) return '📷 Photo';
+  if (/\.(mp4|m4v|webm|mov)$/i.test(n)) return '🎬 Video';
+  if (n) return `📎 ${n}`;
+  return 'New conversation';
+};
+
+// Non-media attachment: the classic download link.
+function AttachmentLink({ m }) {
+  return m.attachment_download
+    ? <a href={m.attachment_download} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline"
+        onClick={(e) => { if (nativeBridge.downloadFile) { e.preventDefault(); nativeBridge.downloadFile(m.attachment_download, m.attachment_name || 'attachment'); } }}>
+        📎 {m.attachment_name || 'Attachment'}</a>
+    : m.attachment && <a href={absUrl(m.attachment)} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline">📎 Attachment</a>;
+}
+
+// Photo/video attachments render inside the bubble, WhatsApp-style. On the web
+// the session cookie rides along with a plain src; on native the bearer token
+// can't attach to an <img>/<video> request, so we fetch the bytes ourselves and
+// hand the element a blob URL. Any failure falls back to the download link.
+function ChatMedia({ m, onOpenImage, onMediaLoad }) {
+  const inlineUrl = apiUrl(`${m.attachment_download}?inline=1`);
+  const [src, setSrc] = useState(IS_NATIVE ? null : inlineUrl);
+  const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (!IS_NATIVE) return;
+    let url = null, alive = true;
+    const t = getAuthToken();
+    fetch(inlineUrl, { headers: t ? { Authorization: 'Bearer ' + t } : {} })
+      .then(r => { if (!r.ok) throw new Error('media'); return r.blob(); })
+      .then(b => { if (alive) { url = URL.createObjectURL(b); setSrc(url); } })
+      .catch(() => { if (alive) setFailed(true); });
+    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+  }, [m.id]);
+
+  if (failed) return <AttachmentLink m={m} />;
+  if (m.attachment_media === 'video') {
+    return (
+      <div className="mt-1.5 rounded-xl overflow-hidden bg-black/60 border border-ink-600/40">
+        {src
+          ? <video src={src} controls playsInline preload="metadata" aria-label={m.attachment_name || 'Video attachment'}
+              className="block w-full max-h-72" onError={() => setFailed(true)} onLoadedMetadata={onMediaLoad} />
+          : <div className="skeleton w-56 h-36" />}
+      </div>
+    );
+  }
+  return (
+    <button type="button" className="block mt-1.5 rounded-xl overflow-hidden border border-ink-600/40 max-w-full"
+      onClick={() => src && onOpenImage(src)} aria-label={`View image ${m.attachment_name || ''}`.trim()}>
+      {!loaded && <div className="skeleton w-56 h-40" />}
+      <img src={src || undefined} alt={m.attachment_name || 'Photo attachment'} loading="lazy" draggable={false}
+        className={`block max-h-72 max-w-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0 h-0'}`}
+        onLoad={() => { setLoaded(true); onMediaLoad?.(); }} onError={() => setFailed(true)} />
+    </button>
+  );
+}
 
 export default function Messages() {
   const { user } = useAuth();
@@ -23,9 +99,19 @@ export default function Messages() {
   const [sending, setSending] = useState(false);
   const [uploadPct, setUploadPct] = useState(null);
   const [reporting, setReporting] = useState(false);
+  const [lightbox, setLightbox] = useState(null); // { src, download, name }
   const endRef = useRef();
   const scrollBoxRef = useRef();
+  const composerRef = useRef();
   const toast = useToast();
+
+  // Inline media finishes decoding after the thread paints and grows the scroll
+  // height — re-anchor to the bottom if the user was already reading there.
+  const anchorIfNearBottom = () => {
+    const box = scrollBoxRef.current;
+    if (!box) return;
+    if (box.scrollHeight - box.scrollTop - box.clientHeight < 240) endRef.current?.scrollIntoView({ behavior: 'auto' });
+  };
 
   const [listErr, setListErr] = useState(null);
   // A failed load must NOT paint the "no conversations" empty state (offline would
@@ -71,7 +157,9 @@ export default function Messages() {
     setSending(true);
     try {
       await api.post(`/api/messages/${active}/send`, { text: text.trim(), attachment_key: attach?.key || '', attachment_name: attach?.name || '', ...extra });
+      if (attach?.preview) URL.revokeObjectURL(attach.preview);
       setText(''); setAttach(null);
+      if (composerRef.current) composerRef.current.style.height = 'auto'; // shrink back after send
       loadThread(); loadList();
     } catch (e) { toast(e.message, 'error'); } finally { setSending(false); }
   };
@@ -122,7 +210,7 @@ export default function Messages() {
                     {c.last_message && <span className="text-[10px] text-mist-500 shrink-0">{timeAgo(c.last_message.created_at)}</span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-mist-400 truncate flex-1">{c.last_message?.text || 'New conversation'}</span>
+                    <span className="text-xs text-mist-400 truncate flex-1">{lastPreview(c.last_message)}</span>
                     {c.unread > 0 && <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-400 text-ink-950 text-[10px] font-bold flex items-center justify-center">{c.unread}</span>}
                   </div>
                   {c.deal_stage && <span className={`${STAGE_STYLE[c.deal_stage]} mt-1.5`}>{c.deal_stage}</span>}
@@ -164,25 +252,49 @@ export default function Messages() {
                 </div>
               </div>
 
-              <div ref={scrollBoxRef} className="flex-1 overflow-y-auto p-4 space-y-3" style={{ overscrollBehavior: 'contain' }}>
-                {tMessages.map(m => {
+              <div ref={scrollBoxRef} className="flex-1 overflow-y-auto p-4" style={{ overscrollBehavior: 'contain' }}>
+                {tMessages.map((m, i) => {
                   const mine = m.sender_id === user.id;
+                  const prev = tMessages[i - 1];
+                  const next = tMessages[i + 1];
+                  const newDay = !prev || dayKey(prev.created_at) !== dayKey(m.created_at);
+                  // WhatsApp-style runs: messages from the same sender within five
+                  // minutes sit tight together and share one timestamp at the end.
+                  const grouped = !newDay && prev && prev.sender_id === m.sender_id && minutesApart(prev.created_at, m.created_at) < 5;
+                  const endsGroup = !next || next.sender_id !== m.sender_id
+                    || minutesApart(m.created_at, next.created_at) >= 5
+                    || dayKey(next.created_at) !== dayKey(m.created_at);
+                  const hasMedia = m.attachment_download && (m.attachment_media === 'image' || m.attachment_media === 'video');
                   return (
-                    <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed break-words min-w-0 ${mine ? 'bg-gold-500/15 border border-gold-500/25 text-mist-100' : 'bg-ink-800 border border-ink-600/60 text-mist-200'}`}>
-                        {m.ref_startup && (
-                          <Link to={`/startup/${m.ref_startup.id}`} className="flex items-center gap-2.5 bg-ink-900/70 border border-ink-600/60 rounded-xl p-2.5 mb-2 hover:border-gold-500/40 transition-colors">
-                            <Avatar src={m.ref_startup.logo} name={m.ref_startup.name} size={8} square />
-                            <div><div className="text-xs font-semibold text-mist-100">{m.ref_startup.name}</div>
-                              <div className="text-[10px] text-mist-400">{m.ref_startup.sector} · {m.ref_startup.stage}</div></div>
-                          </Link>
-                        )}
-                        {m.text}
-                        {m.attachment_download
-                          ? <a href={m.attachment_download} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline"
-                              onClick={(e) => { if (nativeBridge.downloadFile) { e.preventDefault(); nativeBridge.downloadFile(m.attachment_download, m.attachment_name || 'attachment'); } }}>📎 Attachment</a>
-                          : m.attachment && <a href={absUrl(m.attachment)} target="_blank" rel="noopener noreferrer" className="block mt-1.5 text-xs text-accent-400 underline">📎 Attachment</a>}
-                        <div className={`text-[10px] mt-1 ${mine ? 'text-gold-300/50' : 'text-mist-500'}`}>{timeAgo(m.created_at)}</div>
+                    <div key={m.id}>
+                      {newDay && (
+                        <div className="flex items-center gap-3 my-4 first:mt-0" role="separator" aria-label={dayLabel(m.created_at)}>
+                          <div className="divider flex-1" />
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-mist-500">{dayLabel(m.created_at)}</span>
+                          <div className="divider flex-1" />
+                        </div>
+                      )}
+                      <div className={`flex ${mine ? 'justify-end' : 'justify-start'} ${grouped ? 'mt-[3px]' : 'mt-3 first:mt-0'}`}>
+                        <div className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words min-w-0
+                          ${endsGroup ? (mine ? 'rounded-br-md' : 'rounded-bl-md') : ''}
+                          ${mine ? 'bg-gold-500/15 border border-gold-500/25 text-mist-100' : 'bg-ink-800 border border-ink-600/60 text-mist-200'}`}>
+                          {m.ref_startup && (
+                            <Link to={`/startup/${m.ref_startup.id}`} className="flex items-center gap-2.5 bg-ink-900/70 border border-ink-600/60 rounded-xl p-2.5 mb-2 hover:border-gold-500/40 transition-colors">
+                              <Avatar src={m.ref_startup.logo} name={m.ref_startup.name} size={8} square />
+                              <div><div className="text-xs font-semibold text-mist-100">{m.ref_startup.name}</div>
+                                <div className="text-[10px] text-mist-400">{m.ref_startup.sector} · {m.ref_startup.stage}</div></div>
+                            </Link>
+                          )}
+                          {m.text}
+                          {hasMedia
+                            ? <ChatMedia m={m} onMediaLoad={anchorIfNearBottom}
+                                onOpenImage={(src) => setLightbox({ src, download: m.attachment_download, name: m.attachment_name })} />
+                            : <AttachmentLink m={m} />}
+                          {endsGroup && (
+                            <div className={`text-[10px] mt-1 tabular-nums ${mine ? 'text-gold-300/50' : 'text-mist-500'}`}
+                              title={timeAgo(m.created_at)}>{clockTime(m.created_at)}</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -197,21 +309,39 @@ export default function Messages() {
                     <div className="h-1 bg-ink-700 rounded-full overflow-hidden"><div className="h-full bg-gold-400 transition-all" style={{ width: uploadPct + '%' }} /></div>
                   </div>
                 )}
-                {attach && <div className="text-xs text-emerald-300 mb-2">📎 {attach.name || 'File'} attached — sends with your message <button className="text-mist-500 ml-1" aria-label="Remove attachment" onClick={() => setAttach(null)}>✕</button></div>}
+                {attach && (
+                  <div className="flex items-center gap-3 mb-2 bg-ink-850 border border-ink-700/60 rounded-xl p-2 pr-3">
+                    {/* An image attachment previews as a thumbnail before it sends — you see what you're about to share. */}
+                    {attach.preview
+                      ? <img src={attach.preview} alt="Attachment preview" className="w-12 h-12 rounded-lg object-cover border border-ink-600/60" />
+                      : <span className="w-12 h-12 rounded-lg bg-ink-800 border border-ink-600/60 flex items-center justify-center text-lg" aria-hidden>📎</span>}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-mist-100 truncate">{attach.name || 'File'}</div>
+                      <div className="text-[11px] text-emerald-400">Ready — sends with your message</div>
+                    </div>
+                    <button className="text-mist-500 hover:text-red-400 p-2 -m-1" aria-label="Remove attachment"
+                      onClick={() => { if (attach.preview) URL.revokeObjectURL(attach.preview); setAttach(null); }}>✕</button>
+                  </div>
+                )}
                 <div className="flex gap-2 items-end">
-                  <label className="btn-ghost btn-sm !px-3 !py-2.5 cursor-pointer" title="Attach file" aria-label="Attach a document (max 25 MB)">
-                    <input type="file" className="hidden" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,.txt,.zip,image/*" onChange={async (e) => {
+                  <label className="btn-ghost btn-sm !px-3 !py-2.5 cursor-pointer" title="Attach a file or photo" aria-label="Attach a file or photo (max 25 MB)">
+                    <input type="file" className="hidden" accept=".pdf,.ppt,.pptx,.xls,.xlsx,.doc,.docx,.csv,.txt,.zip,image/*,video/*" onChange={async (e) => {
                       const f = e.target.files[0];
                       e.target.value = ''; // allow re-selecting the same file
                       if (!f) return;
                       if (f.size > 25 * 1024 * 1024) return toast(`That file is ${Math.ceil(f.size / 1048576)} MB. Attachments are limited to 25 MB.`, 'error');
-                      try { setUploadPct(0); const d = await api.uploadPrivate(f, setUploadPct); setAttach({ key: d.key, name: d.name }); }
-                      catch (er) { toast(er.message, 'error'); } finally { setUploadPct(null); }
+                      const preview = /^image\//.test(f.type) ? URL.createObjectURL(f) : '';
+                      try { setUploadPct(0); const d = await api.uploadPrivate(f, setUploadPct); setAttach({ key: d.key, name: d.name, preview }); }
+                      catch (er) { if (preview) URL.revokeObjectURL(preview); toast(er.message, 'error'); } finally { setUploadPct(null); }
                     }} />📎
                   </label>
                   <button className="btn-ghost btn-sm !px-3 !py-2.5" title="Reference a startup" aria-label="Reference a startup" onClick={openRef}>◳</button>
-                  <textarea className="input flex-1 !py-2.5 resize-none" rows={1} aria-label="Message" placeholder="Write a message…" enterKeyHint="send" value={text}
-                    onChange={(e) => setText(e.target.value)}
+                  <textarea ref={composerRef} className="input flex-1 !py-2.5 resize-none max-h-32" rows={1} aria-label="Message" placeholder="Write a message…" enterKeyHint="send" value={text}
+                    onChange={(e) => {
+                      setText(e.target.value);
+                      // Grow with the draft (up to ~5 lines) so long messages stay readable.
+                      const el = e.target; el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+                    }}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
                   <button className="btn-primary btn-sm !py-2.5" disabled={sending || uploadPct !== null} onClick={() => send()}>{sending ? '…' : 'Send'}</button>
                 </div>
@@ -223,6 +353,14 @@ export default function Messages() {
       </div>
 
       {thread && <ReportModal open={reporting} onClose={() => setReporting(false)} targetType="user" targetId={asObject(thread.other).id} targetLabel="conversation" />}
+
+      <Lightbox src={lightbox?.src} alt={lightbox?.name || 'Photo'} onClose={() => setLightbox(null)}
+        onDownload={lightbox ? () => {
+          if (nativeBridge.downloadFile) return nativeBridge.downloadFile(lightbox.download, lightbox.name || 'photo');
+          const a = document.createElement('a');
+          a.href = apiUrl(lightbox.download); a.download = lightbox.name || 'photo';
+          document.body.appendChild(a); a.click(); a.remove();
+        } : undefined} />
 
       <Modal open={refOpen} onClose={() => setRefOpen(false)} title="Reference a startup">
         <div className="space-y-2 max-h-80 overflow-y-auto">

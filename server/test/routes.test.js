@@ -460,6 +460,45 @@ async function run() {
     // Once b replies, the cap lifts for a.
     await b('POST', `/api/messages/${conversationId}/send`, { text: 'reply' });
     assert.strictEqual((await a('POST', `/api/messages/${conversationId}/send`, { text: 'now allowed' })).status, 200, 'cap lifted after reply');
+
+    // ---- Inline chat media (in-bubble photos/videos) ----
+    // A PNG attachment streams inline with the right Content-Type when asked,
+    // stays a download by default, and non-media types can never go inline.
+    const png = new FormData();
+    // Minimal valid PNG header bytes are enough — the server types by extension.
+    png.append('file', new Blob([Buffer.from('89504e470d0a1a0a', 'hex')], { type: 'image/png' }), 'chart.png');
+    const pngUp = await (await b('POST', '/api/upload/private', png)).json();
+    assert.ok(pngUp.key, 'private image upload returns a key');
+    assert.strictEqual((await b('POST', `/api/messages/${conversationId}/send`, { text: '', attachment_key: pngUp.key, attachment_name: pngUp.name })).status, 200, 'image message sent');
+
+    const txt = new FormData();
+    txt.append('file', new Blob([Buffer.from('hello')], { type: 'text/plain' }), 'notes.txt');
+    const txtUp = await (await b('POST', '/api/upload/private', txt)).json();
+    assert.strictEqual((await b('POST', `/api/messages/${conversationId}/send`, { text: '', attachment_key: txtUp.key, attachment_name: txtUp.name })).status, 200, 'doc message sent');
+
+    const thread = await (await a('GET', `/api/messages/${conversationId}`)).json();
+    const imgMsg = thread.messages.find(m => m.attachment_name === 'chart.png');
+    const docMsg = thread.messages.find(m => m.attachment_name === 'notes.txt');
+    assert.ok(imgMsg && imgMsg.attachment_download, 'image message exposes a download route');
+    assert.strictEqual(imgMsg.attachment_media, 'image', 'image message is flagged as inline-viewable media');
+    assert.strictEqual(docMsg.attachment_media, '', 'doc message is NOT flagged as media');
+    assert.strictEqual(imgMsg.attachment_key, undefined, 'private key never leaves the server');
+
+    const inlineRes = await a('GET', `${imgMsg.attachment_download}?inline=1`);
+    assert.strictEqual(inlineRes.status, 200, 'participant can stream media inline');
+    assert.strictEqual(inlineRes.headers.get('content-type'), 'image/png', 'inline media carries its real content-type');
+    assert.ok(/^inline\b/.test(inlineRes.headers.get('content-disposition') || ''), 'inline media uses inline disposition');
+
+    const dlRes = await a('GET', imgMsg.attachment_download);
+    assert.ok(/^attachment\b/.test(dlRes.headers.get('content-disposition') || ''), 'default fetch stays a download');
+
+    const docInline = await a('GET', `${docMsg.attachment_download}?inline=1`);
+    assert.ok(/^attachment\b/.test(docInline.headers.get('content-disposition') || ''), 'non-media types never stream inline even when asked');
+
+    // A third party still can't touch the attachment at all.
+    const outsider = makeClient();
+    await outsider('POST', '/api/auth/login', { email: 'investor2@demo.app', password: 'demo1234' });
+    assert.strictEqual((await outsider('GET', `${imgMsg.attachment_download}?inline=1`)).status, 404, 'non-participant is denied the attachment');
   });
 
   await test('creator can withdraw a pending community; non-pending withdraw blocked', async () => {

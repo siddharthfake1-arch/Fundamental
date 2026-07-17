@@ -6,6 +6,9 @@ import { apiUrl, IS_NATIVE } from './config';
 // token to device storage, onExpired clears it when the session dies.
 let authToken = null;
 export function setAuthToken(t) { authToken = t || null; }
+// Read access for media loaders: an <img>/<video> tag can't carry the bearer
+// header on native, so inline chat media fetches blobs itself and needs the token.
+export function getAuthToken() { return authToken; }
 // onUser/getCachedUser let the native app keep a signed-in shell on offline cold
 // starts: the last confirmed session user is cached on device and reused when the
 // session probe fails with a NETWORK error (never for a real 401 rejection).

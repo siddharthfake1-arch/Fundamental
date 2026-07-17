@@ -3,7 +3,7 @@ const path = require('path');
 const { db, notify, areConnected, isBlocked, canViewStartup, isVisibleUser } = require('../db');
 const { auth } = require('../authmw');
 const { validateUrlFields, clampStrings } = require('../security');
-const { streamPrivate, privateExists } = require('../storage');
+const { streamPrivate, privateExists, inlineTypeFor } = require('../storage');
 
 const router = express.Router();
 router.use(auth);
@@ -71,6 +71,10 @@ router.get('/:id', (req, res) => {
     // Private attachments are streamed through an access-checked endpoint, never linked directly.
     out.attachment_download = m.attachment_key ? `/api/messages/attachment/${m.id}` : '';
     out.has_attachment = !!(m.attachment_key || m.attachment);
+    // Tell the client which attachments are safe to render in the chat itself
+    // (image/* or video/*) versus offered as a document download.
+    const mediaType = m.attachment_key ? inlineTypeFor(m.attachment_key) : null;
+    out.attachment_media = mediaType ? mediaType.split('/')[0] : '';
     delete out.attachment_key;
     return out;
   });
@@ -86,7 +90,7 @@ router.get('/attachment/:mid', (req, res) => {
   const m = db.prepare(`SELECT m.*, c.a_id, c.b_id FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE m.id=?`).get(req.params.mid);
   if (!m || (m.a_id !== req.user.id && m.b_id !== req.user.id)) return res.status(404).json({ error: 'Attachment not found.' });
   if (!m.attachment_key) return res.status(404).json({ error: 'No attachment on this message.' });
-  if (!streamPrivate(res, m.attachment_key, m.attachment_name || 'attachment')) return res.status(404).json({ error: 'Attachment is no longer available.' });
+  if (!streamPrivate(res, m.attachment_key, m.attachment_name || 'attachment', { inline: req.query.inline === '1' })) return res.status(404).json({ error: 'Attachment is no longer available.' });
 });
 
 router.post('/:id/send', (req, res) => {
