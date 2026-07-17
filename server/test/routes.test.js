@@ -240,7 +240,11 @@ async function run() {
 
     assert.strictEqual((await c('GET', '/api/users/me/export')).status, 200, 'export works');
     assert.strictEqual((await c('DELETE', '/api/users/me')).status, 200, 'delete works');
-    assert.strictEqual((await c('GET', '/api/auth/me')).status, 401, 'session is dead after deletion');
+    // Deletion clears the cookie, so the probe is anonymous: the quiet-probe
+    // contract returns 200 { user: null } (a present-but-dead token still 401s).
+    const deadMe = await c('GET', '/api/auth/me');
+    const deadBody = await deadMe.json().catch(() => ({}));
+    assert.ok(deadMe.status === 401 || (deadMe.status === 200 && deadBody.user === null), 'session is dead after deletion');
     assert.ok(!fs.existsSync(pubPath), 'public upload deleted');
     assert.ok(!fs.existsSync(privPath), 'private document deleted');
   });
@@ -649,6 +653,12 @@ async function run() {
   await test('garbage bearer token is rejected with 401', async () => {
     const r = await fetch(BASE + '/api/auth/me', { headers: { Authorization: 'Bearer nonsense' } });
     assert.strictEqual(r.status, 401);
+  });
+
+  await test('anonymous /me probe is quiet: 200 with user null (no console noise)', async () => {
+    const r = await fetch(BASE + '/api/auth/me');
+    assert.strictEqual(r.status, 200, 'no-credential probe must not 401');
+    assert.strictEqual((await r.json()).user, null);
   });
 
   await test('bearer write from the app origin passes CSRF and gets CORS headers', async () => {

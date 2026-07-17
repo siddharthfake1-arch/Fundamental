@@ -40,24 +40,48 @@ function RedirectToStartup() {
   return <Navigate to={`/startup/${id}`} replace />;
 }
 
-// Honest 404 instead of a silent redirect — a mistyped or dead link should say so.
+// Honest 404 instead of a silent redirect — a mistyped or dead link should say so,
+// and the person holding it should have every quick way out.
 function NotFound({ homeTo = '/' }) {
   const loc = useLocation();
+  const { user } = useAuth();
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
       <div className="card p-10 text-center max-w-md">
         <div className="h-display text-5xl text-mist-500 mb-3">404</div>
         <div className="h-display text-lg">This page doesn't exist</div>
         <p className="text-sm text-mist-400 mt-2 break-all">We couldn't find <code>{loc.pathname}</code>. It may have moved or been removed.</p>
-        <Link to={homeTo} className="btn-primary btn-sm inline-flex mt-5">Go home</Link>
+        <div className="flex justify-center gap-2 flex-wrap mt-5">
+          <Link to={homeTo} className="btn-primary btn-sm">Go home</Link>
+          {!user && <Link to="/login" className="btn-ghost btn-sm">Sign in</Link>}
+          {!user && <Link to="/signup" className="btn-ghost btn-sm">Create account</Link>}
+          {user && <Link to="/discover" className="btn-ghost btn-sm">Discover startups</Link>}
+        </div>
       </div>
     </div>
   );
 }
 
+// Route-aware document titles: the tab bar and history read like the app, and
+// shared links carry the page name. Detail pages set their own richer titles.
+const TITLES = {
+  '/discover': 'Discover', '/startups': 'Startups', '/pulse': 'Market Pulse',
+  '/communities': 'Communities', '/network': 'Network', '/messages': 'Messages',
+  '/dashboard': 'Dashboard', '/notifications': 'Notifications', '/social': 'Social',
+  '/watchlist': 'Pipeline', '/settings': 'Settings', '/menu': 'Menu', '/admin': 'Admin',
+  '/onboarding': 'Welcome', '/login': 'Sign in', '/signup': 'Create account',
+};
+function usePageTitle(pathname) {
+  useEffect(() => {
+    const t = TITLES[pathname];
+    document.title = t ? `${t} · Fundamental` : 'Fundamental — Fundraising? Fundamental.';
+  }, [pathname]);
+}
+
 export default function App() {
   const { user, loading } = useAuth();
   const loc = useLocation();
+  usePageTitle(loc.pathname);
 
   // Native: hold the splash screen until the session probe resolves (no white flash).
   useEffect(() => { if (!loading) window.__hideSplash?.(); }, [loading]);
@@ -79,6 +103,10 @@ export default function App() {
           {/* A native app should open on sign-in, not the marketing site. */}
           <Route path="/" element={IS_NATIVE ? <Navigate to="/login" replace /> : <Landing />} />
           <Route path="/login" element={<Auth />} />
+          {/* /signup is canonical for account creation — links, ads, and emails
+              will guess it, and a 404 on a signup URL costs real conversions. */}
+          <Route path="/signup" element={<Auth />} />
+          <Route path="/register" element={<Navigate to="/signup" replace />} />
           <Route path="/s/:id" element={<PublicStartup />} />
           <Route path="/legal/:doc" element={<Legal />} />
           <Route path="*" element={<NotFound homeTo="/" />} />
@@ -112,6 +140,10 @@ export default function App() {
           <Suspense fallback={<Spinner />}>
           <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
+          {/* Already signed in: auth URLs land in the app, never on a 404. */}
+          <Route path="/login" element={<Navigate to="/discover" replace />} />
+          <Route path="/signup" element={<Navigate to="/discover" replace />} />
+          <Route path="/register" element={<Navigate to="/discover" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/startups" element={<Startups />} />

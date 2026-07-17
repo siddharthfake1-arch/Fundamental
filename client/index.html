@@ -10,17 +10,30 @@
     <meta name="theme-color" content="#000000" />
     <meta name="description" content="Fundamental — the serious fundraising platform and private-market network. Every startup opens with a 12-minute video pitch." />
     <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://fundamental.co.in/" />
+    <!-- Share cards -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Fundamental" />
+    <meta property="og:title" content="Fundamental — Fundraising? Fundamental." />
+    <meta property="og:description" content="The serious fundraising platform and private-market network. Video pitches, permissioned data rooms, and verified founders and investors." />
+    <meta property="og:url" content="https://fundamental.co.in/" />
+    <meta property="og:image" content="https://fundamental.co.in/pwa-maskable-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Fundamental — Fundraising? Fundamental." />
+    <meta name="twitter:description" content="The serious fundraising platform and private-market network. Video pitches, permissioned data rooms, and verified founders and investors." />
+    <meta name="twitter:image" content="https://fundamental.co.in/pwa-maskable-512.png" />
     <link rel="manifest" href="/manifest.json" />
     <!-- The wordmark is the LCP element on the landing/login pages (both always
          use the dark-background lockup) — fetch it before React discovers it. -->
     <link rel="preload" as="image" href="/logo-dark.png" fetchpriority="high" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Non-blocking font load: media="print" defers it off the render path, onload
-         flips it live. A slow or offline network (native cold start!) must never
+    <!-- Non-blocking font load: media="print" defers it off the render path;
+         theme-init.js (external — inline handlers violate our CSP) flips it live
+         once loaded. A slow or offline network (native cold start!) must never
          hold first paint hostage — system fonts stand in until the swap. -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
-      rel="stylesheet" media="print" onload="this.media='all'" />
+      rel="stylesheet" media="print" data-defer-swap />
     <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" /></noscript>
     <title>Fundamental — Fundraising? Fundamental.</title>
   </head>

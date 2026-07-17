@@ -120,6 +120,26 @@ app.post('/api/client-errors', clientErrorLimiter, (req, res) => {
   res.status(204).end();
 });
 
+// First-party conversion funnel: anonymous counters only (event name + time —
+// no user id, IP, or payload is stored). Public because the funnel starts
+// before any session exists. The whitelist rejects junk; the limiter bounds
+// abuse; failures are invisible to the client (analytics never breaks UX).
+const FUNNEL_EVENTS = new Set([
+  'landing_view', 'cta_join_founder', 'cta_join_investor', 'cta_signin',
+  'login_view', 'signup_view', 'signup_role_founder', 'signup_role_investor',
+  'otp_sent', 'otp_verified', 'signup_completed', 'login_success', 'login_failed',
+]);
+const metricsLimiter = rateLimit({ name: 'metrics', windowMs: 60_000, max: 60 });
+app.post('/api/metrics', metricsLimiter, (req, res) => {
+  try {
+    const name = String(req.query.e || '');
+    if (FUNNEL_EVENTS.has(name)) {
+      require('./db').db.prepare('INSERT INTO funnel_events (name) VALUES (?)').run(name);
+    }
+  } catch { /* never surface metrics failures */ }
+  res.status(204).end();
+});
+
 // ---- Database bootstrap & production safety (P0-1) ----
 {
   const { db } = require('./db');

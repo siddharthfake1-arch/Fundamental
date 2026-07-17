@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { db, publicUser, audit } = require('../db');
-const { sign, auth, JWT_SECRET } = require('../authmw');
+const { sign, auth, extractToken, JWT_SECRET } = require('../authmw');
 const { rateLimit, validatePassword } = require('../security');
 const { sendOtp, verifyOtp, normalizePhone, isEmail } = require('../otp');
 
@@ -193,8 +193,14 @@ router.post('/logout', (req, res) => {
   res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' }).json({ ok: true });
 });
 
-router.get('/me', auth, (req, res) => {
-  res.json({ user: sessionPayload(req.user) });
+// The session probe. Every public page calls this on load, so a plain visitor
+// with NO credentials gets a quiet 200 { user: null } — a 401 here painted a
+// "Failed to load resource" console error on every logged-out pageview. A
+// PRESENT-but-invalid token still 401s (revocation, expiry, and tampering keep
+// their real status codes).
+router.get('/me', (req, res) => {
+  if (!extractToken(req)) return res.json({ user: null });
+  auth(req, res, () => res.json({ user: sessionPayload(req.user) }));
 });
 
 router.post('/change-password', auth, authLimiter, async (req, res) => {

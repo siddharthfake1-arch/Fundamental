@@ -71,6 +71,23 @@ function Analytics() {
           <div className="mt-3"><LineChart data={d.signups_trend} xKey="d" yKey="c" height={120} format={(v) => v} /></div>
         </div>
       )}
+      {d.funnel && Object.keys(d.funnel).length > 0 && (
+        <div className="card p-5">
+          <h2 className="section-title">Conversion funnel · last 30 days</h2>
+          <p className="text-xs text-mist-500 mt-1 mb-4">Anonymous counters from the public site — where visitors drop off between landing and account creation.</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[['landing_view', 'Landing views'], ['cta_join_founder', 'Join as founder'], ['cta_join_investor', 'Join as investor'],
+              ['signup_view', 'Signup views'], ['login_view', 'Sign-in views'], ['otp_sent', 'OTP sent'],
+              ['otp_verified', 'OTP verified'], ['signup_completed', 'Signups completed'],
+              ['login_success', 'Logins'], ['login_failed', 'Failed logins']].map(([k, l]) => (
+              <div key={k} className="bg-ink-850 border border-ink-700/50 rounded-xl px-3.5 py-2.5">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-mist-500">{l}</div>
+                <div className="font-display text-xl font-bold text-mist-100 tabular-nums mt-0.5">{(d.funnel[k] ?? 0).toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -105,6 +105,22 @@ export const fmtMoney = (n) => {
   return '$' + Math.round(n);
 };
 
+// Anonymous conversion-funnel beacon (event name only — no user data leaves the
+// device). *_view events fire once per page load; action events fire every time.
+// Analytics must never break or slow the app, so every path swallows errors.
+const seenViews = new Set();
+export function track(name) {
+  try {
+    if (name.endsWith('_view')) {
+      if (seenViews.has(name)) return;
+      seenViews.add(name);
+    }
+    const url = apiUrl(`/api/metrics?e=${encodeURIComponent(name)}`);
+    if (navigator.sendBeacon) navigator.sendBeacon(url);
+    else fetch(url, { method: 'POST', keepalive: true, credentials: 'omit' }).catch(() => {});
+  } catch { /* never */ }
+}
+
 export const timeAgo = (iso) => {
   if (!iso) return '';
   const s = (Date.now() - new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z'))) / 1000;

@@ -34,7 +34,9 @@ export default class ErrorBoundary extends Component {
           message: error?.message || String(error || ''),
           stack: error?.stack || '',
           componentStack: info?.componentStack || '',
-          path,
+          // Viewport rides along with the path — reproducing a layout-dependent
+          // crash without knowing the screen size is guesswork.
+          path: `${path} @${window.innerWidth}x${window.innerHeight}`,
         }),
       }).catch(() => {});
     } catch { /* ignore */ }

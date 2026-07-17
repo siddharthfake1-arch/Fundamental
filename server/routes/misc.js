@@ -211,6 +211,10 @@ router.get('/admin/overview', (req, res) => {
     upvotes: c('SELECT COUNT(*) c FROM upvotes'),
     open_reports: c("SELECT COUNT(*) c FROM reports WHERE status='open'"),
     signups_trend: db.prepare("SELECT date(created_at) d, COUNT(*) c FROM users GROUP BY d ORDER BY d DESC LIMIT 14").all().reverse(),
+    // Anonymous conversion funnel, last 30 days (see /api/metrics).
+    funnel: Object.fromEntries(db.prepare(
+      "SELECT name, COUNT(*) c FROM funnel_events WHERE created_at > datetime('now','-30 days') GROUP BY name"
+    ).all().map(r => [r.name, r.c])),
   });
 });
 router.get('/admin/users', (req, res) => {

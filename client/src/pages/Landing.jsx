@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { track } from '../api';
 import { Logo } from '../components/ui';
 import Constellation, { SHAPES } from '../components/Constellation';
 
@@ -18,6 +19,7 @@ const PILLARS = [
 
 export default function Landing() {
   const [shape, setShape] = useState(SHAPES[0]);
+  useEffect(() => { track('landing_view'); }, []);
 
   return (
     <div className="min-h-screen bg-black text-white safe-top safe-bottom" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -25,18 +27,16 @@ export default function Landing() {
       <header className="fixed top-0 inset-x-0 z-50 bg-black/85">
         <div className="max-w-[1200px] mx-auto px-6 h-[72px] flex items-center justify-between">
           <Logo className="h-[63px]" variant="dark" />
-          {/* Anchor links stay reachable on mobile (the old hidden-below-md nav left
-              phones with no way to the founder/investor sections). */}
-          <nav className="flex items-center gap-4 md:gap-9" aria-label="Primary">
+          {/* Phones get logo + one clear CTA — the founder/investor sections are one
+              scroll below the hero, so the anchor links live on sm+ only. */}
+          <nav className="hidden sm:flex items-center gap-4 md:gap-9" aria-label="Primary">
             {NAV_LINKS.map(([l, to]) => (
-              to.startsWith('#')
-                ? <a key={l} href={to} className="py-2 text-[13px] md:text-[14px] tracking-[0.021em] text-[#9a9a9a] hover:text-white transition-colors">{l}</a>
-                : <Link key={l} to={to} className="hidden sm:inline py-2 text-[13px] md:text-[14px] tracking-[0.021em] text-[#9a9a9a] hover:text-white transition-colors">{l}</Link>
+              <a key={l} href={to} className="py-2 text-[13px] md:text-[14px] tracking-[0.021em] text-[#9a9a9a] hover:text-white transition-colors">{l}</a>
             ))}
           </nav>
-          <Link to="/login"
+          <Link to="/login" onClick={() => track('cta_signin')}
             className="rounded-[24px] bg-[#8052ff] text-white text-[12px] font-semibold uppercase tracking-[0.05em] px-5 py-[15px] hover:bg-[#9066ff] transition-colors">
-            Enter Fundamental
+            Sign in
           </Link>
         </div>
       </header>
@@ -56,14 +56,16 @@ export default function Landing() {
               and investors. Discover opportunities, build meaningful relationships, and raise
               capital with confidence.
             </p>
+            {/* Role-aware CTAs: each says exactly what happens next and lands on
+                the signup form with the right card preselected. */}
             <div className="mt-[36px] flex items-center gap-[15px] flex-wrap">
-              <Link to="/login"
+              <Link to="/signup?role=founder" onClick={() => track('cta_join_founder')}
                 className="rounded-[24px] bg-[#8052ff] text-white text-[12px] font-semibold uppercase tracking-[0.05em] px-6 py-[14px] hover:bg-[#9066ff] transition-colors">
-                Raise or invest
+                Join as founder
               </Link>
-              <Link to="/login"
+              <Link to="/signup?role=investor" onClick={() => track('cta_join_investor')}
                 className="rounded-[24px] border border-[#ffb829] text-[#ffb829] text-[12px] font-semibold uppercase tracking-[0.05em] px-6 py-[14px] hover:bg-[#ffb829]/10 transition-colors">
-                Watch the pitches
+                Join as investor
               </Link>
             </div>
           </div>
@@ -94,6 +96,24 @@ export default function Landing() {
           </div>
         </section>
 
+        {/* Trust: exactly what the platform controls — the credibility questions a
+            serious founder or investor asks before signing up. */}
+        <section className="max-w-[1200px] mx-auto px-6 py-[30px]">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-[18px]">
+            {[
+              ['Structured profiles', 'Founders publish metrics, team, and round details in one reviewable format.'],
+              ['Founder-controlled access', 'Data rooms open per investor, per document — and can be revoked.'],
+              ['Verified identities', 'Founder and fund verification tiers, visible on every profile.'],
+              ['On-the-record diligence', 'Document access is audit-logged for both sides.'],
+            ].map(([t, d]) => (
+              <div key={t} className="rounded-[18px] border border-white/10 p-[20px]">
+                <div className="text-[14px] font-semibold">{t}</div>
+                <p className="text-[13px] leading-[1.55] text-[#9a9a9a] mt-[8px]">{d}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* Value props — durable claims, not live counters that drift out of date */}
         <section id="investors" className="max-w-[1200px] mx-auto px-6 py-[60px]">
           <div className="rounded-[24px] border border-white/10 p-[36px] grid sm:grid-cols-3 gap-[30px] text-center">
@@ -111,7 +131,7 @@ export default function Landing() {
           <h2 className="font-extralight text-[clamp(42px,6vw,78px)] leading-[0.9] tracking-[-0.04em]">
             Every idea<br />comes to life.
           </h2>
-          <Link to="/login"
+          <Link to="/signup"
             className="inline-block mt-[36px] rounded-[24px] bg-[#8052ff] text-white text-[12px] font-semibold uppercase tracking-[0.05em] px-8 py-[14px] hover:bg-[#9066ff] transition-colors">
             Create account
           </Link>
@@ -121,14 +141,14 @@ export default function Landing() {
       <footer className="border-t border-white/10">
         <div className="max-w-[1200px] mx-auto px-6 py-[30px] flex items-center justify-between flex-wrap gap-[12px]">
           <Logo className="h-[52px]" variant="dark" />
-          <div className="text-[12px] tracking-[0.05em] text-[#9a9a9a]">The private-market network for founders and investors.</div>
+          <div className="text-[13px] leading-[1.6] tracking-[0.02em] text-[#9a9a9a]">The private-market network for founders and investors.</div>
           <nav className="flex items-center gap-5 flex-wrap" aria-label="Legal">
             {[['Terms of Service', '/legal/terms'], ['Privacy Policy', '/legal/privacy'], ['Risk Disclosures', '/legal/disclosures']].map(([l, to]) => (
-              <Link key={to} to={to} className="text-[12px] tracking-[0.05em] text-[#9a9a9a] hover:text-white transition-colors">{l}</Link>
+              <Link key={to} to={to} className="py-1 text-[13px] leading-[1.6] tracking-[0.02em] text-[#9a9a9a] hover:text-white transition-colors">{l}</Link>
             ))}
           </nav>
         </div>
-        <div className="max-w-[1200px] mx-auto px-6 pb-[24px] text-[11px] leading-[1.5] text-[#6a6a6a]">
+        <div className="max-w-[1200px] mx-auto px-6 pb-[24px] text-[12px] leading-[1.65] text-[#8a8a8a]">
           Information on Fundamental is provided by members and is not investment advice. Investing in private companies involves substantial risk, including total loss of capital.
         </div>
       </footer>

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { MoveRight, PlayCircle, ShieldCheck, FolderLock, TrendingUp, Globe2 } from 'lucide-react';
-import { api } from '../api';
+import { api, track } from '../api';
 import { useAuth } from '../AuthContext';
 import { IS_NATIVE } from '../config';
 import { Logo, useToast } from '../components/ui';
@@ -65,11 +65,16 @@ const FEATURES = [
 ];
 
 export default function Auth() {
-  const [mode, setMode] = useState('login');
+  // /signup and /login are the SAME component with the matching tab active —
+  // external links, emails, and ads can deep-link straight to account creation.
+  const loc = useLocation();
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState(loc.pathname === '/signup' ? 'signup' : 'login');
   // Signup is a two-step flow: 'form' collects details, 'verify' confirms the email
   // via the OTP code before the account is created and onboarding opens.
   const [step, setStep] = useState('form');
-  const [role, setRole] = useState('founder');
+  // ?role=founder|investor preselects the signup card (role-aware public CTAs).
+  const [role, setRole] = useState(['founder', 'investor'].includes(searchParams.get('role')) ? searchParams.get('role') : 'founder');
   const [form, setForm] = useState({ name: '', email: '', password: '', city: '', phone: '' });
   const [otp, setOtp] = useState({ sent: false, sending: false, code: '', demo_code: '' });
   // Forgot-password sub-flow (lives inside the login tab): request a code, then
@@ -87,8 +92,19 @@ export default function Auth() {
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
 
-  // Switch tabs and reset the signup flow back to its first step.
-  const switchMode = (m) => { setMode(m); setStep('form'); setOtp({ sent: false, sending: false, code: '', demo_code: '' }); setForgot({ on: false, step: 'request', code: '', password: '', demo_code: '' }); };
+  // Switch tabs and reset the signup flow back to its first step. The URL follows
+  // the tab (/login vs /signup) so refresh and sharing land on the right mode.
+  const switchMode = (m) => {
+    setMode(m); setStep('form');
+    setOtp({ sent: false, sending: false, code: '', demo_code: '' });
+    setForgot({ on: false, step: 'request', code: '', password: '', demo_code: '' });
+    const want = m === 'signup' ? '/signup' : '/login';
+    if (loc.pathname !== want) nav(want + loc.search, { replace: true });
+  };
+  useEffect(() => {
+    setMode(loc.pathname === '/signup' ? 'signup' : 'login');
+  }, [loc.pathname]);
+  useEffect(() => { track(mode === 'signup' ? 'signup_view' : 'login_view'); }, [mode]);
 
   // ---- Forgot password ----
   // Request a reset code. The server responds neutrally (it won't confirm whether
@@ -121,8 +137,9 @@ export default function Auth() {
     setBusy(true);
     try {
       const { user } = await api.post('/api/auth/login', { email: form.email, password: form.password });
+      track('login_success');
       goToDiscoverOrOnboarding(user);
-    } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
+    } catch (err) { track('login_failed'); toast(err.message, 'error'); } finally { setBusy(false); }
   };
 
   // Step 1 → 2: validate the details, send the email code, advance to verification.
@@ -135,6 +152,7 @@ export default function Auth() {
     try {
       const d = await api.post('/api/auth/send-otp', { channel: 'email', identifier: form.email });
       setOtp(o => ({ ...o, sent: true, demo_code: d.demo_code || '', code: '' }));
+      track('otp_sent');
       setStep('verify');
       toast(d.demo_code ? 'Demo mode — your code is shown below' : 'We sent a 6-digit code to your email', 'success');
     } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
@@ -146,7 +164,9 @@ export default function Auth() {
     setBusy(true);
     try {
       const { otp_token } = await api.post('/api/auth/verify-otp', { identifier: form.email, code: otp.code });
+      track('otp_verified');
       const { user } = await api.post('/api/auth/signup', { ...form, role, otp_token, accept_terms: true });
+      track('signup_completed');
       goToDiscoverOrOnboarding(user);
     } catch (err) { toast(err.message, 'error'); } finally { setBusy(false); }
   };
@@ -187,7 +207,7 @@ export default function Auth() {
           the form (full-screen native auth); mobile web shows the form FIRST and
           the brand story below it, so Sign in is never buried under a scroll. */}
       {!IS_NATIVE && (
-      <div className="order-2 lg:order-1 lg:w-[52%] relative flex flex-col justify-between p-8 lg:p-14 border-t lg:border-t-0 lg:border-r border-ink-700/50 overflow-hidden">
+      <div className="order-2 lg:order-1 lg:w-[52%] relative hidden lg:flex flex-col justify-between p-8 lg:p-14 border-t lg:border-t-0 lg:border-r border-ink-700/50 overflow-hidden">
         {/* The constellation lives behind the brand copy — masked to a soft nebula
             so it reads as intentional depth, never scattered noise behind the text */}
         <div className="absolute inset-0 pointer-events-none opacity-[0.3]"
@@ -233,10 +253,10 @@ export default function Auth() {
 
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
-            className="mt-9 flex items-center gap-6 text-xs text-mist-400">
-            <span><span className="font-display font-bold text-mist-100 text-base">8+</span> startups raising</span>
-            <span><span className="font-display font-bold text-mist-100 text-base">$39M+</span> in open rounds</span>
-            <span><span className="font-display font-bold text-mist-100 text-base">5</span> active funds</span>
+            className="mt-9 flex items-center gap-x-6 gap-y-2 flex-wrap text-xs text-mist-400">
+            <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5 text-gold-400" /> Verified founders &amp; funds</span>
+            <span className="flex items-center gap-1.5"><FolderLock className="w-3.5 h-3.5 text-gold-400" /> Permissioned data rooms</span>
+            <span className="flex items-center gap-1.5"><PlayCircle className="w-3.5 h-3.5 text-gold-400" /> Audit-logged access</span>
           </motion.div>
         </div>
 
@@ -326,7 +346,7 @@ export default function Auth() {
                   <span className="label">I am a</span>
                   <div className="grid grid-cols-2 gap-3">
                     {[['founder', 'Founder', 'Raising capital for my startup'], ['investor', 'Investor', 'Sourcing and evaluating deals']].map(([v, t, s]) => (
-                      <button type="button" key={v} onClick={() => setRole(v)}
+                      <button type="button" key={v} onClick={() => { setRole(v); track(v === 'founder' ? 'signup_role_founder' : 'signup_role_investor'); }}
                         className={`rounded-xl border p-4 text-left transition-all ${role === v ? 'border-gold-500/70 bg-gold-500/10' : 'border-ink-600/70 bg-ink-850 hover:border-ink-500'}`}>
                         <div className={`font-display font-bold text-sm ${role === v ? 'text-gold-300' : 'text-mist-100'}`}>{t}</div>
                         <div className="text-[11px] text-mist-400 mt-1 leading-snug">{s}</div>
