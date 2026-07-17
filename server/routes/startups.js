@@ -1,7 +1,15 @@
 const express = require('express');
 const { db, notify, audit, logCollateralAccess, canViewStartup, isListed, addActivity, areConnected, publicUser, isVisibleUser, fundamentalScore, thesisFit, FUNDING_LADDER, startupSubscribers } = require('../db');
 const { auth, requireRole, requireApprovedInvestor } = require('../authmw');
-const { validateUrlFields, validateNumericFields, clampStrings, safeUrl, sanitizeLinks } = require('../security');
+const { rateLimit, validateUrlFields, validateNumericFields, clampStrings, safeUrl, sanitizeLinks } = require('../security');
+
+// Per-user throttles on the most expensive reads: the global API ceiling
+// (1500/5min) still allowed one client to hammer the widest queries in the app.
+// Generous for humans (infinite scroll + filter churn), a wall for scripts.
+const TEST = process.env.NODE_ENV === 'test';
+const byUser = (req) => (req.user ? `u${req.user.id}` : req.ip);
+const discoverLimiter = rateLimit({ name: 'discover', windowMs: 5 * 60_000, max: TEST ? 100000 : 180, keyFn: byUser });
+const memoLimiter = rateLimit({ name: 'memo', windowMs: 5 * 60_000, max: TEST ? 100000 : 40, keyFn: byUser });
 const { streamPrivate, deletePrivate, privateExists } = require('../storage');
 const { J, qstr, qint } = require('../util');
 
@@ -28,29 +36,53 @@ function investorProfileOf(user) {
     : null;
 }
 
-function tile(s, userId, ip = null) {
-  const upvotes = db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c;
-  const score = fundamentalScore(s);
-  const fit = ip ? thesisFit(s, ip) : null;
-  const recentViews = db.prepare("SELECT COUNT(*) c FROM startup_views WHERE startup_id=? AND created_at > datetime('now','-7 days')").get(s.id).c;
-  const recentUpvotes = db.prepare("SELECT COUNT(*) c FROM upvotes WHERE startup_id=? AND created_at > datetime('now','-7 days')").get(s.id).c;
-  return {
-    id: s.id, name: s.name, logo: s.logo, sector: s.sector, subsector: s.subsector,
-    stage: s.stage, city: s.city, arr: s.arr, mrr: s.mrr, verified: s.verified,
-    raising_status: s.raising_status, one_liner: s.one_liner,
-    upvotes, views: s.views,
-    score: score.total, fit,
-    spark: J(s.revenue_series).map(p => p.revenue),
-    growth: s.growth,
-    momentum: Math.min(100, Math.round(recentUpvotes * 18 + recentViews * 3 + upvotes * 4 + (s.raising_status === 'Actively Raising' ? 10 : 0))),
-    has_video: !!s.video_url,
-    has_collateral: !!db.prepare('SELECT 1 FROM collateral WHERE startup_id=?').get(s.id),
-    saved: !!db.prepare('SELECT 1 FROM watchlist WHERE user_id=? AND startup_id=?').get(userId, s.id),
-    upvoted: !!db.prepare('SELECT 1 FROM upvotes WHERE user_id=? AND startup_id=?').get(userId, s.id),
-    followers: db.prepare('SELECT COUNT(*) c FROM startup_follows WHERE startup_id=?').get(s.id).c,
-    following: !!db.prepare('SELECT 1 FROM startup_follows WHERE user_id=? AND startup_id=?').get(userId, s.id),
-    interested: !!db.prepare('SELECT 1 FROM interests WHERE investor_id=? AND startup_id=?').get(userId, s.id),
+// Shape a whole page of marketplace tiles with page-wide aggregates: ten
+// IN-queries per page instead of ~13 point queries PER STARTUP (the audit's
+// worst hot path — a 30-tile Discover load ran ~450 queries; now it runs 12).
+// Output shape is identical to the old per-row tile().
+function tiles(rows, userId, ip = null) {
+  if (rows.length === 0) return [];
+  const ids = rows.map(s => s.id);
+  const ph = ids.map(() => '?').join(',');
+  const countMap = (sql, ...extra) => {
+    const m = new Map();
+    for (const r of db.prepare(sql).all(...extra, ...ids)) m.set(r.id, r.c);
+    return m;
   };
+  const idSet = (sql, ...extra) => new Set(db.prepare(sql).all(...extra, ...ids).map(r => r.id));
+  const upvotes = countMap(`SELECT startup_id id, COUNT(*) c FROM upvotes WHERE startup_id IN (${ph}) GROUP BY startup_id`);
+  const recentUpvotes = countMap(`SELECT startup_id id, COUNT(*) c FROM upvotes WHERE created_at > datetime('now','-7 days') AND startup_id IN (${ph}) GROUP BY startup_id`);
+  const recentViews = countMap(`SELECT startup_id id, COUNT(*) c FROM startup_views WHERE created_at > datetime('now','-7 days') AND startup_id IN (${ph}) GROUP BY startup_id`);
+  const updates60 = countMap(`SELECT startup_id id, COUNT(*) c FROM founder_updates WHERE created_at > datetime('now','-60 days') AND startup_id IN (${ph}) GROUP BY startup_id`);
+  const followers = countMap(`SELECT startup_id id, COUNT(*) c FROM startup_follows WHERE startup_id IN (${ph}) GROUP BY startup_id`);
+  const hasCollateral = idSet(`SELECT DISTINCT startup_id id FROM collateral WHERE startup_id IN (${ph})`);
+  const saved = idSet(`SELECT startup_id id FROM watchlist WHERE user_id=? AND startup_id IN (${ph})`, userId);
+  const upvotedBy = idSet(`SELECT startup_id id FROM upvotes WHERE user_id=? AND startup_id IN (${ph})`, userId);
+  const followedBy = idSet(`SELECT startup_id id FROM startup_follows WHERE user_id=? AND startup_id IN (${ph})`, userId);
+  const interestedBy = idSet(`SELECT startup_id id FROM interests WHERE investor_id=? AND startup_id IN (${ph})`, userId);
+  return rows.map(s => {
+    const up = upvotes.get(s.id) || 0;
+    const rv = recentViews.get(s.id) || 0;
+    const ru = recentUpvotes.get(s.id) || 0;
+    const score = fundamentalScore(s, { upvotes: up, updates: updates60.get(s.id) || 0 });
+    return {
+      id: s.id, name: s.name, logo: s.logo, sector: s.sector, subsector: s.subsector,
+      stage: s.stage, city: s.city, arr: s.arr, mrr: s.mrr, verified: s.verified,
+      raising_status: s.raising_status, one_liner: s.one_liner,
+      upvotes: up, views: s.views,
+      score: score.total, fit: ip ? thesisFit(s, ip) : null,
+      spark: J(s.revenue_series).map(p => p.revenue),
+      growth: s.growth,
+      momentum: Math.min(100, Math.round(ru * 18 + rv * 3 + up * 4 + (s.raising_status === 'Actively Raising' ? 10 : 0))),
+      has_video: !!s.video_url,
+      has_collateral: hasCollateral.has(s.id),
+      saved: saved.has(s.id),
+      upvoted: upvotedBy.has(s.id),
+      followers: followers.get(s.id) || 0,
+      following: followedBy.has(s.id),
+      interested: interestedBy.has(s.id),
+    };
+  });
 }
 
 // Unapproved investors cannot browse private deal flow (P0-5). Founders & admins may.
@@ -64,7 +96,7 @@ function dealFlowGate(req, res, next) {
 // ---- Discover (marketplace). Mandatory video: unlisted until pitch uploaded. ----
 // Filters run in SQL (parameterized), results are paginated, and all query params
 // are coerced to strings so hostile array/object inputs cannot crash the route.
-router.get('/', dealFlowGate, (req, res) => {
+router.get('/', dealFlowGate, discoverLimiter, (req, res) => {
   const sector = qstr(req.query.sector), subsector = qstr(req.query.subsector), stage = qstr(req.query.stage);
   const revenue = qstr(req.query.revenue), geography = qstr(req.query.geography), raising = qstr(req.query.raising);
   const verified = qstr(req.query.verified), sort = qstr(req.query.sort), q = qstr(req.query.q).trim();
@@ -98,9 +130,20 @@ router.get('/', dealFlowGate, (req, res) => {
     // the 400 most recent, rank those, then page. (Older long-tail entries fall
     // out of these two sorts; every other sort still covers the full catalog.)
     const candidates = db.prepare(`SELECT * FROM startups WHERE ${whereSql} ORDER BY id DESC LIMIT 400`).all(...params);
-    const key = sort === 'score'
-      ? (s) => fundamentalScore(s).total
-      : (s) => thesisFit(s, ip) || 0;
+    let key;
+    if (sort === 'score' && candidates.length === 0) {
+      key = () => 0;
+    } else if (sort === 'score') {
+      // Score needs two counts per startup — batch them for the whole candidate
+      // set (2 queries) instead of 2 point queries × up to 400 candidates.
+      const cids = candidates.map(s => s.id);
+      const cph = cids.map(() => '?').join(',');
+      const cUp = new Map(db.prepare(`SELECT startup_id, COUNT(*) c FROM upvotes WHERE startup_id IN (${cph}) GROUP BY startup_id`).all(...cids).map(r => [r.startup_id, r.c]));
+      const cUpd = new Map(db.prepare(`SELECT startup_id, COUNT(*) c FROM founder_updates WHERE created_at > datetime('now','-60 days') AND startup_id IN (${cph}) GROUP BY startup_id`).all(...cids).map(r => [r.startup_id, r.c]));
+      key = (s) => fundamentalScore(s, { upvotes: cUp.get(s.id) || 0, updates: cUpd.get(s.id) || 0 }).total;
+    } else {
+      key = (s) => thesisFit(s, ip) || 0;
+    }
     pageRows = candidates.map(s => ({ s, k: key(s) })).sort((a, b) => b.k - a.k)
       .slice(offset, offset + limit).map(x => x.s);
   } else {
@@ -110,7 +153,7 @@ router.get('/', dealFlowGate, (req, res) => {
     pageRows = db.prepare(`SELECT * FROM startups WHERE ${whereSql} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
       .all(...params, limit, offset);
   }
-  res.json({ startups: pageRows.map(s => tile(s, req.user.id, ip)), total, limit, offset });
+  res.json({ startups: tiles(pageRows, req.user.id, ip), total, limit, offset });
 });
 
 router.get('/facets', dealFlowGate, (req, res) => {
@@ -444,7 +487,7 @@ router.put('/notes/:noteId', requireRole('investor'), (req, res) => {
 });
 
 // ---- AI Investment Memo (structured-data synthesis engine) ----
-router.get('/:id/memo', requireApprovedInvestor, (req, res) => {
+router.get('/:id/memo', requireApprovedInvestor, memoLimiter, (req, res) => {
   const s = db.prepare('SELECT * FROM startups WHERE id=?').get(req.params.id);
   if (!s || !canViewStartup(s, req.user)) return res.status(404).json({ error: 'We could not find this startup.' });
   const score = fundamentalScore(s);

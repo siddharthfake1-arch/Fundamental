@@ -45,7 +45,12 @@ function auth(req, res, next) {
       res.clearCookie('token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
       return res.status(403).json({ error: 'Your account has been suspended. Contact support@fundamental.app if you believe this is a mistake.' });
     }
-    db.prepare("UPDATE users SET last_active=datetime('now') WHERE id=?").run(user.id);
+    // Presence tracking only needs minute resolution — writing on EVERY request
+    // (including the 8s/15s polls) made each poll a WAL write. One write per
+    // 60s per user carries the same product signal at a fraction of the churn.
+    if (!user.last_active || (Date.now() - new Date(user.last_active + 'Z').getTime()) > 60_000) {
+      db.prepare("UPDATE users SET last_active=datetime('now') WHERE id=?").run(user.id);
+    }
     req.user = user;
     next();
   } catch {

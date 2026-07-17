@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { db, notify, audit, areConnected, isBlocked, publicUser, trustScore, isVisibleUser, ACTIVE_USER_SQL } = require('../db');
 const { auth, requireRole } = require('../authmw');
-const { validateUrlFields, clampStrings, sanitizeLinks } = require('../security');
+const { rateLimit, validateUrlFields, clampStrings, sanitizeLinks } = require('../security');
 const { deletePrivate } = require('../storage');
 const { J, qstr, qint } = require('../util');
 
@@ -11,7 +11,14 @@ const router = express.Router();
 router.use(auth);
 
 // ---- Network directory ----
-router.get('/network', (req, res) => {
+const TEST = process.env.NODE_ENV === 'test';
+const byUser = (req) => (req.user ? `u${req.user.id}` : req.ip);
+// The directory query and the ~25-table data export are the two heaviest reads
+// in this router — cap them per user well below the global API ceiling.
+const networkLimiter = rateLimit({ name: 'network', windowMs: 5 * 60_000, max: TEST ? 100000 : 180, keyFn: byUser });
+const exportLimiter = rateLimit({ name: 'export', windowMs: 60 * 60_000, max: TEST ? 100000 : 6, keyFn: byUser });
+
+router.get('/network', networkLimiter, (req, res) => {
   // All query params coerced to strings so array/object inputs cannot 500 the route.
   const role = qstr(req.query.role), sector = qstr(req.query.sector), stage = qstr(req.query.stage);
   const geography = qstr(req.query.geography).toLowerCase(), active = qstr(req.query.active), q = qstr(req.query.q).toLowerCase();
@@ -37,24 +44,35 @@ router.get('/network', (req, res) => {
     ? db.prepare(`SELECT * FROM users WHERE ${whereSql} ORDER BY last_active DESC LIMIT 300`).all(...params)
     : db.prepare(`SELECT * FROM users WHERE ${whereSql} ORDER BY last_active DESC LIMIT ? OFFSET ?`).all(...params, limit, offset);
 
+  // Shape the page with four IN-queries instead of 3 point queries per user —
+  // the per-row fan-out was the remaining cost after the SQL pagination fix.
+  const ids = rows.map(u => u.id);
+  const ph = ids.map(() => '?').join(',');
+  const startupBy = new Map(); const profileBy = new Map(); const connBy = new Map(); const followingSet = new Set();
+  if (ids.length) {
+    for (const s of db.prepare(`SELECT founder_id, name, sector, stage FROM startups WHERE founder_id IN (${ph})`).all(...ids)) startupBy.set(s.founder_id, s);
+    for (const p of db.prepare(`SELECT * FROM investor_profiles WHERE user_id IN (${ph})`).all(...ids)) profileBy.set(p.user_id, p);
+    for (const c of db.prepare(`SELECT * FROM connections WHERE (requester_id=? AND recipient_id IN (${ph})) OR (recipient_id=? AND requester_id IN (${ph}))`).all(req.user.id, ...ids, req.user.id, ...ids)) {
+      connBy.set(c.requester_id === req.user.id ? c.recipient_id : c.requester_id, c);
+    }
+    for (const f of db.prepare(`SELECT followee_id FROM follows WHERE follower_id=? AND followee_id IN (${ph})`).all(req.user.id, ...ids)) followingSet.add(f.followee_id);
+  }
   let cards = rows.map(u => {
     let company = '', focus = [];
     if (u.role === 'founder') {
-      const s = db.prepare('SELECT name, sector, stage FROM startups WHERE founder_id=?').get(u.id);
+      const s = startupBy.get(u.id);
       if (s) { company = s.name; focus = [s.sector, s.stage]; }
     } else {
-      const ip = db.prepare('SELECT * FROM investor_profiles WHERE user_id=?').get(u.id);
+      const ip = profileBy.get(u.id);
       if (ip) { company = ip.fund_name; focus = [...J(ip.sector_focus), ...J(ip.stage_focus)]; }
     }
-    const conn = db.prepare(
-      'SELECT * FROM connections WHERE (requester_id=? AND recipient_id=?) OR (requester_id=? AND recipient_id=?)'
-    ).get(req.user.id, u.id, u.id, req.user.id);
+    const conn = connBy.get(u.id);
     return {
       ...publicUser(u), company, focus,
       connection: conn ? conn.status : null,
       connection_direction: conn ? (conn.requester_id === req.user.id ? 'outgoing' : 'incoming') : null,
       connection_id: conn ? conn.id : null,
-      following: !!db.prepare('SELECT 1 FROM follows WHERE follower_id=? AND followee_id=?').get(req.user.id, u.id),
+      following: followingSet.has(u.id),
     };
   });
   let total;
@@ -166,8 +184,12 @@ router.get('/profile/:id', (req, res) => {
     if (out.investor) {
       // Portfolio companies are only shown if listed (unless you own the profile / admin).
       const ownerView = req.user.id === u.id || req.user.role === 'admin';
+      const pids = out.investor.portfolio;
+      const byId = new Map(pids.length
+        ? db.prepare(`SELECT id, name, logo, sector, stage, one_liner, video_url FROM startups WHERE id IN (${pids.map(() => '?').join(',')})`).all(...pids).map(s => [s.id, s])
+        : []);
       out.portfolio_startups = out.investor.portfolio
-        .map(pid => db.prepare('SELECT id, name, logo, sector, stage, one_liner, video_url FROM startups WHERE id=?').get(pid))
+        .map(pid => byId.get(Number(pid)))
         .filter(s => s && (ownerView || s.video_url))
         .map(({ video_url, ...s }) => s);
     }
@@ -204,7 +226,7 @@ router.get('/profile/:id', (req, res) => {
 
 // ---- Data export (GDPR/CCPA/DPDP portability) ----
 // Returns the user's own data as JSON. Excludes other users' private content.
-router.get('/me/export', (req, res) => {
+router.get('/me/export', exportLimiter, (req, res) => {
   const uid = req.user.id;
   const data = {
     exported_at: new Date().toISOString(),

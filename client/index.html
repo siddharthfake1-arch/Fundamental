@@ -11,6 +11,9 @@
     <meta name="description" content="Fundamental — the serious fundraising platform and private-market network. Every startup opens with a 12-minute video pitch." />
     <meta name="robots" content="index, follow" />
     <link rel="manifest" href="/manifest.json" />
+    <!-- The wordmark is the LCP element on the landing/login pages (both always
+         use the dark-background lockup) — fetch it before React discovers it. -->
+    <link rel="preload" as="image" href="/logo-dark.png" fetchpriority="high" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!-- Non-blocking font load: media="print" defers it off the render path, onload

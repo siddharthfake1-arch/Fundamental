@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Link, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
@@ -7,28 +7,33 @@ import MobileHeader from './components/MobileHeader';
 import ErrorBoundary from './components/ErrorBoundary';
 import OfflineBanner from './components/OfflineBanner';
 import BottomNav from './components/BottomNav';
-import Menu from './pages/Menu';
 import { IS_NATIVE } from './config';
 import { Spinner } from './components/ui';
-import Auth from './pages/Auth';
-import Landing from './pages/Landing';
-import Onboarding from './pages/Onboarding';
+// Discover is the app's default route — it stays in the entry chunk so the
+// common cold start renders without a second fetch. Every other page loads on
+// demand: logged-out visitors never download the app, and the app never
+// downloads the marketing/auth pages. Chunks are content-hashed + immutable,
+// so each page is fetched at most once per deploy.
 import Discover from './pages/Discover';
-import Startups from './pages/Startups';
-import Startup from './pages/Startup';
-import Profile from './pages/Profile';
-import Network from './pages/Network';
-import Messages from './pages/Messages';
-import Dashboard from './pages/Dashboard';
-import Notifications from './pages/Notifications';
-import Social from './pages/Social';
-import Watchlist from './pages/Watchlist';
-import Settings from './pages/Settings';
-import Admin from './pages/Admin';
-import PublicStartup from './pages/PublicStartup';
-import Pulse from './pages/Pulse';
-import Communities from './pages/Communities';
-import Legal from './pages/Legal';
+const Menu = lazy(() => import('./pages/Menu'));
+const Auth = lazy(() => import('./pages/Auth'));
+const Landing = lazy(() => import('./pages/Landing'));
+const Onboarding = lazy(() => import('./pages/Onboarding'));
+const Startups = lazy(() => import('./pages/Startups'));
+const Startup = lazy(() => import('./pages/Startup'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Network = lazy(() => import('./pages/Network'));
+const Messages = lazy(() => import('./pages/Messages'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Notifications = lazy(() => import('./pages/Notifications'));
+const Social = lazy(() => import('./pages/Social'));
+const Watchlist = lazy(() => import('./pages/Watchlist'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Admin = lazy(() => import('./pages/Admin'));
+const PublicStartup = lazy(() => import('./pages/PublicStartup'));
+const Pulse = lazy(() => import('./pages/Pulse'));
+const Communities = lazy(() => import('./pages/Communities'));
+const Legal = lazy(() => import('./pages/Legal'));
 
 function RedirectToStartup() {
   const { id } = useParams();
@@ -69,14 +74,16 @@ export default function App() {
     return (
       <>
       <OfflineBanner />
-      <Routes>
-        {/* A native app should open on sign-in, not the marketing site. */}
-        <Route path="/" element={IS_NATIVE ? <Navigate to="/login" replace /> : <Landing />} />
-        <Route path="/login" element={<Auth />} />
-        <Route path="/s/:id" element={<PublicStartup />} />
-        <Route path="/legal/:doc" element={<Legal />} />
-        <Route path="*" element={<NotFound homeTo="/" />} />
-      </Routes>
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Spinner /></div>}>
+        <Routes>
+          {/* A native app should open on sign-in, not the marketing site. */}
+          <Route path="/" element={IS_NATIVE ? <Navigate to="/login" replace /> : <Landing />} />
+          <Route path="/login" element={<Auth />} />
+          <Route path="/s/:id" element={<PublicStartup />} />
+          <Route path="/legal/:doc" element={<Legal />} />
+          <Route path="*" element={<NotFound homeTo="/" />} />
+        </Routes>
+      </Suspense>
       </>
     );
   }
@@ -102,6 +109,7 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           className="max-w-7xl mx-auto px-4 pt-4 sm:pt-6 main-pad-bottom">
+          <Suspense fallback={<Spinner />}>
           <Routes>
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/onboarding" element={<Onboarding />} />
@@ -125,6 +133,7 @@ export default function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound homeTo="/discover" />} />
           </Routes>
+          </Suspense>
         </motion.main>
       </ErrorBoundary>
     </div>

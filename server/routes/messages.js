@@ -25,19 +25,39 @@ function getOrCreateConversation(u1, u2) {
 }
 
 router.get('/', (req, res) => {
-  const convos = db.prepare('SELECT * FROM conversations WHERE a_id=? OR b_id=? ORDER BY updated_at DESC')
-    .all(req.user.id, req.user.id);
+  // One pass, three queries total — the previous shape ran ~4 point queries per
+  // conversation (counterpart, last message, unread count, block check), which
+  // scaled linearly with inbox size on every 8-second poll.
+  const uid = req.user.id;
+  const convos = db.prepare(`
+    SELECT c.id, c.deal_stage, c.updated_at,
+           u.id AS o_id, u.name AS o_name, u.role AS o_role, u.photo AS o_photo,
+           u.headline AS o_headline, u.verified AS o_verified, u.status AS o_status, u.flagged AS o_flagged,
+           (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id AND m.sender_id != ? AND m.read = 0) AS unread,
+           (SELECT MAX(m.id) FROM messages m WHERE m.conversation_id = c.id) AS last_id
+    FROM conversations c
+    JOIN users u ON u.id = CASE WHEN c.a_id = ? THEN c.b_id ELSE c.a_id END
+    WHERE (c.a_id = ? OR c.b_id = ?)
+      AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = ? AND b.blocked_id = u.id) OR (b.blocker_id = u.id AND b.blocked_id = ?))
+    ORDER BY c.updated_at DESC
+  `).all(uid, uid, uid, uid, uid, uid);
+  // Hydrate the last message per conversation in one IN-query.
+  const lastIds = convos.map(c => c.last_id).filter(Boolean);
+  const lastById = new Map();
+  if (lastIds.length) {
+    const ph = lastIds.map(() => '?').join(',');
+    for (const m of db.prepare(`SELECT * FROM messages WHERE id IN (${ph})`).all(...lastIds)) {
+      delete m.attachment_key; // private key never leaves the server
+      lastById.set(m.id, m);
+    }
+  }
   const list = convos.map(c => {
-    const otherId = c.a_id === req.user.id ? c.b_id : c.a_id;
-    const other = db.prepare('SELECT id, name, role, photo, headline, verified, status, flagged FROM users WHERE id=?').get(otherId);
+    const other = { id: c.o_id, name: c.o_name, role: c.o_role, photo: c.o_photo, headline: c.o_headline, verified: c.o_verified, status: c.o_status, flagged: c.o_flagged };
     // Conversations with suspended/flagged/blocked counterparts are hidden from the
     // inbox (history is preserved; the row simply doesn't list while that stands).
-    if (!isVisibleUser(other, req.user) || isBlocked(req.user.id, otherId)) return null;
+    if (!isVisibleUser(other, req.user)) return null;
     delete other.status; delete other.flagged;
-    const last = db.prepare('SELECT * FROM messages WHERE conversation_id=? ORDER BY id DESC LIMIT 1').get(c.id);
-    if (last) delete last.attachment_key; // private key never leaves the server
-    const unread = db.prepare('SELECT COUNT(*) c FROM messages WHERE conversation_id=? AND sender_id!=? AND read=0').get(c.id, req.user.id).c;
-    return { id: c.id, deal_stage: c.deal_stage, other, last_message: last, unread };
+    return { id: c.id, deal_stage: c.deal_stage, other, last_message: lastById.get(c.last_id) || null, unread: c.unread };
   }).filter(Boolean);
   res.json({ conversations: list });
 });

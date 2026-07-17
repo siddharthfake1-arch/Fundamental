@@ -409,6 +409,25 @@ npm start</pre>
 
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => console.log(`Fundamental running on http://localhost:${PORT}`));
+// Slow-loris / stalled-connection protection. Kept above the 10-minute upload
+// window (client XHR timeout) so large pitch videos still complete.
+server.headersTimeout = 65_000;      // client must finish sending headers promptly
+server.requestTimeout = 11 * 60_000; // whole request, sized for the video upload path
+server.keepAliveTimeout = 61_000;    // > typical LB idle timeout to avoid races
+
+// A crash without a log line is a mystery outage. These never "handle" the error —
+// they record it (console + Sentry when configured) and let the process die so the
+// supervisor restarts from a clean state.
+process.on('unhandledRejection', (reason) => {
+  console.error(JSON.stringify({ level: 'fatal', kind: 'unhandledRejection', message: String(reason?.message || reason), stack: reason?.stack || '' }));
+  try { require('@sentry/node').captureException(reason); } catch { /* sentry not configured */ }
+  shutdown('unhandledRejection');
+});
+process.on('uncaughtException', (err) => {
+  console.error(JSON.stringify({ level: 'fatal', kind: 'uncaughtException', message: err?.message, stack: err?.stack || '' }));
+  try { require('@sentry/node').captureException(err); } catch { /* sentry not configured */ }
+  shutdown('uncaughtException');
+});
 
 // F-034: graceful shutdown — stop accepting connections and close the SQLite
 // (WAL) database cleanly on SIGTERM/SIGINT (containers/hosts send these).

@@ -281,7 +281,7 @@ export default function Constellation({ count = 1500, cycleMs = 5600, onShape, c
     const canvas = ref.current;
     const ctx = canvas.getContext('2d');
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let raf, w, h, dpr, R, ox, oy;
+    let w, h, dpr, R, ox, oy;
 
     const resize = () => {
       dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -376,8 +376,24 @@ export default function Constellation({ count = 1500, cycleMs = 5600, onShape, c
       canvas.addEventListener('pointerdown', onDown);
     }
 
+    // Run the simulation only while the canvas is actually watchable: scrolled
+    // offscreen or in a hidden tab, the loop parks itself instead of burning
+    // CPU/battery at 60fps. Resuming re-arms the RAF from where it left off.
+    let visible = true, raf2 = 0;
+    const armed = () => visible && !document.hidden;
+    const wake = () => { if (armed() && !raf2) raf2 = requestAnimationFrame(frame); };
+    const io = typeof IntersectionObserver !== 'undefined'
+      ? new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; wake(); }, { threshold: 0 })
+      : null;
+    io?.observe(canvas);
+    const onVis = () => wake();
+    document.addEventListener('visibilitychange', onVis);
+
     let t = 0;
     const frame = () => {
+      raf2 = 0;
+      if (!armed()) return; // parked — wake() re-arms on visibility
+      raf2 = requestAnimationFrame(frame);
       t += 0.016;
       ctx.clearRect(0, 0, w, h);
 
@@ -442,12 +458,14 @@ export default function Constellation({ count = 1500, cycleMs = 5600, onShape, c
       }
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
-      raf = requestAnimationFrame(frame);
     };
-    raf = requestAnimationFrame(frame);
+    raf2 = requestAnimationFrame(frame);
 
     return () => {
-      cancelAnimationFrame(raf); clearInterval(cycle);
+      if (raf2) cancelAnimationFrame(raf2);
+      clearInterval(cycle);
+      io?.disconnect();
+      document.removeEventListener('visibilitychange', onVis);
       window.removeEventListener('resize', resize);
       canvas.removeEventListener('pointermove', onMove);
       canvas.removeEventListener('pointerleave', onLeave);

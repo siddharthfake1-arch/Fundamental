@@ -9,6 +9,11 @@ db.pragma('foreign_keys = ON');
 // Wait briefly on a locked database (WAL checkpoints, the boot-time seed
 // subprocess) instead of throwing SQLITE_BUSY immediately.
 db.pragma('busy_timeout = 5000');
+// WAL + NORMAL is the standard production pairing: commits stop fsyncing the
+// WAL on every transaction (a large win under our per-request write load) while
+// remaining durable across app crashes — only an OS/power failure can lose the
+// final transactions, and WAL guarantees no corruption either way.
+db.pragma('synchronous = NORMAL');
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -500,6 +505,14 @@ function retentionSweep() {
 retentionSweep();
 setInterval(retentionSweep, 24 * 3600 * 1000).unref();
 
+// Long-lived processes can outrun SQLite's automatic WAL checkpointing under
+// sustained writes, letting the -wal file grow without bound. TRUNCATE folds it
+// back into the main DB and resets the file hourly; PASSIVE semantics aren't
+// enough because readers (polling endpoints) are almost always active.
+setInterval(() => {
+  try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* busy — next hour */ }
+}, 3600 * 1000).unref();
+
 // ---- shared helpers ----
 // Respects the recipient's in-app notification preference (P1-11). Email delivery
 // is handled separately by the mailer when email_alerts is on.
@@ -609,7 +622,10 @@ function profileCompletion(user, startup) {
 
 // Fundamental Score: 0–100 composite of completeness, traction, engagement and trust.
 // Deterministic and explainable — shown with its breakdown, never as a black box.
-function fundamentalScore(s) {
+// `pre` lets batched callers (the Discover tile shaper) supply the two counts
+// from a page-wide GROUP BY instead of two point queries per startup. Same
+// numbers either way — single-startup callers keep the simple form.
+function fundamentalScore(s, pre = null) {
   const fields = [s.one_liner, s.problem, s.solution, s.business_model, s.market_size,
     s.competitive_advantage, s.round_details, s.logo, s.video_url].filter(Boolean).length;
   const completeness = Math.round((fields / 9) * 40);
@@ -618,8 +634,8 @@ function fundamentalScore(s) {
   if (rev >= 5e6) traction = 26; else if (rev >= 1e6) traction = 21; else if (rev >= 250e3) traction = 15; else if (rev > 0) traction = 10;
   if (s.growth >= 20) traction += 4; else if (s.growth >= 10) traction += 2;
   traction = Math.min(30, traction);
-  const upvotes = db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c;
-  const updates = db.prepare("SELECT COUNT(*) c FROM founder_updates WHERE startup_id=? AND created_at > datetime('now','-60 days')").get(s.id).c;
+  const upvotes = pre ? (pre.upvotes || 0) : db.prepare('SELECT COUNT(*) c FROM upvotes WHERE startup_id=?').get(s.id).c;
+  const updates = pre ? (pre.updates || 0) : db.prepare("SELECT COUNT(*) c FROM founder_updates WHERE startup_id=? AND created_at > datetime('now','-60 days')").get(s.id).c;
   const engagement = Math.min(20, upvotes * 2 + Math.min(6, (s.views || 0) / 500) + updates * 3);
   const trust = s.verified ? 10 : 0;
   return {

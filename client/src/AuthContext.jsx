@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { api, session } from './api';
 
 const AuthCtx = createContext(null);
@@ -25,17 +25,17 @@ export function AuthProvider({ children }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await api.post('/api/auth/logout');
     session.onExpired?.(); // native: clear the stored bearer token
     setUser(null);
-  };
+  }, []);
 
-  return (
-    <AuthCtx.Provider value={{ user, setUser, refresh, logout, loading }}>
-      {children}
-    </AuthCtx.Provider>
-  );
+  // A stable value object: without the memo, every provider render handed out a
+  // fresh reference and re-rendered every useAuth() consumer in the app.
+  const value = useMemo(() => ({ user, setUser, refresh, logout, loading }), [user, refresh, logout, loading]);
+
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
 export const useAuth = () => useContext(AuthCtx);
