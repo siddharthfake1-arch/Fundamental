@@ -80,6 +80,7 @@ function ChatMedia({ m, onOpenImage, onMediaLoad }) {
       {!loaded && <div className="skeleton w-56 h-40" />}
       <img src={src || undefined} alt={m.attachment_name || 'Photo attachment'} loading="lazy" draggable={false}
         className={`block max-h-72 max-w-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0 h-0'}`}
+        ref={(el) => { if (el && el.complete && el.naturalWidth > 0 && !loaded) setLoaded(true); }}
         onLoad={() => { setLoaded(true); onMediaLoad?.(); }} onError={() => setFailed(true)} />
     </button>
   );
@@ -191,9 +192,9 @@ export default function Messages() {
         <p className="text-sm text-mist-400 mb-5 page-sub">Conversations open once a connection is accepted.</p>
       </div>
 
-      <div className={`card overflow-hidden grid md:grid-cols-[320px_1fr] chat-card ${active ? 'chat-card-active' : ''}`}>
+      <div className={`card overflow-hidden grid md:grid-cols-[320px_1fr] grid-rows-[minmax(0,1fr)] chat-card ${active ? 'chat-card-active' : ''}`}>
         {/* Left panel */}
-        <div className={`border-r border-ink-700/60 flex flex-col ${active ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`border-r border-ink-700/60 flex flex-col min-h-0 ${active ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-3 border-b border-ink-700/60">
             <input className="input !py-2" aria-label="Search" placeholder="Search conversations…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
@@ -221,7 +222,7 @@ export default function Messages() {
         </div>
 
         {/* Right panel */}
-        <div className={`flex-col min-w-0 ${active ? 'flex' : 'hidden md:flex'}`}>
+        <div className={`flex-col min-w-0 min-h-0 ${active ? 'flex' : 'hidden md:flex'}`}>
           {!active || !thread ? (
             active ? <Spinner className="my-auto" /> : (
               <div className="m-auto text-center p-8">
@@ -252,7 +253,7 @@ export default function Messages() {
                 </div>
               </div>
 
-              <div ref={scrollBoxRef} className="flex-1 overflow-y-auto p-4" style={{ overscrollBehavior: 'contain' }}>
+              <div ref={scrollBoxRef} className="flex-1 min-h-0 overflow-y-auto p-4" style={{ overscrollBehavior: 'contain' }}>
                 {tMessages.map((m, i) => {
                   const mine = m.sender_id === user.id;
                   const prev = tMessages[i - 1];
@@ -285,7 +286,8 @@ export default function Messages() {
                                 <div className="text-[10px] text-mist-400">{m.ref_startup.sector} · {m.ref_startup.stage}</div></div>
                             </Link>
                           )}
-                          {m.text}
+                          {/* Shift+Enter drafts multi-line messages — keep the line breaks. */}
+                          {m.text && <span className="whitespace-pre-wrap">{m.text}</span>}
                           {hasMedia
                             ? <ChatMedia m={m} onMediaLoad={anchorIfNearBottom}
                                 onOpenImage={(src) => setLightbox({ src, download: m.attachment_download, name: m.attachment_name })} />
@@ -302,7 +304,7 @@ export default function Messages() {
                 <div ref={endRef} />
               </div>
 
-              <div className="border-t border-ink-700/60 p-3">
+              <div className="border-t border-ink-700/60 p-3 shrink-0">
                 {uploadPct !== null && (
                   <div className="mb-2">
                     <div className="text-xs text-mist-400 mb-1">Uploading… {uploadPct}%</div>
