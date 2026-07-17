@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, asArray, timeAgo } from '../api';
 import { useAuth } from '../AuthContext';
-import { Avatar, Empty, FileUpload, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast, SkeletonList } from '../components/ui';
+import { Avatar, Empty, FileUpload, Lightbox, ReportModal, Spinner, VerifiedBadge, useConfirm, useToast, SkeletonList } from '../components/ui';
 import { absUrl, nativeBridge, shareOrigin } from '../config';
 import PullToRefresh from '../components/PullToRefresh';
 
@@ -12,15 +12,12 @@ const TYPE_STYLE = {
   'Hiring': 'chip', 'Product Launch': 'chip-blue', 'Investment Made': 'chip-green', 'Investor Insight': 'chip-gold',
 };
 
-const FORMATS = [['all', 'All'], ['status', 'Status'], ['image', 'Images'], ['video', 'Videos']];
-const mediaKind = (m) => !m ? 'status' : /\.(mp4|webm|mov)/i.test(m) ? 'video' : /\.(png|jpe?g|gif|svg|webp)/i.test(m) ? 'image' : 'status';
 
 export default function Social() {
   const { user } = useAuth();
   const [posts, setPosts] = useState(null);
   const [types, setTypes] = useState({ types: [], allowed_for_me: [] });
   const [filter, setFilter] = useState('');
-  const [format, setFormat] = useState('all');
   const [q, setQ] = useState('');
   const [composer, setComposer] = useState(false);
   const [loadErr, setLoadErr] = useState(null);
@@ -49,7 +46,6 @@ export default function Social() {
   useEffect(() => { api.get('/api/social/types').then(d => setTypes({ types: asArray(d?.types), allowed_for_me: asArray(d?.allowed_for_me) })).catch(() => {}); }, []);
 
   const visible = posts && posts
-    .filter(p => format === 'all' || mediaKind(p.media) === format)
     .filter(p => !q || String((p.text || '') + ' ' + (p.author?.name || '') + ' ' + (p.startup?.name || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (
@@ -67,13 +63,6 @@ export default function Social() {
             {types.types.map(t => <option key={t}>{t}</option>)}
           </select>
         </div>
-      </div>
-
-      <div className="flex rounded-xl bg-ink-850 border border-ink-600/50 p-1 mb-5 w-fit max-w-full overflow-x-auto no-scrollbar">
-        {FORMATS.map(([v, l]) => (
-          <button key={v} onClick={() => setFormat(v)} aria-pressed={format === v}
-            className={`rounded-lg px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors ${format === v ? 'bg-ink-700 text-mist-100' : 'text-mist-400 hover:text-mist-200'}`}>{l}</button>
-        ))}
       </div>
 
       {user.role !== 'admin' && (
@@ -96,8 +85,8 @@ export default function Social() {
         // "Nothing matches your filters" and "nothing has been posted" are
         // different situations — say which one this is, and offer the way out.
         posts.length > 0 || filter || q ? (
-          <Empty title="No posts match" sub="Try a different search, category, or format."
-            action={<button className="btn-ghost btn-sm" onClick={() => { setQ(''); setFilter(''); setFormat('all'); }}>Clear filters</button>} />
+          <Empty title="No posts match" sub="Try a different search or category."
+            action={<button className="btn-ghost btn-sm" onClick={() => { setQ(''); setFilter(''); }}>Clear filters</button>} />
         ) : (
           <Empty title="No posts yet" sub="Updates from the network appear here." />
         )
@@ -191,6 +180,7 @@ function Post({ p, onChange }) {
   const [likeState, setLikeState] = useState({ liked: !!p.liked, likes: p.likes, busy: false });
   const [commentBusy, setCommentBusy] = useState(false);
   const [reporting, setReporting] = useState(null); // { type, id, label }
+  const [imageView, setImageView] = useState(null); // Instagram-style full-screen image
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -289,7 +279,13 @@ function Post({ p, onChange }) {
         /\.(mp4|webm|mov)/i.test(p.media)
           ? <div className="feed-media aspect-video"><video src={absUrl(p.media)} controls playsInline preload="metadata" aria-label={`Video posted by ${p.author?.name || 'a member'}`} onError={(e) => { e.currentTarget.closest('.feed-media').style.display = 'none'; }} className="object-contain bg-black" /></div>
           : /\.(png|jpe?g|gif|svg|webp)/i.test(p.media)
-            ? <div className="feed-media aspect-[16/10]"><img src={absUrl(p.media)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onError={(e) => { e.currentTarget.closest('.feed-media').style.display = 'none'; }} className="object-cover img-fade" /></div>
+            ? <>
+                <button type="button" className="feed-media aspect-[16/10] block w-full cursor-zoom-in" aria-label="View image full screen"
+                  onClick={() => setImageView(absUrl(p.media))}>
+                  <img src={absUrl(p.media)} alt="" loading="lazy" onLoad={(e) => e.currentTarget.classList.add('loaded')} onError={(e) => { e.currentTarget.closest('.feed-media').style.display = 'none'; }} className="object-cover img-fade" />
+                </button>
+                <Lightbox src={imageView} alt="Post image" onClose={() => setImageView(null)} />
+              </>
             : <a href={absUrl(p.media)} target="_blank" rel="noreferrer" className="block mt-3 text-sm text-accent-400 underline">📎 View attachment</a>
       )}
 

@@ -4,13 +4,26 @@ import { motion, AnimatePresence } from 'motion/react';
 import { api } from '../api';
 import { absUrl, IS_NATIVE } from '../config';
 
-export function Avatar({ src, name, size = 10, square = false }) {
+// `viewable` makes the photo tappable, opening it full-screen in the Lightbox
+// (Instagram-style) — used on profile/startup headers, never on list rows.
+export function Avatar({ src, name, size = 10, square = false, viewable = false }) {
+  const [open, setOpen] = useState(false);
   const px = size * 4;
   const cls = `${square ? 'rounded-xl' : 'rounded-full'} object-cover bg-ink-700 border border-ink-600/60 shrink-0`;
   if (src) {
-    return <img src={absUrl(src)} alt={name} loading="lazy" style={{ width: px, height: px }}
+    const img = <img src={absUrl(src)} alt={name} loading="lazy" style={{ width: px, height: px }}
       className={`${cls} img-fade`} onLoad={(e) => e.currentTarget.classList.add('loaded')}
       onError={(e) => e.currentTarget.classList.add('loaded')} />;
+    if (!viewable) return img;
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)} aria-label={`View ${name || 'profile'} photo`}
+          className={`${square ? 'rounded-xl' : 'rounded-full'} shrink-0 cursor-zoom-in block`}>
+          {img}
+        </button>
+        <Lightbox src={open ? absUrl(src) : null} alt={name || 'Photo'} onClose={() => setOpen(false)} />
+      </>
+    );
   }
   return (
     <div style={{ width: px, height: px, fontSize: px * 0.38 }}
@@ -51,9 +64,11 @@ export function Sparkline({ data, w = 110, h = 30 }) {
   );
 }
 
-// LinkedIn-style cover hero with gradient overlay and gentle parallax
+// LinkedIn-style cover hero with gradient overlay and gentle parallax.
+// A real cover photo is tappable and opens full screen (the gradient fallback isn't).
 export function CoverHero({ cover, fallbackKey = '', height = 'h-44 sm:h-56', children }) {
   const ref = useRef(null);
+  const [viewing, setViewing] = useState(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -77,9 +92,14 @@ export function CoverHero({ cover, fallbackKey = '', height = 'h-44 sm:h-56', ch
         ) : (
           <div ref={ref} className="absolute inset-0 will-change-transform" style={{ transform: 'scale(1.06)', background: `linear-gradient(120deg, hsl(${hue} 55% 24%), hsl(${(hue + 50) % 360} 65% 40%))` }} />
         )}
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgb(var(--ink-900)) 2%, rgb(var(--ink-900) / 0.45) 35%, transparent 70%)' }} />
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(to top, rgb(var(--ink-900)) 2%, rgb(var(--ink-900) / 0.45) 35%, transparent 70%)' }} />
+        {cover && (
+          <button type="button" aria-label="View cover image" onClick={() => setViewing(true)}
+            className="absolute inset-0 cursor-zoom-in" />
+        )}
       </div>
       <div className="px-5 sm:px-6 pb-5 sm:pb-6">{children}</div>
+      {cover && <Lightbox src={viewing ? absUrl(cover) : null} alt="Cover image" onClose={() => setViewing(false)} />}
     </div>
   );
 }

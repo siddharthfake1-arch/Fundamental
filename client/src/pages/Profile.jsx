@@ -49,7 +49,7 @@ export default function Profile() {
       <CoverHero cover={u.cover} fallbackKey={u.name}>
         <div className="flex flex-col sm:flex-row gap-5 -mt-12 sm:-mt-14 relative">
           <div className="rounded-full p-1 bg-ink-900 w-fit shadow-lift shrink-0">
-            <Avatar src={u.photo} name={u.name} size={22} />
+            <Avatar src={u.photo} name={u.name} size={22} viewable />
           </div>
           <div className="flex-1 min-w-0 sm:pt-14">
             <div className="flex items-center gap-2 flex-wrap">

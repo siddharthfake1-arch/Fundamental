@@ -42,7 +42,7 @@ export default function PublicStartup() {
         className="relative max-w-3xl mx-auto px-4 pb-16 space-y-5">
         <div className="card ring-gradient p-6">
           <div className="flex flex-col sm:flex-row gap-5 items-start">
-            <Avatar src={s.logo} name={s.name} size={18} square />
+            <Avatar src={s.logo} name={s.name} size={18} square viewable />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="h-display text-2xl sm:text-3xl break-words min-w-0">{s.name}</h1>

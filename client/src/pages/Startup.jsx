@@ -136,7 +136,7 @@ export default function Startup() {
         <div className="flex flex-col sm:flex-row gap-5 -mt-12 sm:-mt-14 relative">
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
             className="rounded-2xl p-1 bg-ink-900 w-fit shadow-lift">
-            <Avatar src={s.logo} name={s.name} size={20} square />
+            <Avatar src={s.logo} name={s.name} size={20} square viewable />
           </motion.div>
           <div className="flex-1 min-w-0 sm:pt-14">
             <div className="flex items-center gap-2 flex-wrap">
